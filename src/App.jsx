@@ -9,11 +9,22 @@ import {
 } from './lib/portfolioIngestionCore.js';
 import { createPortfolioScorecard } from './lib/portfolioScoring.js';
 import { enrichPortfolioItem } from './lib/securityKnowledge.js';
+import {
+  fetchLiveMarketData,
+  fetchMarketSymbolSuggestions,
+  formatMarketChange,
+  formatMarketChangePercent,
+  formatMarketInputPrice,
+  formatMarketPrice,
+  formatMarketTime,
+} from './lib/liveMarketData.js';
+import { fetchMarketNews, formatNewsTime } from './lib/marketNews.js';
+import DigitalTwinPanel from './components/panels/DigitalTwinPanel.jsx';
 
 const VIEWBOX_SIZE = 640;
 const VIEWBOX_HALF = VIEWBOX_SIZE / 2;
 const MIN_ATOMS = 1;
-const MAX_PORTFOLIOS = 12;
+const MAX_PORTFOLIOS = 20;
 const BOND_LENGTH = 214;
 const CAMERA_DISTANCE = 470;
 const CAMERA_NEAR_CLIP = 136;
@@ -72,12 +83,14 @@ const STORAGE_KEYS = {
   assetClassMode: 'atom-sketch-asset-class-mode',
   allocationWeightMode: 'atom-sketch-allocation-weight-mode',
   scoreWeightPreset: 'atom-sketch-score-weight-preset',
+  portfolioData: 'atom-sketch-portfolio-data-v1',
   settingsDockPosition: 'atom-sketch-settings-dock-position',
   toolTriggerPosition: 'atom-sketch-tool-trigger-position',
   groupDockPosition: 'atom-sketch-group-dock-position',
   heatmapDockPosition: 'atom-sketch-heatmap-dock-position',
   scoreDockPosition: 'atom-sketch-score-dock-position-v2',
   allocationDockPosition: 'atom-sketch-allocation-dock-position',
+  twinDockPosition: 'atom-sketch-twin-dock-position',
 };
 const MOBILE_BREAKPOINT = 560;
 const REVIEW_TOOLTIP_MAX_WIDTH = 18 * 16;
@@ -104,7 +117,11 @@ const FLOATING_TOOL_Z_INDEX = {
   heatmap: 33,
   allocation: 34,
   score: 35,
+  twin: 36,
+  'tool-drawer': 37,
 };
+const TOOL_DRAWER_DEFAULT_WIDTH = 38 * 16;
+const TOOL_DRAWER_MAX_WIDTH = 760;
 const UI_TEXT = {
   ko: {
     groupLabels: {
@@ -124,8 +141,8 @@ const UI_TEXT = {
     fieldLabels: {
       stockCode: '종목코드',
       stockName: '종목명',
-      accountId: '계좌 ID',
-      accountType: '계좌유형',
+      accountId: '포트폴리오 ID',
+      accountType: '포트폴리오 유형',
       buyDate: '매수일',
       buyPrice: '매수가',
       shares: '보유수량',
@@ -156,7 +173,7 @@ const UI_TEXT = {
     settingsAllocationWeightAuto: '자동',
     settingsAllocationWeightStock: '종목별 비중',
     settingsAllocationWeightAssetClass: '자산군 기준',
-    settingsAllocationWeightAccount: '계좌 기준',
+    settingsAllocationWeightAccount: '포트폴리오 기준',
     settingsScoreWeightBalanced: '균형 중심',
     settingsScoreWeightReturnFocus: '수익 중심',
     settingsScoreWeightLongTermReturnFocus: '장기수익 중심',
@@ -190,11 +207,11 @@ const UI_TEXT = {
     allocationSourceExplicit: '비중 컬럼 기준',
     allocationSourcePosition: '매수가 × 수량 기준',
     allocationSourceEqual: '균등 비중 기준',
-    atomAria: '검은 배경 위 손으로 그린 인터랙티브 원자 스케치',
+    atomAria: '검은 배경 위 손으로 그린 인터랙티브 포트폴리오 스케치',
     scorePointUnit: '점',
     parseError: '종목 행을 찾지 못했습니다. ticker/name 컬럼이 있는 CSV를 올려주세요.',
     readError: '파일을 읽지 못했습니다.',
-    maxFilesError: '포트폴리오는 최대 12개까지 업로드할 수 있습니다.',
+    maxFilesError: '포트폴리오는 최대 20개까지 업로드할 수 있습니다.',
   },
   en: {
     groupLabels: {
@@ -214,8 +231,8 @@ const UI_TEXT = {
     fieldLabels: {
       stockCode: 'Ticker',
       stockName: 'Name',
-      accountId: 'Account ID',
-      accountType: 'Account Type',
+      accountId: 'Portfolio ID',
+      accountType: 'Portfolio Type',
       buyDate: 'Buy Date',
       buyPrice: 'Buy Price',
       shares: 'Shares',
@@ -246,7 +263,7 @@ const UI_TEXT = {
     settingsAllocationWeightAuto: 'Auto',
     settingsAllocationWeightStock: 'By security weight',
     settingsAllocationWeightAssetClass: 'By asset class',
-    settingsAllocationWeightAccount: 'By account',
+    settingsAllocationWeightAccount: 'By portfolio',
     settingsScoreWeightBalanced: 'Balanced',
     settingsScoreWeightReturnFocus: 'Return focus',
     settingsScoreWeightLongTermReturnFocus: 'Long-term return',
@@ -263,7 +280,7 @@ const UI_TEXT = {
     groupToolAria: 'Open highlight tool',
     scoreToolAria: 'Open radar chart',
     clearUploadAria: 'Clear uploaded file',
-    clearCenterAria: 'Clear highlighted atom selection',
+    clearCenterAria: 'Clear highlighted portfolio selection',
     heatmapAria: 'Open profit calendar heatmap',
     contributionAria: 'GitHub contribution icon',
     heatmapChartAria: 'Portfolio profit calendar heatmap',
@@ -280,11 +297,11 @@ const UI_TEXT = {
     allocationSourceExplicit: 'Weighted by allocation column',
     allocationSourcePosition: 'Weighted by buy price × shares',
     allocationSourceEqual: 'Weighted equally',
-    atomAria: 'Interactive hand-drawn atom sketch on a black background',
+    atomAria: 'Interactive hand-drawn portfolio sketch on a black background',
     scorePointUnit: 'pts',
     parseError: 'Could not find portfolio rows. Upload a CSV with ticker or name columns.',
     readError: 'Could not read the file.',
-    maxFilesError: 'You can upload up to 12 portfolios.',
+    maxFilesError: 'You can upload up to 20 portfolios.',
   },
 };
 const TOOLTIP_WIDTH = 320;
@@ -680,6 +697,105 @@ function createPortfolioEntryFromPayload(payload, entryId) {
   };
 }
 
+function serializePortfolioEntryForStorage(entry) {
+  const items = Array.isArray(entry?.items) ? entry.items : [];
+  const timelineItems =
+    Array.isArray(entry?.timelineItems) && entry.timelineItems.length ? entry.timelineItems : items;
+
+  return {
+    id: String(entry?.id ?? ''),
+    fileName: String(entry?.fileName ?? 'portfolio.csv'),
+    items,
+    timelineItems,
+    parserDiagnostics: entry?.parserDiagnostics ?? null,
+    agentReview: entry?.agentReview ?? null,
+    ingestSource: entry?.ingestSource ?? 'restored-local',
+  };
+}
+
+function readStoredPortfolioState() {
+  if (typeof window === 'undefined') {
+    return { entries: [], activePortfolioId: null };
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(STORAGE_KEYS.portfolioData);
+    if (!rawValue) {
+      return { entries: [], activePortfolioId: null };
+    }
+
+    const parsed = JSON.parse(rawValue);
+    const restoredEntries = Array.isArray(parsed?.entries)
+      ? parsed.entries
+          .slice(0, MAX_PORTFOLIOS)
+          .map((storedEntry) =>
+            createPortfolioEntryFromPayload(
+              {
+                fileName: storedEntry?.fileName,
+                items: Array.isArray(storedEntry?.items) ? storedEntry.items : [],
+                timelineItems: Array.isArray(storedEntry?.timelineItems)
+                  ? storedEntry.timelineItems
+                  : Array.isArray(storedEntry?.items)
+                    ? storedEntry.items
+                    : [],
+                parserDiagnostics: storedEntry?.parserDiagnostics ?? null,
+                agentReview: storedEntry?.agentReview ?? null,
+                ingestSource: storedEntry?.ingestSource ?? 'restored-local',
+              },
+              storedEntry?.id,
+            ),
+          )
+          .filter((entry) => entry.id)
+      : [];
+
+    const parsedActiveId = String(parsed?.activePortfolioId ?? '');
+    const activePortfolioId = restoredEntries.some((entry) => entry.id === parsedActiveId)
+      ? parsedActiveId
+      : restoredEntries[0]?.id ?? null;
+
+    return {
+      entries: restoredEntries,
+      activePortfolioId,
+    };
+  } catch {
+    return { entries: [], activePortfolioId: null };
+  }
+}
+
+function writeStoredPortfolioState(entries, activePortfolioId) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    const safeEntries = Array.isArray(entries)
+      ? entries.slice(0, MAX_PORTFOLIOS).map(serializePortfolioEntryForStorage).filter((entry) => entry.id)
+      : [];
+
+    if (!safeEntries.length) {
+      window.localStorage.removeItem(STORAGE_KEYS.portfolioData);
+      return;
+    }
+
+    const safeActiveId = String(activePortfolioId ?? '');
+    const nextActivePortfolioId = safeEntries.some((entry) => entry.id === safeActiveId)
+      ? safeActiveId
+      : safeEntries[0].id;
+
+    window.localStorage.setItem(
+      STORAGE_KEYS.portfolioData,
+      JSON.stringify({
+        version: 1,
+        savedAt: new Date().toISOString(),
+        activePortfolioId: nextActivePortfolioId,
+        entries: safeEntries,
+      }),
+    );
+  } catch (error) {
+    console.warn('portfolio-persist-failed', error);
+  }
+}
+
 function buildLocalPortfolioPayload(fileName, localItems, parserDiagnostics, overrides = {}) {
   const displayItems = collapsePortfolioItemsForDisplayShared(localItems);
 
@@ -801,6 +917,10 @@ function scoreDockSizeFor(width) {
 
 function allocationWidgetSizeFor(width) {
   return (width <= MOBILE_BREAKPOINT ? 3.5 : 4) * 16;
+}
+
+function twinDockSizeFor(width) {
+  return (width <= MOBILE_BREAKPOINT ? 3.45 : 3.9) * 16;
 }
 
 function toolTriggerSizeFor(width) {
@@ -1303,6 +1423,15 @@ function compactFileName(fileName, max = 18) {
   return `${baseName.slice(0, frontLength)}…${baseName.slice(-backLength)}${extension}`;
 }
 
+function formatDateKey(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
 function textFor(language) {
   return UI_TEXT[language] ?? UI_TEXT.ko;
 }
@@ -1365,6 +1494,12 @@ function normalizeDisplayKey(value) {
     .replace(/[\s_.\-/%()[\]]+/g, '');
 }
 
+const LEGACY_ATOM_TERM_PATTERN = new RegExp(`원${'자'}(?!재)`, 'g');
+
+function normalizePortfolioVocabulary(value) {
+  return String(value ?? '').replace(LEGACY_ATOM_TERM_PATTERN, '포트폴리오');
+}
+
 function canHighlightGroupField(atom, groupKey) {
   if (!atom || !groupKey) {
     return false;
@@ -1380,7 +1515,7 @@ function canHighlightGroupField(atom, groupKey) {
 }
 
 function resolveFieldLabelKey(label) {
-  const normalized = normalizeDisplayKey(label);
+  const normalized = normalizeDisplayKey(normalizePortfolioVocabulary(label));
 
   if (['종목코드', 'ticker', 'symbol', 'stockcode', 'securitycode'].map(normalizeDisplayKey).includes(normalized)) {
     return 'stockCode';
@@ -1394,11 +1529,11 @@ function resolveFieldLabelKey(label) {
     return 'stockName';
   }
 
-  if (['계좌id', '계좌번호', '계좌코드', 'acctid', 'accountid', 'accountnumber'].map(normalizeDisplayKey).includes(normalized)) {
+  if (['계좌id', '계좌번호', '계좌코드', '포트폴리오id', '포트폴리오번호', '포트폴리오코드', 'acctid', 'accountid', 'accountnumber'].map(normalizeDisplayKey).includes(normalized)) {
     return 'accountId';
   }
 
-  if (['계좌유형', '계좌종류', '계좌구분', 'accounttype', 'accountkind', 'accountclass'].map(normalizeDisplayKey).includes(normalized)) {
+  if (['계좌유형', '계좌종류', '계좌구분', '계좌명', '포트폴리오 유형', '포트폴리오종류', '포트폴리오구분', '포트폴리오명', 'accounttype', 'accountkind', 'accountclass'].map(normalizeDisplayKey).includes(normalized)) {
     return 'accountType';
   }
 
@@ -1464,7 +1599,7 @@ function resolveFieldLabelKey(label) {
 function formatFieldLabel(label, language = 'ko') {
   const key = resolveFieldLabelKey(label);
   if (!key) {
-    return label;
+    return normalizePortfolioVocabulary(label);
   }
 
   return textFor(language).fieldLabels[key] ?? label;
@@ -1493,7 +1628,7 @@ function buildAtomInfoFields(atom, language = 'ko') {
   const fallbackValue = atomInfoFallbackValue(language);
 
   const pushField = (label, value) => {
-    const trimmedLabel = String(label ?? '').trim();
+    const trimmedLabel = normalizePortfolioVocabulary(label).trim();
     const trimmedValue = String(value ?? '').trim();
 
     if (!trimmedLabel || !trimmedValue) {
@@ -2164,7 +2299,7 @@ function inferHeaderLabels(headerLabels, bodyRows) {
     },
     {
       key: 'accountType',
-      label: '계좌유형',
+      label: '포트폴리오 유형',
       minScore: 0.74,
       score: (values) => matchRatio(values, isAccountTypeValue),
     },
@@ -2550,7 +2685,7 @@ function normalizePortfolioFieldLabels(headerLabels, bodyRows) {
     .find((column) => column.score >= 0.78);
 
   if (bestAccountIdColumn) {
-    labels[bestAccountIdColumn.columnIndex] = '계좌 ID';
+    labels[bestAccountIdColumn.columnIndex] = '포트폴리오 ID';
   }
 
   const bestAccountColumn = [...columns]
@@ -2567,7 +2702,7 @@ function normalizePortfolioFieldLabels(headerLabels, bodyRows) {
     .find((column) => column.score >= 0.7);
 
   if (bestAccountColumn) {
-    labels[bestAccountColumn.columnIndex] = '계좌유형';
+    labels[bestAccountColumn.columnIndex] = '포트폴리오 유형';
   }
 
   return labels;
@@ -2666,6 +2801,26 @@ function formatReturnDetail(value, label = '') {
   const sign = percentValue > 0 ? '+' : '';
 
   return `${sign}${fixed}%`;
+}
+
+function parseManualPriceValue(value) {
+  const match = String(value ?? '')
+    .replace(/,/g, '')
+    .match(/[+-]?\d*\.?\d+/);
+  const numeric = Number.parseFloat(match?.[0] ?? '');
+
+  return Number.isFinite(numeric) ? numeric : NaN;
+}
+
+function calculateReturnRateFromBuyPrice(buyPriceValue, latestPrice) {
+  const buyPrice = parseManualPriceValue(buyPriceValue);
+  const currentPrice = Number(latestPrice);
+
+  if (!Number.isFinite(buyPrice) || buyPrice <= 0 || !Number.isFinite(currentPrice)) {
+    return '';
+  }
+
+  return formatMarketChangePercent(((currentPrice - buyPrice) / buyPrice) * 100);
 }
 
 function countReplacementCharacters(text) {
@@ -3073,6 +3228,10 @@ function generateAtomLayout(items) {
         seed: 11,
         label: visibleItems[0]?.label ?? 'Stock',
         detail: visibleItems[0]?.detail ?? '',
+        sourceItemId: visibleItems[0]?.id ?? '',
+        stockName: visibleItems[0]?.stockName ?? visibleItems[0]?.name ?? visibleItems[0]?.label ?? '',
+        stockCode: visibleItems[0]?.stockCode ?? visibleItems[0]?.ticker ?? visibleItems[0]?.code ?? '',
+        ticker: visibleItems[0]?.ticker ?? visibleItems[0]?.stockCode ?? visibleItems[0]?.code ?? '',
         region: visibleItems[0]?.region ?? '',
         sector: visibleItems[0]?.sector ?? '',
         style: visibleItems[0]?.style ?? '',
@@ -3105,6 +3264,10 @@ function generateAtomLayout(items) {
         seed: 11 + index * 23,
         label: visibleItems[index]?.label ?? `Stock ${index + 1}`,
         detail: visibleItems[index]?.detail ?? '',
+        sourceItemId: visibleItems[index]?.id ?? '',
+        stockName: visibleItems[index]?.stockName ?? visibleItems[index]?.name ?? visibleItems[index]?.label ?? '',
+        stockCode: visibleItems[index]?.stockCode ?? visibleItems[index]?.ticker ?? visibleItems[index]?.code ?? '',
+        ticker: visibleItems[index]?.ticker ?? visibleItems[index]?.stockCode ?? visibleItems[index]?.code ?? '',
         region: visibleItems[index]?.region ?? '',
         sector: visibleItems[index]?.sector ?? '',
         style: visibleItems[index]?.style ?? '',
@@ -3326,7 +3489,7 @@ function SketchAtom({
     buildBondPath(atom, 2, phase),
   ];
   const dimFactor = atom.dimmed ? 0.18 : 1;
-  const focusBoost = atom.isSelected ? 1.08 : atom.isGroupMatch ? 1.04 : 1;
+  const focusBoost = atom.isSelected ? 1.48 : atom.isGroupMatch ? 1.04 : 1;
 
   return (
     <>
@@ -3355,6 +3518,14 @@ function SketchAtom({
           nodeRotation,
         )}) scale(${format(nodeScale)})`}
       >
+        {atom.isSelected ? (
+          <path
+            className="node-selected-glow"
+            d={atom.nodePaths[0]}
+            opacity={Math.min(1, (0.48 + atom.depth * 0.34) * (0.82 + Math.sin(phase * 1.2) * 0.08))}
+            strokeWidth={3.2}
+          />
+        ) : null}
         <path
           className="node-soft"
           d={atom.nodePaths[0]}
@@ -3390,17 +3561,17 @@ function SketchAtom({
 
 function SketchAura({ atom, phase }) {
   const dimFactor = atom.dimmed ? 0.12 : 1;
-  const focusBoost = atom.isSelected ? 1.18 : atom.isGroupMatch ? 1.08 : 1;
+  const focusBoost = atom.isSelected ? 2.25 : atom.isGroupMatch ? 1.08 : 1;
 
   return (
     <path
       className="aura-line"
       d={buildBondPath(atom, 0, phase)}
       opacity={Math.min(
-        0.22,
+        atom.isSelected ? 0.44 : 0.22,
         (0.03 + atom.depth * 0.04 + atom.dragMix * 0.05) * dimFactor * focusBoost,
       )}
-      strokeWidth={5.4 + atom.scale * 2.5}
+      strokeWidth={atom.isSelected ? 8.2 + atom.scale * 3.2 : 5.4 + atom.scale * 2.5}
     />
   );
 }
@@ -4279,6 +4450,837 @@ function SketchHeatmapIcon({ heatmap }) {
   );
 }
 
+function SketchTwinIcon() {
+  return (
+    <svg className="twin-dock__icon" viewBox="0 0 48 48" aria-hidden="true">
+      <path
+        className="twin-dock__orbit-soft"
+        d="M10.6 25.4C13.7 14.6 24.5 8.8 34 12.1C42.7 15.2 43.8 25.3 36.5 32.1C28.6 39.4 16 40.5 11.5 32.5C10.1 30 9.8 27.7 10.6 25.4Z"
+      />
+      <path
+        className="twin-dock__orbit-main"
+        d="M11.8 25.1C14.8 15.6 24.1 10.4 32.5 13.3C40.2 16 41.6 24.7 35 30.9C27.9 37.6 17.1 38.3 13 31.3C11.8 29.2 11.2 27.1 11.8 25.1Z"
+      />
+      <path
+        className="twin-dock__orbit-soft"
+        d="M13.4 14.9C21.2 9.1 32.1 11.9 35.3 21.2C38.3 29.9 31.1 38.1 21.1 36.3C11.8 34.6 7.7 25.8 13.4 14.9Z"
+        opacity="0.42"
+      />
+      <path
+        className="twin-dock__node-soft"
+        d="M23.7 17.9C27.7 17.6 30.6 20.5 30.7 24.1C30.8 28.2 27.8 31.1 23.8 31C19.8 31 17.2 28.3 17.3 24.4C17.4 20.7 20 18.2 23.7 17.9Z"
+      />
+      <path
+        className="twin-dock__node-main"
+        d="M24 18.9C27.2 18.7 29.5 21 29.5 24.1C29.5 27.5 27.2 29.8 24 29.8C20.8 29.8 18.6 27.5 18.7 24.4C18.8 21.3 20.9 19.1 24 18.9Z"
+      />
+      <circle className="twin-dock__spark" cx="34.4" cy="15.6" r="2.1" />
+      <circle className="twin-dock__spark" cx="13.6" cy="31.2" r="1.6" />
+    </svg>
+  );
+}
+
+function SketchAccountStackIcon() {
+  return (
+    <svg className="account-dock__icon" viewBox="0 0 48 48" aria-hidden="true">
+      <path
+        className="account-dock__soft"
+        d="M13.2 12.6C18.1 9.5 29.2 9.8 34.9 12.9C39.7 15.6 39 20.1 33.7 22.1C27.5 24.4 16.6 23.8 12.4 20.2C9.5 17.7 10.1 14.5 13.2 12.6Z"
+      />
+      <path
+        className="account-dock__main"
+        d="M14.1 13.4C18.7 10.8 28.3 11 33.5 13.6C37.3 15.5 36.9 18.5 32.7 20.2C27.1 22.4 17.5 21.8 13.6 18.9C11.4 17.3 11.8 14.7 14.1 13.4Z"
+      />
+      <path
+        className="account-dock__soft"
+        d="M11.9 21.2C16.1 25.1 28.8 25.8 35.4 22.7L35 28.2C29.5 32 17.4 31.6 12 27.4L11.9 21.2Z"
+        opacity="0.55"
+      />
+      <path
+        className="account-dock__main"
+        d="M13.1 22.3C17.5 25.5 28 26 34 23.4L33.7 27.4C28.5 30.3 18.2 30 13.2 26.7L13.1 22.3Z"
+      />
+      <path
+        className="account-dock__soft"
+        d="M12.4 30.3C17.9 34.2 29 34.7 35.2 31.2L34.8 35.4C28.7 39 17.5 38.2 12.6 34.7L12.4 30.3Z"
+      />
+      <path
+        className="account-dock__main"
+        d="M13.6 30.9C18.7 33.8 28.4 34.2 33.8 31.8L33.6 34.6C28.4 37.2 18.8 36.7 13.7 33.9L13.6 30.9Z"
+      />
+    </svg>
+  );
+}
+
+function SketchManualAccountIcon() {
+  return (
+    <svg className="manual-dock__icon" viewBox="0 0 48 48" aria-hidden="true">
+      <path
+        className="manual-dock__soft"
+        d="M12.5 13.6C17.1 10.5 30.2 10.7 35.8 13.9C39.5 16 38.8 19.3 34.2 20.8C28.4 22.7 17.1 22.1 12.8 19.1C9.7 16.9 10.3 15 12.5 13.6Z"
+      />
+      <path
+        className="manual-dock__main"
+        d="M14.4 15C18.5 12.8 28.7 12.8 33.5 15.2C36.2 16.6 35.6 18.5 32.7 19.5C27.5 21.1 18.5 20.8 14.5 18.4C12.5 17.2 12.7 15.9 14.4 15Z"
+      />
+      <path
+        className="manual-dock__soft"
+        d="M13.1 22.8C17.9 26 29.6 26.4 34.8 23.7L34.2 34.1C29.2 37.4 18.7 37.1 13.5 33.5L13.1 22.8Z"
+      />
+      <path
+        className="manual-dock__main"
+        d="M15.1 24.1C19.5 26.3 28.4 26.6 32.8 24.6L32.4 32.8C28 34.8 20.1 34.7 15.5 32.3L15.1 24.1Z"
+      />
+      <path className="manual-dock__main" d="M19.1 29.3L22.6 31.8L29.7 25.7" />
+      <path className="manual-dock__accent" d="M34.3 10.8L34.3 17.6M30.9 14.2L37.7 14.2" />
+    </svg>
+  );
+}
+
+function SketchNewsIcon() {
+  return (
+    <svg className="news-dock__icon" viewBox="0 0 48 48" aria-hidden="true">
+      <path
+        className="news-dock__soft"
+        d="M12.2 13.4C18.4 10.7 30.4 10.2 36.2 13.8L35.5 35.5C29.7 32.3 19.4 32.4 12.7 35.8L12.2 13.4Z"
+      />
+      <path
+        className="news-dock__main"
+        d="M14.3 14.8C19.6 12.8 29.2 12.7 33.9 15.1L33.4 32.9C28.2 30.8 20.1 30.9 14.8 33.2L14.3 14.8Z"
+      />
+      <path className="news-dock__main" d="M18.4 19.2L29.6 18.7" />
+      <path className="news-dock__main" d="M18.4 23.8L30.1 23.4" />
+      <path className="news-dock__main" d="M18.6 28.3L26.8 27.9" />
+      <path className="news-dock__accent" d="M34.4 10.5C37.4 11.5 39.1 14.3 38.5 17.4" />
+      <path className="news-dock__accent" d="M37.9 22.1C40.1 24.5 39.9 28.2 37.4 30.4" />
+    </svg>
+  );
+}
+
+function summarizePortfolioEntryAccounts(entry, language) {
+  const sourceItems = (entry?.timelineItems?.length ? entry.timelineItems : entry?.items) ?? [];
+  const labels = [];
+
+  sourceItems.forEach((item) => {
+    const rawLabel =
+      item?.accountType ??
+      item?.accountId ??
+      item?.account ??
+      item?.accountName ??
+      item?.accountLabel ??
+      '';
+    const label = String(rawLabel).trim();
+
+    if (label && !labels.includes(label)) {
+      labels.push(label);
+    }
+  });
+
+  const visibleLabels = labels.slice(0, 3).map((label) => compactLabel(label, 12));
+  const extraCount = Math.max(0, labels.length - visibleLabels.length);
+  const accountText = visibleLabels.length
+    ? `${visibleLabels.join(', ')}${extraCount ? ` +${extraCount}` : ''}`
+    : language === 'en'
+      ? 'Unclassified portfolio'
+      : '포트폴리오 정보 없음';
+  const rowCount = sourceItems.length;
+  const securityCount = entry?.items?.length ?? 0;
+
+  return {
+    accountText,
+    rowCount,
+    securityCount,
+  };
+}
+
+function createManualPortfolioItem(row, index) {
+  const accountName = String(row?.accountName ?? '').trim() || '직접 입력 포트폴리오';
+  const stockName =
+    String(row?.stockName ?? '').trim() ||
+    String(row?.marketName ?? '').trim() ||
+    String(row?.ticker ?? '').trim() ||
+    `직접 입력 종목 ${index + 1}`;
+  const ticker = String(row?.ticker ?? '').trim();
+  const buyPrice = String(row?.buyPrice ?? '').trim();
+  const shares = String(row?.shares ?? '').trim();
+  const assetClass = String(row?.assetClass ?? '').trim() || '주식';
+  const sector = String(row?.sector ?? '').trim();
+  const marketPrice = String(row?.marketPrice ?? '').trim();
+  const marketCurrency = String(row?.marketCurrency ?? '').trim();
+  const marketUpdatedAt = String(row?.marketUpdatedAt ?? '').trim();
+  const recordedAt = String(row?.recordedAt ?? '').trim() || formatDateKey();
+  const returnDetail = formatReturnDetail(String(row?.returnRate ?? '0'), '수익률') || '0%';
+  const fields = [
+    { label: '포트폴리오명', value: accountName },
+    { label: '종목명', value: stockName },
+    { label: '종목코드', value: ticker },
+    { label: '날짜', value: recordedAt },
+    { label: '매수가', value: buyPrice },
+    { label: '보유수량', value: shares },
+    { label: '수익률', value: returnDetail },
+    { label: '자산군', value: assetClass },
+    { label: '분야', value: sector },
+    { label: '현재가', value: marketPrice },
+    { label: '통화', value: marketCurrency },
+    { label: '시세시각', value: marketUpdatedAt },
+  ].filter((field) => String(field.value ?? '').trim());
+
+  return {
+    id:
+      row?.id ||
+      (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `manual-${Date.now()}-${index}`),
+    label: stockName,
+    name: stockName,
+    detail: returnDetail,
+    stockName,
+    stockCode: ticker,
+    ticker,
+    code: ticker,
+    accountType: accountName,
+    accountName,
+    recordedAt,
+    buyPrice,
+    shares,
+    return: returnDetail,
+    assetClass,
+    sector,
+    marketPrice,
+    currency: marketCurrency,
+    marketUpdatedAt,
+    fields,
+    metadataSource: 'manual-entry',
+    metadataSourceByField: {
+      accountType: 'manual',
+      stockName: 'manual',
+      stockCode: ticker ? 'manual' : 'fallback',
+      buyPrice: buyPrice ? 'manual' : 'fallback',
+      shares: shares ? 'manual' : 'fallback',
+      return: 'manual',
+      assetClass: 'manual',
+    },
+  };
+}
+
+function buildMarketSparklinePath(points, width = 320, height = 138) {
+  const validPoints = points
+    .filter((point) => Number.isFinite(point.close))
+    .slice(-96);
+
+  if (validPoints.length < 2) {
+    return null;
+  }
+
+  const paddingX = 10;
+  const paddingY = 12;
+  const values = validPoints.map((point) => point.close);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || Math.max(1, Math.abs(max) * 0.01);
+  const step = (width - paddingX * 2) / Math.max(1, validPoints.length - 1);
+  const coords = validPoints.map((point, index) => {
+    const x = paddingX + step * index;
+    const y = height - paddingY - ((point.close - min) / range) * (height - paddingY * 2);
+    return {
+      x,
+      y,
+      time: point.time,
+      close: point.close,
+    };
+  });
+  const line = coords
+    .map((point, index) => `${index === 0 ? 'M' : 'L'}${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+    .join(' ');
+  const area = `${line} L${coords.at(-1).x.toFixed(2)} ${height - paddingY} L${coords[0].x.toFixed(2)} ${height - paddingY} Z`;
+
+  return { line, area, min, max, latest: values.at(-1), first: values[0], points: coords };
+}
+
+function buildMarketInfoUrl(data) {
+  const symbol = String(data?.symbol ?? '').trim().toUpperCase();
+
+  if (!symbol) {
+    return '';
+  }
+
+  const koreanCodeMatch = symbol.match(/^(\d{6})(?:\.(?:KS|KQ))?$/);
+
+  if (koreanCodeMatch) {
+    return `https://finance.naver.com/item/main.naver?code=${koreanCodeMatch[1]}`;
+  }
+
+  return `https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}`;
+}
+
+function formatMarketPointTime(value, language = 'ko') {
+  if (!Number.isFinite(Number(value))) {
+    return '';
+  }
+
+  return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'ko-KR', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(Number(value)));
+}
+
+function resolveMarketDisplayName(data) {
+  return String(data?.displayName ?? data?.name ?? data?.rawName ?? data?.symbol ?? '').trim();
+}
+
+function MarketLivePreview({
+  data,
+  status,
+  error,
+  language,
+  onApplyQuote,
+  showApply = true,
+}) {
+  const [hoveredPoint, setHoveredPoint] = useState(null);
+  const isLoading = status === 'loading';
+  const hasData = Boolean(data);
+  const path = hasData ? buildMarketSparklinePath(data.points ?? []) : null;
+  const changePercentText = hasData ? formatMarketChangePercent(data.changePercent) : '';
+  const tone = Number(data?.changePercent ?? 0) >= 0 ? 'is-up' : 'is-down';
+  const marketUrl = buildMarketInfoUrl(data);
+  const displayName = resolveMarketDisplayName(data);
+
+  const handleChartPointerMove = useCallback(
+    (event) => {
+      if (!path?.points?.length) {
+        return;
+      }
+
+      const rect = event.currentTarget.getBoundingClientRect();
+      const relativeX = ((event.clientX - rect.left) / Math.max(rect.width, 1)) * 320;
+      const nearest = path.points.reduce((closest, point) =>
+        Math.abs(point.x - relativeX) < Math.abs(closest.x - relativeX) ? point : closest,
+      );
+
+      setHoveredPoint(nearest);
+    },
+    [path],
+  );
+
+  const handleChartOpen = useCallback(() => {
+    if (!marketUrl || typeof window === 'undefined') {
+      return;
+    }
+
+    window.open(marketUrl, '_blank', 'noopener,noreferrer');
+  }, [marketUrl]);
+
+  if (!hasData && status === 'idle') {
+    return (
+      <section className="tool-drawer__market-preview is-empty">
+        <p>
+          {language === 'en'
+            ? 'Enter a ticker to load live market data and a chart.'
+            : '티커/코드를 입력하면 실시간 시세와 차트가 표시됩니다.'}
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className={`tool-drawer__market-preview ${tone}`}>
+      <div className="tool-drawer__market-head">
+        <span>
+          <strong>{hasData ? data.symbol : language === 'en' ? 'Loading' : '조회 중'}</strong>
+          <em title={displayName}>{hasData ? displayName : ''}</em>
+        </span>
+        <small>
+          {isLoading
+            ? language === 'en'
+              ? 'updating'
+              : '갱신 중'
+            : hasData
+              ? formatMarketTime(data.updatedAt, language)
+              : ''}
+        </small>
+      </div>
+
+      {hasData ? (
+        <div className="tool-drawer__market-stats">
+          <strong>{formatMarketPrice(data.latestPrice, data.currency)}</strong>
+          <span>
+            {formatMarketChange(data.change)}
+            {changePercentText ? ` · ${changePercentText}` : ''}
+          </span>
+        </div>
+      ) : null}
+
+      <button
+        type="button"
+        className="tool-drawer__market-chart"
+        disabled={!marketUrl}
+        onClick={handleChartOpen}
+        onPointerMove={handleChartPointerMove}
+        onPointerLeave={() => setHoveredPoint(null)}
+        aria-label={language === 'en' ? 'Open stock information' : '주식 정보 웹으로 이동'}
+      >
+        {path ? (
+          <svg viewBox="0 0 320 138" role="img" aria-label={language === 'en' ? 'Live stock chart' : '실시간 주식 차트'}>
+            <defs>
+              <linearGradient id="manualMarketArea" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor="rgba(255, 247, 232, 0.26)" />
+                <stop offset="100%" stopColor="rgba(255, 247, 232, 0)" />
+              </linearGradient>
+            </defs>
+            <path className="tool-drawer__market-area" d={path.area} />
+            <path className="tool-drawer__market-line" d={path.line} />
+            {hoveredPoint ? (
+              <g className="tool-drawer__market-hover-mark" aria-hidden="true">
+                <line x1={hoveredPoint.x} x2={hoveredPoint.x} y1="8" y2="130" />
+                <circle cx={hoveredPoint.x} cy={hoveredPoint.y} r="3.2" />
+              </g>
+            ) : null}
+          </svg>
+        ) : (
+          <p>
+            {error ||
+              (isLoading
+                ? language === 'en'
+                  ? 'Loading market chart...'
+                  : '시세 차트를 불러오는 중입니다.'
+                : language === 'en'
+                  ? 'No chart data available.'
+                  : '차트 데이터를 가져오지 못했습니다.')}
+          </p>
+        )}
+        {hoveredPoint ? (
+          <span
+            className="tool-drawer__market-hover"
+            style={{ left: `${(hoveredPoint.x / 320) * 100}%` }}
+          >
+            <em>{formatMarketPointTime(hoveredPoint.time, language)}</em>
+            <strong>{formatMarketPrice(hoveredPoint.close, data?.currency)}</strong>
+          </span>
+        ) : null}
+      </button>
+
+      <div className="tool-drawer__market-foot">
+        <span>{hasData ? `${data.source} · ${data.range}/${data.interval}` : error}</span>
+        {showApply ? (
+          <button type="button" disabled={!hasData} onClick={onApplyQuote}>
+            {language === 'en' ? 'Use quote' : '현재가 적용'}
+          </button>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function getItemFieldValue(item, labels) {
+  const normalizedLabels = labels.map(normalizeDisplayKey);
+
+  for (const field of item?.fields ?? []) {
+    if (normalizedLabels.includes(normalizeDisplayKey(field?.label))) {
+      return String(field?.value ?? '').trim();
+    }
+  }
+
+  return '';
+}
+
+function resolveHoldingName(item) {
+  return (
+    String(item?.stockName ?? item?.name ?? item?.label ?? '').trim() ||
+    getItemFieldValue(item, ['종목명', 'stockName', 'name']) ||
+    resolveHoldingTicker(item) ||
+    '종목'
+  );
+}
+
+function resolveHoldingTicker(item) {
+  return (
+    String(item?.ticker ?? item?.stockCode ?? item?.code ?? '').trim() ||
+    getItemFieldValue(item, ['종목코드', 'ticker', 'code', 'symbol'])
+  );
+}
+
+function resolveHoldingAccount(item) {
+  return (
+    String(item?.accountType ?? item?.accountName ?? '').trim() ||
+    getItemFieldValue(item, ['포트폴리오 유형', '포트폴리오명', '계좌유형', '계좌명', 'accountType', 'accountName']) ||
+    '포트폴리오'
+  );
+}
+
+function resolveHoldingGroupKey(item, index = 0) {
+  const tickerKey = normalizeDisplayKey(resolveHoldingTicker(item));
+
+  if (tickerKey) {
+    return `code:${tickerKey}`;
+  }
+
+  const nameKey = normalizeDisplayKey(resolveHoldingName(item));
+
+  if (nameKey) {
+    return `name:${nameKey}`;
+  }
+
+  return `row:${index}`;
+}
+
+function buildGroupedHoldingItems(items) {
+  const sourceItems = Array.isArray(items) ? items : [];
+
+  if (sourceItems.length <= 1) {
+    return sourceItems.map((item, index) => ({
+      ...item,
+      holdingGroupKey: resolveHoldingGroupKey(item, index),
+      groupedSourceItemIds: [String(item?.id ?? '').trim()].filter(Boolean),
+      groupedSourceItemIndexes: [index],
+      groupedRowCount: 1,
+    }));
+  }
+
+  const groupedItems = new Map();
+  sourceItems.forEach((item, index) => {
+    const key = resolveHoldingGroupKey(item, index);
+    const bucket = groupedItems.get(key);
+    const nextEntry = { item, index };
+
+    if (bucket) {
+      bucket.push(nextEntry);
+      return;
+    }
+
+    groupedItems.set(key, [nextEntry]);
+  });
+
+  return [...groupedItems.entries()].map(([key, group]) => {
+    const groupItems = group.map((entry) => entry.item);
+    const representative =
+      collapsePortfolioItemsForDisplayShared(groupItems)[0] ?? groupItems[groupItems.length - 1];
+    const groupedSourceItemIds = group
+      .map((entry) => String(entry.item?.id ?? '').trim())
+      .filter(Boolean);
+
+    return {
+      ...representative,
+      holdingGroupKey: key,
+      groupedSourceItemIds,
+      groupedSourceItemIndexes: group.map((entry) => entry.index),
+      groupedRowCount: group.length,
+    };
+  });
+}
+
+function formatHoldingListMeta(item, language = 'ko') {
+  const ticker = resolveHoldingTicker(item) || resolveHoldingAccount(item);
+  const rowCount = Number(item?.groupedRowCount ?? 1);
+
+  if (rowCount > 1) {
+    const rowText = language === 'en' ? `${rowCount} rows` : `${rowCount}개 행`;
+    return ticker ? `${ticker} · ${rowText}` : rowText;
+  }
+
+  return ticker;
+}
+
+function resolveHoldingAtomId(atoms, item, itemIndex) {
+  const itemId = String(item?.id ?? '').trim();
+  const tickerKey = normalizeDisplayKey(resolveHoldingTicker(item));
+  const nameKey = normalizeDisplayKey(resolveHoldingName(item));
+
+  if (itemId) {
+    const byId = atoms.find((atom) => String(atom.sourceItemId ?? '').trim() === itemId);
+    if (byId) {
+      return byId.id;
+    }
+  }
+
+  if (tickerKey) {
+    const byTicker = atoms.find((atom) =>
+      [atom.ticker, atom.stockCode, atom.code].some((value) => normalizeDisplayKey(value) === tickerKey),
+    );
+    if (byTicker) {
+      return byTicker.id;
+    }
+  }
+
+  if (nameKey) {
+    const byName = atoms.find((atom) =>
+      [atom.stockName, atom.name, atom.label].some((value) => normalizeDisplayKey(value) === nameKey),
+    );
+    if (byName) {
+      return byName.id;
+    }
+  }
+
+  return atoms[itemIndex]?.id ?? null;
+}
+
+function resolveHoldingMetric(item, labels) {
+  return getItemFieldValue(item, labels) || '';
+}
+
+function StockDetailCard({ item, language, onEdit, onClose }) {
+  const ticker = resolveHoldingTicker(item);
+  const name = resolveHoldingName(item);
+  const [data, setData] = useState(null);
+  const [status, setStatus] = useState('idle');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!ticker && name.length < 2) {
+      setStatus('idle');
+      setData(null);
+      setError('');
+      return undefined;
+    }
+
+    const controller = new AbortController();
+
+    const load = async () => {
+      setStatus('loading');
+      setError('');
+
+      try {
+        const nextData = await fetchLiveMarketData({
+          ticker,
+          name,
+          signal: controller.signal,
+        });
+
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setData(nextData);
+        setStatus('ready');
+      } catch {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setData(null);
+        setStatus('error');
+        setError(language === 'en' ? 'Could not load details.' : '상세 시세를 가져오지 못했습니다.');
+      }
+    };
+
+    load();
+    const intervalId = window.setInterval(load, 30000);
+
+    return () => {
+      controller.abort();
+      window.clearInterval(intervalId);
+    };
+  }, [language, name, ticker]);
+
+  const shares = resolveHoldingMetric(item, ['보유수량', 'shares', 'quantity']);
+  const buyPrice = resolveHoldingMetric(item, ['매수가', 'buyPrice', 'purchasePrice']);
+  const returnRate = String(item?.detail ?? item?.return ?? '').trim() ||
+    resolveHoldingMetric(item, ['수익률', 'return']);
+  const yesterdayChange = data
+    ? `${formatMarketChange(data.change)} ${formatMarketChangePercent(data.changePercent)}`
+    : '-';
+
+  return (
+    <section className="tool-drawer__holding-detail">
+      <div className="tool-drawer__holding-detail-head">
+        <span>
+          <strong>{compactLabel(name, 22)}</strong>
+          <em>{ticker || resolveHoldingAccount(item)}</em>
+        </span>
+        <div className="tool-drawer__holding-detail-actions">
+          <button type="button" onClick={onEdit}>
+            {language === 'en' ? 'Edit' : '수정'}
+          </button>
+          {onClose ? (
+            <button
+              type="button"
+              className="tool-drawer__holding-detail-close"
+              onClick={onClose}
+              aria-label={language === 'en' ? 'Close stock details' : '종목 정보 닫기'}
+            >
+              ×
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="tool-drawer__holding-metrics">
+        <div>
+          <span>{language === 'en' ? 'Live' : '현재가'}</span>
+          <strong>{data ? formatMarketPrice(data.latestPrice, data.currency) : '-'}</strong>
+        </div>
+        <div>
+          <span>{language === 'en' ? 'Vs prev.' : '전일 대비'}</span>
+          <strong className={Number(data?.changePercent ?? 0) >= 0 ? 'is-up' : 'is-down'}>
+            {yesterdayChange}
+          </strong>
+        </div>
+        <div>
+          <span>{language === 'en' ? 'Shares' : '보유수량'}</span>
+          <strong>{shares || '-'}</strong>
+        </div>
+        <div>
+          <span>{language === 'en' ? 'Buy' : '매수가'}</span>
+          <strong>{buyPrice || '-'}</strong>
+        </div>
+        <div>
+          <span>{language === 'en' ? 'Return' : '수익률'}</span>
+          <strong>{returnRate || '-'}</strong>
+        </div>
+      </div>
+
+      <MarketLivePreview
+        data={data}
+        status={status}
+        error={error}
+        language={language}
+        onApplyQuote={() => {}}
+        showApply={false}
+      />
+    </section>
+  );
+}
+
+function MarketNewsPanel({ language }) {
+  const requestIdRef = useRef(0);
+  const activeNewsAbortRef = useRef(null);
+  const [query, setQuery] = useState('');
+  const [submittedQuery, setSubmittedQuery] = useState('');
+  const [news, setNews] = useState(null);
+  const [status, setStatus] = useState('idle');
+  const [error, setError] = useState('');
+
+  const loadNews = useCallback(
+    async (nextQuery = '') => {
+      const requestId = requestIdRef.current + 1;
+      requestIdRef.current = requestId;
+      activeNewsAbortRef.current?.abort();
+      const controller = new AbortController();
+      activeNewsAbortRef.current = controller;
+      const cleanQuery = String(nextQuery ?? '').trim();
+      setStatus('loading');
+      setError('');
+
+      try {
+        const payload = await fetchMarketNews({
+          query: cleanQuery,
+          language,
+          mode: cleanQuery ? 'search' : 'today',
+          signal: controller.signal,
+        });
+
+        if (requestIdRef.current !== requestId || controller.signal.aborted) {
+          return;
+        }
+
+        setNews(payload);
+        setStatus('ready');
+      } catch {
+        if (requestIdRef.current !== requestId || controller.signal.aborted) {
+          return;
+        }
+
+        setNews(null);
+        setStatus('error');
+        setError(language === 'en' ? 'Could not load market news.' : '뉴스를 가져오지 못했습니다.');
+      }
+    },
+    [language],
+  );
+
+  useEffect(() => {
+    setSubmittedQuery('');
+    loadNews('');
+
+    return () => {
+      requestIdRef.current += 1;
+      activeNewsAbortRef.current?.abort();
+    };
+  }, [language, loadNews]);
+
+  const handleSearch = useCallback(
+    (event) => {
+      event.preventDefault();
+      const cleanQuery = query.trim();
+      setSubmittedQuery(cleanQuery);
+      loadNews(cleanQuery);
+    },
+    [loadNews, query],
+  );
+
+  const handleRefresh = useCallback(() => {
+    loadNews(submittedQuery);
+  }, [loadNews, submittedQuery]);
+
+  const newsItems = news?.items ?? [];
+  const isSearchMode = Boolean(submittedQuery || news?.mode === 'search');
+  const metaLabel =
+    news?.source ??
+    (isSearchMode ? (language === 'en' ? 'Search results' : '검색 결과') : language === 'en' ? 'Latest stock news' : '최신 주식 뉴스');
+  const emptyCopy = isSearchMode
+    ? language === 'en' ? 'No matching news.' : '검색 결과가 없습니다.'
+    : language === 'en' ? 'No recent stock news found.' : '최신 주식 뉴스를 찾지 못했습니다.';
+
+  return (
+    <div className="tool-drawer__news">
+      <form className="tool-drawer__news-search" onSubmit={handleSearch}>
+        <input
+          type="text"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={language === 'en' ? 'Ticker, company, theme, date' : '티커, 종목명, 테마, 날짜 검색'}
+        />
+        <button type="submit" disabled={status === 'loading'}>
+          {language === 'en' ? 'Search' : '검색'}
+        </button>
+        <button type="button" onClick={handleRefresh} disabled={status === 'loading'}>
+          {language === 'en' ? 'Refresh' : '새로고침'}
+        </button>
+      </form>
+
+      <div className="tool-drawer__news-meta">
+        <span>{metaLabel}</span>
+        <em>
+          {status === 'loading'
+            ? language === 'en' ? 'updating' : '갱신 중'
+            : news?.fetchedAt
+              ? formatNewsTime(news.fetchedAt, language)
+              : ''}
+        </em>
+      </div>
+
+      {error ? <p className="tool-drawer__empty">{error}</p> : null}
+      {!error && status !== 'loading' && newsItems.length === 0 ? (
+        <p className="tool-drawer__empty">{emptyCopy}</p>
+      ) : null}
+
+      <div className="tool-drawer__news-list">
+        {newsItems.map((article) => {
+          const sourceLabel = /naver|네이버/i.test(article.source ?? '')
+            ? language === 'en' ? 'Market news' : '주식 뉴스'
+            : article.source;
+
+          return (
+            <a
+              key={article.id}
+              className="tool-drawer__news-card"
+              href={article.link}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <strong>{article.title}</strong>
+              <span>
+                {sourceLabel}
+                {article.publishedAt ? ` · ${formatNewsTime(article.publishedAt, language)}` : ''}
+              </span>
+            </a>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 function HeatmapCard({
   heatmap,
   language,
@@ -4599,7 +5601,13 @@ function PortfolioAllocationRing({
   );
 }
 
-function PortfolioAllocationCard({ allocation, language, onInteract, onPointerDown }) {
+function PortfolioAllocationCard({
+  allocation,
+  language,
+  className = 'allocation-panel',
+  onInteract,
+  onPointerDown,
+}) {
   const panelRef = useRef(null);
   const text = textFor(language);
   const [hoverInfo, setHoverInfo] = useState(null);
@@ -4640,7 +5648,7 @@ function PortfolioAllocationCard({ allocation, language, onInteract, onPointerDo
   return (
     <aside
       ref={panelRef}
-      className="allocation-panel"
+      className={className}
       aria-label={text.allocationChartAria}
       onPointerDown={(event) => {
         onPointerDown?.(event);
@@ -4918,6 +5926,1511 @@ function PortfolioAllocationWidget({
         />
       ) : null}
     </div>
+  );
+}
+
+function FloatingDigitalTwinDock({
+  items,
+  timelineItems,
+  language = 'ko',
+  anchorRef,
+  anchorSelector,
+  anchorPosition,
+  anchorSize,
+  anchorSteps = 5,
+  resetSignal,
+  visible = true,
+  layerStyle,
+  onInteract,
+}) {
+  const [open, setOpen] = useState(false);
+  const pendingResetRef = useRef(0);
+
+  const resolveAnchorRect = () =>
+    anchorRef?.current?.getBoundingClientRect() ??
+    (anchorSelector && typeof document !== 'undefined'
+      ? document.querySelector(anchorSelector)?.getBoundingClientRect()
+      : null);
+
+  const twinDock = useFloatingHandle({
+    initialPosition: (win) => {
+      const size = twinDockSizeFor(win.innerWidth);
+      const currentAnchorSize = anchorSize ?? toolTriggerSizeFor(win.innerWidth);
+      const rect = resolveAnchorRect();
+
+      if (rect) {
+        return stackDockBelowRect(
+          rect,
+          currentAnchorSize,
+          size,
+          win.innerWidth,
+          win.innerHeight,
+          anchorSteps,
+        );
+      }
+
+      if (anchorPosition) {
+        return stackDockBelow(
+          anchorPosition.x,
+          anchorPosition.y,
+          currentAnchorSize,
+          size,
+          win.innerWidth,
+          win.innerHeight,
+          anchorSteps,
+        );
+      }
+
+      const inset = uiInsetFor(win.innerWidth);
+
+      return stackDockBelow(
+        inset,
+        inset,
+        toolTriggerSizeFor(win.innerWidth),
+        size,
+        win.innerWidth,
+        win.innerHeight,
+        anchorSteps,
+      );
+    },
+    fallbackSize: (width) => {
+      const size = twinDockSizeFor(width);
+      return { width: size, height: size };
+    },
+    measureBounds: ({ container, fallback, viewportWidth, nextX }) => {
+      if (!open) {
+        return fallback;
+      }
+
+      const panel = container?.querySelector('.twin-panel');
+      const panelWidth = panel?.offsetWidth ?? Math.min(24 * 16, viewportWidth - 32);
+      const panelHeight = panel?.offsetHeight ?? Math.min(36 * 16, window.innerHeight - 32);
+      const panelOffset = (viewportWidth <= MOBILE_BREAKPOINT ? 0.34 : 0.55) * 16;
+      const panelReachX = Math.max(0, panelWidth + panelOffset - fallback.width);
+      const panelSide = floatingPanelSideFor(
+        nextX ?? container?.getBoundingClientRect().left ?? 0,
+        fallback.width,
+        viewportWidth,
+      );
+
+      return {
+        width: fallback.width + panelReachX,
+        height: Math.max(fallback.height, panelHeight + panelOffset),
+        offsetX: panelSide === 'left' ? -panelReachX : 0,
+        offsetY: 0,
+      };
+    },
+    onInteract,
+    onPress: () => {
+      setOpen((current) => !current);
+    },
+    continuousFollow: true,
+    storageKey: STORAGE_KEYS.twinDockPosition,
+  });
+
+  useEffect(() => {
+    if (!resetSignal) {
+      return;
+    }
+
+    pendingResetRef.current = resetSignal;
+    setOpen(false);
+  }, [resetSignal]);
+
+  useEffect(() => {
+    if (!pendingResetRef.current || !resetSignal || typeof window === 'undefined') {
+      return undefined;
+    }
+
+    let outerFrameId = 0;
+    let innerFrameId = 0;
+
+    outerFrameId = window.requestAnimationFrame(() => {
+      innerFrameId = window.requestAnimationFrame(() => {
+        if (pendingResetRef.current !== resetSignal) {
+          return;
+        }
+
+        twinDock.snapToInitial();
+        pendingResetRef.current = 0;
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(outerFrameId);
+      window.cancelAnimationFrame(innerFrameId);
+    };
+  }, [
+    twinDock.snapToInitial,
+    anchorPosition?.x,
+    anchorPosition?.y,
+    anchorSteps,
+    resetSignal,
+  ]);
+
+  useEffect(() => {
+    if (!open || !visible) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open, visible]);
+
+  const panelSide =
+    typeof window === 'undefined'
+      ? 'right'
+      : floatingPanelSideFor(
+          twinDock.position.x,
+          twinDockSizeFor(window.innerWidth),
+          window.innerWidth,
+        );
+
+  return (
+    <div
+      ref={twinDock.containerRef}
+      className={`twin-dock${panelSide === 'left' ? ' is-flipped' : ''}${open ? ' is-open' : ''}${twinDock.dragging ? ' is-dragging' : ''}${visible ? '' : ' is-hidden'}`}
+      style={{
+        transform: `translate3d(${twinDock.position.x}px, ${twinDock.position.y}px, 0)`,
+        ...layerStyle,
+      }}
+    >
+      <button
+        type="button"
+        className={`twin-dock__toggle${open ? ' is-open' : ''}`}
+        aria-label={language === 'en' ? 'Investment Simulation' : '투자 시뮬레이션'}
+        aria-expanded={open}
+        onPointerDown={twinDock.handlePointerDown}
+        onClick={(event) => {
+          if (event.detail !== 0) {
+            return;
+          }
+
+          onInteract?.();
+          setOpen((current) => !current);
+        }}
+      >
+        <SketchTwinIcon />
+      </button>
+
+      {open ? (
+        <DigitalTwinPanel
+          items={items}
+          timelineItems={timelineItems}
+          className="is-open"
+          onPointerDown={twinDock.handleDragPointerDown}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ToolSideDrawer({
+  open,
+  activeTool,
+  onSelectTool,
+  groupOptions,
+  activeGroupKey,
+  onGroupChange,
+  heatmap,
+  allocation,
+  scorecard,
+  overallScorecard,
+  scoreAxes,
+  scoreWeightPreset,
+  onScoreWeightPresetChange,
+  items,
+  timelineItems,
+  portfolioEntries = [],
+  activePortfolio = null,
+  activePortfolioId,
+  onSelectPortfolio,
+  onFocusHolding,
+  onClearPortfolio,
+  onOpenPortfolioPicker,
+  onCreateManualAtom,
+  onCreateManualPortfolio,
+  onAppendManualHoldings,
+  onUpdatePortfolioHolding,
+  onRemovePortfolioHolding,
+  drawerWidth = TOOL_DRAWER_DEFAULT_WIDTH,
+  onDrawerWidthChange,
+  language,
+  layerStyle,
+  onInteract,
+}) {
+  const text = textFor(language);
+  const [resizing, setResizing] = useState(false);
+  const [manualAccountName, setManualAccountName] = useState('');
+  const [manualStockName, setManualStockName] = useState('');
+  const [manualTicker, setManualTicker] = useState('');
+  const [manualBuyPrice, setManualBuyPrice] = useState('');
+  const [manualShares, setManualShares] = useState('');
+  const [manualReturnRate, setManualReturnRate] = useState('');
+  const [manualAssetClass, setManualAssetClass] = useState('주식');
+  const [manualRows, setManualRows] = useState([]);
+  const [manualMarketData, setManualMarketData] = useState(null);
+  const [manualMarketStatus, setManualMarketStatus] = useState('idle');
+  const [manualMarketError, setManualMarketError] = useState('');
+  const [manualMarketSuggestions, setManualMarketSuggestions] = useState([]);
+  const [manualSuggestionStatus, setManualSuggestionStatus] = useState('idle');
+  const [manualSuggestionLocked, setManualSuggestionLocked] = useState(false);
+  const [editingHolding, setEditingHolding] = useState(null);
+  const [selectedHolding, setSelectedHolding] = useState(null);
+  const manualSuggestionRef = useRef(null);
+  const manualDraftRef = useRef({
+    stockName: '',
+    ticker: '',
+    buyPrice: '',
+    returnRate: '',
+  });
+  const tools = [
+    {
+      key: 'accounts',
+      label: language === 'en' ? 'Portfolios' : '포트폴리오 목록',
+      icon: <SketchAccountStackIcon />,
+      available: true,
+    },
+    {
+      key: 'manual',
+      label: language === 'en' ? 'Add Stock' : '종목 추가',
+      icon: <SketchManualAccountIcon />,
+      available: true,
+    },
+    {
+      key: 'overview',
+      label: language === 'en' ? 'Overview' : '요약',
+      icon: <SketchBurstIcon />,
+      available: Boolean(heatmap || allocation || scorecard || groupOptions.length),
+    },
+    {
+      key: 'twin',
+      label: language === 'en' ? 'Investment Simulation' : '투자 시뮬레이션',
+      icon: <SketchTwinIcon />,
+      available: true,
+    },
+    {
+      key: 'news',
+      label: language === 'en' ? 'Market News' : '시장 뉴스',
+      icon: <SketchNewsIcon />,
+      available: true,
+    },
+  ].filter((tool) => tool.available);
+  const resolvedTool =
+    tools.find((tool) => tool.key === activeTool) ??
+    tools.find((tool) => tool.key === 'accounts') ??
+    null;
+  const clampDrawerWidth = useCallback((nextWidth) => {
+    if (typeof window === 'undefined') {
+      return clamp(nextWidth, 300, TOOL_DRAWER_MAX_WIDTH);
+    }
+
+    const viewportWidth = window.innerWidth;
+    const minWidth = Math.min(300, Math.max(248, viewportWidth - 72));
+    const maxWidth = Math.max(minWidth, Math.min(TOOL_DRAWER_MAX_WIDTH, viewportWidth - 34));
+
+    return clamp(nextWidth, minWidth, maxWidth);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const handleResize = () => {
+      onDrawerWidthChange?.((current) => clampDrawerWidth(current));
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [clampDrawerWidth, onDrawerWidthChange]);
+
+  useEffect(() => {
+    manualDraftRef.current = {
+      stockName: manualStockName,
+      ticker: manualTicker,
+      buyPrice: manualBuyPrice,
+      returnRate: manualReturnRate,
+    };
+  }, [manualBuyPrice, manualReturnRate, manualStockName, manualTicker]);
+
+  useEffect(() => {
+    const query = manualStockName.trim();
+
+    if (
+      !open ||
+      resolvedTool?.key !== 'manual' ||
+      manualSuggestionLocked ||
+      (query.length < 2 && !/[가-힣]/.test(query))
+    ) {
+      setManualMarketSuggestions([]);
+      setManualSuggestionStatus('idle');
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    setManualSuggestionStatus('loading');
+
+    const timerId = window.setTimeout(async () => {
+      try {
+        const suggestions = await fetchMarketSymbolSuggestions({
+          query,
+          limit: 8,
+          signal: controller.signal,
+        });
+
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setManualMarketSuggestions(suggestions);
+        setManualSuggestionStatus('ready');
+      } catch {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setManualMarketSuggestions([]);
+        setManualSuggestionStatus('error');
+      }
+    }, 220);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timerId);
+    };
+  }, [manualStockName, manualSuggestionLocked, open, resolvedTool?.key]);
+
+  useEffect(() => {
+    const ticker = manualTicker.trim();
+    const name = manualStockName.trim();
+
+    if (!open || resolvedTool?.key !== 'manual' || (!ticker && name.length < 2)) {
+      setManualMarketStatus('idle');
+      setManualMarketError('');
+      setManualMarketData(null);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    const queryKey = `${ticker}|${name}`;
+    let intervalId = 0;
+
+    const loadMarketData = async (silent = false) => {
+      if (!silent) {
+        setManualMarketStatus('loading');
+        setManualMarketError('');
+        setManualMarketData(null);
+      }
+
+      try {
+        const nextData = await fetchLiveMarketData({
+          ticker,
+          name,
+          signal: controller.signal,
+        });
+
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setManualMarketData({ ...nextData, queryKey });
+        setManualMarketStatus('ready');
+        setManualMarketError('');
+
+        const currentDraft = manualDraftRef.current;
+        const nextBuyPrice = currentDraft.buyPrice.trim() || formatMarketInputPrice(nextData.latestPrice);
+        if (!currentDraft.buyPrice.trim() && nextBuyPrice) {
+          setManualBuyPrice(nextBuyPrice);
+        }
+        const nextReturnRate = calculateReturnRateFromBuyPrice(nextBuyPrice, nextData.latestPrice);
+        if (nextReturnRate) {
+          setManualReturnRate(nextReturnRate);
+        }
+        if (nextData.assetClass) {
+          setManualAssetClass((current) =>
+            !current.trim() || current === '주식' ? nextData.assetClass : current,
+          );
+        }
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setManualMarketStatus('error');
+        setManualMarketError(
+          language === 'en'
+            ? 'Could not load live market data.'
+            : '실시간 시세를 가져오지 못했습니다.',
+        );
+        setManualMarketData(null);
+      }
+    };
+
+    const timerId = window.setTimeout(() => {
+      loadMarketData(false);
+      intervalId = window.setInterval(() => loadMarketData(true), 30000);
+    }, 520);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timerId);
+      window.clearInterval(intervalId);
+    };
+  }, [language, manualStockName, manualTicker, open, resolvedTool?.key]);
+
+  useEffect(() => {
+    if (!manualBuyPrice.trim()) {
+      setManualReturnRate('');
+      return;
+    }
+
+    const nextReturnRate = calculateReturnRateFromBuyPrice(
+      manualBuyPrice,
+      manualMarketData?.latestPrice,
+    );
+
+    if (!nextReturnRate) {
+      return;
+    }
+
+    setManualReturnRate((current) => (current === nextReturnRate ? current : nextReturnRate));
+  }, [manualBuyPrice, manualMarketData]);
+
+  const handleResizePointerDown = useCallback(
+    (event) => {
+      if (!open || event.button !== 0) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      onInteract?.();
+
+      const startX = event.clientX;
+      const startWidth = drawerWidth;
+      setResizing(true);
+
+      const handlePointerMove = (moveEvent) => {
+        moveEvent.preventDefault();
+        onDrawerWidthChange?.(clampDrawerWidth(startWidth + moveEvent.clientX - startX));
+      };
+
+      const stopResize = () => {
+        setResizing(false);
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('pointerup', stopResize);
+        window.removeEventListener('pointercancel', stopResize);
+      };
+
+      window.addEventListener('pointermove', handlePointerMove, { passive: false });
+      window.addEventListener('pointerup', stopResize);
+      window.addEventListener('pointercancel', stopResize);
+    },
+    [clampDrawerWidth, drawerWidth, onDrawerWidthChange, onInteract, open],
+  );
+
+  const handleResizeKeyDown = useCallback(
+    (event) => {
+      if (!open) {
+        return;
+      }
+
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+        return;
+      }
+
+      event.preventDefault();
+      onInteract?.();
+      onDrawerWidthChange?.((current) =>
+        clampDrawerWidth(current + (event.key === 'ArrowRight' ? 24 : -24)),
+      );
+    },
+    [clampDrawerWidth, onDrawerWidthChange, onInteract, open],
+  );
+
+  const hasAtomName = manualAccountName.trim().length > 0;
+  const hasManualStockDraft = manualStockName.trim().length > 0 || manualTicker.trim().length > 0;
+  const hasManualDraft = hasManualStockDraft && (Boolean(activePortfolio?.id) || hasAtomName);
+  const makeManualDraftRow = useCallback(
+    () => {
+      if (!hasManualDraft) {
+        return null;
+      }
+
+      return {
+        accountName:
+          activePortfolio?.id
+            ? activePortfolio.fileName?.replace(/\.manual\.csv$/i, '') ||
+              summarizePortfolioEntryAccounts(activePortfolio, language).accountText ||
+              '직접 입력 포트폴리오'
+            : manualAccountName.trim() || '직접 입력 포트폴리오',
+        stockName: resolveMarketDisplayName(manualMarketData) || manualStockName.trim() || manualTicker.trim(),
+        ticker: manualMarketData?.symbol || manualTicker.trim() || '',
+        buyPrice: manualBuyPrice.trim() || formatMarketInputPrice(manualMarketData?.latestPrice),
+        shares: manualShares.trim(),
+        returnRate:
+          manualReturnRate.trim() ||
+          calculateReturnRateFromBuyPrice(
+            manualBuyPrice.trim() || formatMarketInputPrice(manualMarketData?.latestPrice),
+            manualMarketData?.latestPrice,
+          ),
+        assetClass: manualAssetClass.trim() || '주식',
+        sector: manualMarketData?.sector || '',
+        marketName: resolveMarketDisplayName(manualMarketData) || '',
+        marketPrice: Number.isFinite(manualMarketData?.latestPrice)
+          ? formatMarketPrice(manualMarketData.latestPrice, manualMarketData.currency)
+          : '',
+        marketCurrency: manualMarketData?.currency || '',
+        marketUpdatedAt: manualMarketData?.updatedAt
+          ? formatMarketTime(manualMarketData.updatedAt, language)
+          : '',
+        recordedAt: formatDateKey(),
+      };
+    },
+    [
+      activePortfolio,
+      hasManualDraft,
+      language,
+      manualAccountName,
+      manualAssetClass,
+      manualBuyPrice,
+      manualMarketData,
+      manualReturnRate,
+      manualShares,
+      manualStockName,
+      manualTicker,
+    ],
+  );
+  const clearManualStockFields = useCallback(() => {
+    setManualStockName('');
+    setManualTicker('');
+    setManualBuyPrice('');
+    setManualShares('');
+    setManualReturnRate('');
+    setManualAssetClass('주식');
+    setManualSuggestionLocked(false);
+  }, []);
+  const handleCreateManualAtom = useCallback(() => {
+    if (!hasAtomName || portfolioEntries.length >= MAX_PORTFOLIOS) {
+      return;
+    }
+
+    onInteract?.();
+    onCreateManualAtom?.({
+      accountName: manualAccountName.trim(),
+    });
+    setManualRows([]);
+    clearManualStockFields();
+    setManualAccountName('');
+    onSelectTool?.('manual');
+  }, [
+    clearManualStockFields,
+    hasAtomName,
+    manualAccountName,
+    onCreateManualAtom,
+    onInteract,
+    onSelectTool,
+    portfolioEntries.length,
+  ]);
+  const handleAddManualRow = useCallback(() => {
+    if (editingHolding) {
+      return;
+    }
+
+    const draft = makeManualDraftRow();
+
+    if (!draft) {
+      return;
+    }
+
+    onInteract?.();
+    setManualRows((current) => [
+      ...current,
+      {
+        ...draft,
+        id:
+          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `manual-row-${Date.now()}-${current.length}`,
+      },
+    ]);
+    clearManualStockFields();
+  }, [clearManualStockFields, editingHolding, makeManualDraftRow, onInteract]);
+  const handleSaveManualPortfolio = useCallback(() => {
+    const draft = makeManualDraftRow();
+
+    if (editingHolding) {
+      if (!draft) {
+        return;
+      }
+
+      onInteract?.();
+      onUpdatePortfolioHolding?.({
+        entryId: editingHolding.entryId,
+        itemId: editingHolding.itemId,
+        itemIndex: editingHolding.itemIndex,
+        accountName: manualAccountName.trim() || resolveHoldingAccount(editingHolding.item),
+        row: draft,
+      });
+      setEditingHolding(null);
+      setManualRows([]);
+      clearManualStockFields();
+      setManualAccountName('');
+      onSelectTool?.('accounts');
+      return;
+    }
+
+    const rows = draft ? [...manualRows, draft] : manualRows;
+
+    if (!rows.length || portfolioEntries.length >= MAX_PORTFOLIOS) {
+      return;
+    }
+
+    onInteract?.();
+    onCreateManualPortfolio?.({
+      accountName: manualAccountName.trim() || '직접 입력 포트폴리오',
+      rows,
+    });
+    setManualRows([]);
+    setManualAccountName('');
+    clearManualStockFields();
+  }, [
+    clearManualStockFields,
+    editingHolding,
+    makeManualDraftRow,
+    manualAccountName,
+    manualRows,
+    onCreateManualPortfolio,
+    onInteract,
+    onSelectTool,
+    onUpdatePortfolioHolding,
+    portfolioEntries.length,
+  ]);
+  const handleAppendManualRows = useCallback(() => {
+    const draft = makeManualDraftRow();
+    const rows = draft ? [...manualRows, draft] : manualRows;
+
+    if (!activePortfolio?.id || !rows.length) {
+      return;
+    }
+
+    onInteract?.();
+    onAppendManualHoldings?.({
+      entryId: activePortfolio.id,
+      accountName:
+        activePortfolio.fileName?.replace(/\.manual\.csv$/i, '') ||
+        summarizePortfolioEntryAccounts(activePortfolio, language).accountText ||
+        '직접 입력 포트폴리오',
+      rows,
+    });
+    setManualRows([]);
+    clearManualStockFields();
+    setManualAccountName('');
+    onSelectTool?.('accounts');
+  }, [
+    activePortfolio,
+    clearManualStockFields,
+    language,
+    makeManualDraftRow,
+    manualRows,
+    onAppendManualHoldings,
+    onInteract,
+    onSelectTool,
+  ]);
+  const removeManualRow = useCallback((rowId) => {
+    setManualRows((current) => current.filter((row) => row.id !== rowId));
+  }, []);
+  const beginEditHolding = useCallback(
+    (entry, item, itemIndex) => {
+      if (!entry || !item) {
+        return;
+      }
+
+      onInteract?.();
+      setEditingHolding({
+        entryId: entry.id,
+        itemId: item.id ?? '',
+        itemIndex,
+        item,
+      });
+      setManualRows([]);
+      setManualAccountName(resolveHoldingAccount(item));
+      setManualStockName(resolveHoldingName(item));
+      setManualTicker(resolveHoldingTicker(item));
+      setManualSuggestionLocked(true);
+      setManualBuyPrice(resolveHoldingMetric(item, ['매수가', 'buyPrice', 'purchasePrice']));
+      setManualShares(resolveHoldingMetric(item, ['보유수량', 'shares', 'quantity']));
+      setManualReturnRate(
+        String(item?.detail ?? item?.return ?? '').trim() ||
+          resolveHoldingMetric(item, ['수익률', 'return']),
+      );
+      setManualAssetClass(String(item?.assetClass ?? '').trim() || '주식');
+      onSelectTool?.('manual');
+    },
+    [onInteract, onSelectTool],
+  );
+  const cancelEditingHolding = useCallback(() => {
+    setEditingHolding(null);
+    setManualRows([]);
+    setManualAccountName('');
+    clearManualStockFields();
+  }, [clearManualStockFields]);
+
+  const activeAccountEntry =
+    activePortfolio ??
+    portfolioEntries.find((entry) => entry.id === activePortfolioId) ??
+    portfolioEntries[0] ??
+    null;
+  const activeAccountSourceItems =
+    (activeAccountEntry?.timelineItems?.length
+      ? activeAccountEntry.timelineItems
+      : activeAccountEntry?.items) ?? [];
+  const activeAccountItems = useMemo(
+    () => buildGroupedHoldingItems(activeAccountSourceItems),
+    [activeAccountSourceItems],
+  );
+  const activeSelectedHolding =
+    activeAccountEntry && selectedHolding?.entryId === activeAccountEntry.id
+      ? selectedHolding
+      : null;
+
+  useEffect(() => {
+    if (!selectedHolding) {
+      return;
+    }
+
+    const entry = portfolioEntries.find((candidate) => candidate.id === selectedHolding.entryId);
+    const sourceItems = (entry?.timelineItems?.length ? entry.timelineItems : entry?.items) ?? [];
+    const stillExists = buildGroupedHoldingItems(sourceItems).some(
+      (item, index) =>
+        selectedHolding.holdingGroupKey
+          ? item.holdingGroupKey === selectedHolding.holdingGroupKey
+          : selectedHolding.itemId
+            ? item.id === selectedHolding.itemId
+            : index === selectedHolding.itemIndex,
+    );
+
+    if (!stillExists) {
+      setSelectedHolding(null);
+    }
+  }, [portfolioEntries, selectedHolding]);
+
+  const handleSelectMarketSuggestion = useCallback(
+    (suggestion) => {
+      if (!suggestion?.symbol) {
+        return;
+      }
+
+      onInteract?.();
+      setManualSuggestionLocked(true);
+      setManualStockName(suggestion.displayName || suggestion.name || suggestion.symbol);
+      setManualTicker(suggestion.symbol);
+      if (suggestion.assetClass) {
+        setManualAssetClass(suggestion.assetClass);
+      }
+      setManualMarketSuggestions([]);
+      setManualSuggestionStatus('idle');
+    },
+    [onInteract],
+  );
+  const handleManualStockNameChange = useCallback((event) => {
+    setManualSuggestionLocked(false);
+    setManualStockName(event.target.value);
+  }, []);
+  const handleManualBuyPriceChange = useCallback(
+    (event) => {
+      const nextBuyPrice = event.target.value;
+      setManualBuyPrice(nextBuyPrice);
+
+      const nextReturnRate = calculateReturnRateFromBuyPrice(
+        nextBuyPrice,
+        manualMarketData?.latestPrice,
+      );
+
+      if (nextReturnRate || !nextBuyPrice.trim()) {
+        setManualReturnRate(nextReturnRate);
+      }
+    },
+    [manualMarketData],
+  );
+  const shouldShowManualSuggestions =
+    !manualSuggestionLocked &&
+    (manualStockName.trim().length >= 2 || /[가-힣]/.test(manualStockName.trim())) &&
+    (manualSuggestionStatus === 'loading' ||
+      manualSuggestionStatus === 'ready' ||
+      manualSuggestionStatus === 'error');
+  const closeManualSuggestions = useCallback(() => {
+    setManualSuggestionStatus('idle');
+  }, []);
+
+  useEffect(() => {
+    if (!shouldShowManualSuggestions || typeof document === 'undefined') {
+      return undefined;
+    }
+
+    const handleDocumentPointerDown = (event) => {
+      if (manualSuggestionRef.current?.contains(event.target)) {
+        return;
+      }
+
+      closeManualSuggestions();
+    };
+    const handleDocumentKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        closeManualSuggestions();
+      }
+    };
+
+    document.addEventListener('pointerdown', handleDocumentPointerDown, true);
+    document.addEventListener('keydown', handleDocumentKeyDown, true);
+
+    return () => {
+      document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
+      document.removeEventListener('keydown', handleDocumentKeyDown, true);
+    };
+  }, [closeManualSuggestions, shouldShowManualSuggestions]);
+
+  const applyMarketQuoteToDraft = useCallback(() => {
+    if (!manualMarketData) {
+      return;
+    }
+
+    onInteract?.();
+    const marketName = resolveMarketDisplayName(manualMarketData);
+    if (marketName) {
+      setManualSuggestionLocked(true);
+      setManualStockName(marketName);
+    }
+    if (!manualTicker.trim()) {
+      setManualTicker(manualMarketData.symbol || '');
+    }
+    if (manualMarketData.assetClass) {
+      setManualAssetClass(manualMarketData.assetClass);
+    }
+    const nextBuyPrice = formatMarketInputPrice(manualMarketData.latestPrice);
+    setManualBuyPrice(nextBuyPrice);
+    const nextReturnRate = calculateReturnRateFromBuyPrice(
+      nextBuyPrice,
+      manualMarketData.latestPrice,
+    );
+    if (nextReturnRate) {
+      setManualReturnRate(nextReturnRate);
+    }
+  }, [manualMarketData, manualTicker, onInteract]);
+  const renderManualEntryPanel = () => (
+    <section className="tool-drawer__manual-entry">
+      {editingHolding ? (
+        <div className="tool-drawer__manual-editing">
+          <span>{language === 'en' ? 'Editing holding' : '종목 수정 중'}</span>
+          <button type="button" onClick={cancelEditingHolding}>
+            {language === 'en' ? 'Cancel' : '취소'}
+          </button>
+        </div>
+      ) : null}
+
+      <div className="tool-drawer__manual-grid">
+        <div ref={manualSuggestionRef} className="tool-drawer__manual-field tool-drawer__manual-field--suggest">
+          <span id="manual-stock-name-label">{language === 'en' ? 'Stock' : '종목명'}</span>
+          <input
+            type="text"
+            value={manualStockName}
+            onChange={handleManualStockNameChange}
+            placeholder={language === 'en' ? 'Apple, TIGER' : '예: 타이거, 애플'}
+            autoComplete="off"
+            aria-labelledby="manual-stock-name-label"
+            aria-autocomplete="list"
+            aria-expanded={shouldShowManualSuggestions}
+          />
+          {shouldShowManualSuggestions ? (
+            <div className="tool-drawer__suggestions" role="listbox" aria-label={language === 'en' ? 'Stock suggestions' : '종목 검색 결과'}>
+              {manualMarketSuggestions.length ? (
+                manualMarketSuggestions.map((suggestion) => (
+                  <button
+                    key={suggestion.symbol}
+                    type="button"
+                    className="tool-drawer__suggestion"
+                    role="option"
+                    aria-selected={manualTicker === suggestion.symbol}
+                    onClick={() => handleSelectMarketSuggestion(suggestion)}
+                  >
+                    <span>
+                      <strong>{suggestion.displayName || suggestion.name || suggestion.symbol}</strong>
+                      <em>
+                        {[
+                          suggestion.exchangeName,
+                          suggestion.typeDisp,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ') || suggestion.source}
+                      </em>
+                    </span>
+                    <small>{suggestion.symbol}</small>
+                  </button>
+                ))
+              ) : (
+                <p className="tool-drawer__suggestion-empty">
+                  {manualSuggestionStatus === 'loading'
+                    ? language === 'en'
+                      ? 'Searching...'
+                      : '검색 중...'
+                    : manualSuggestionStatus === 'error'
+                      ? language === 'en'
+                        ? 'Could not load suggestions.'
+                        : '검색 결과를 가져오지 못했습니다.'
+                      : language === 'en'
+                        ? 'No matching stocks.'
+                        : '관련 종목이 없습니다.'}
+                </p>
+              )}
+            </div>
+          ) : null}
+        </div>
+        <label className="tool-drawer__manual-field">
+          <span>{language === 'en' ? 'Ticker' : '티커/코드'}</span>
+          <input
+            type="text"
+            value={manualTicker}
+            onChange={(event) => setManualTicker(event.target.value)}
+            placeholder={language === 'en' ? 'AAPL' : 'AAPL 또는 005930'}
+          />
+        </label>
+        <label className="tool-drawer__manual-field">
+          <span>{language === 'en' ? 'Buy Price' : '매수가'}</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={manualBuyPrice}
+            onChange={handleManualBuyPriceChange}
+            placeholder="0"
+          />
+        </label>
+        <label className="tool-drawer__manual-field">
+          <span>{language === 'en' ? 'Shares' : '보유수량'}</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={manualShares}
+            onChange={(event) => setManualShares(event.target.value)}
+            placeholder="0"
+          />
+        </label>
+        <label className="tool-drawer__manual-field">
+          <span>{language === 'en' ? 'Return' : '수익률'}</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={manualReturnRate}
+            onChange={(event) => setManualReturnRate(event.target.value)}
+            placeholder={language === 'en' ? '3.5%' : '예: 3.5%'}
+          />
+        </label>
+        <label className="tool-drawer__manual-field">
+          <span>{language === 'en' ? 'Asset' : '자산군'}</span>
+          <select
+            value={manualAssetClass}
+            onChange={(event) => setManualAssetClass(event.target.value)}
+          >
+            <option value="주식">{language === 'en' ? 'Stock' : '주식'}</option>
+            <option value="배당">{language === 'en' ? 'Dividend' : '배당'}</option>
+            <option value="금/원자재 ETF">{language === 'en' ? 'Gold/Commodity' : '금/원자재'}</option>
+            <option value="금/현금">{language === 'en' ? 'Gold/Cash' : '금/현금'}</option>
+            <option value="리츠">{language === 'en' ? 'REITs' : '리츠'}</option>
+            <option value="채권">{language === 'en' ? 'Bond' : '채권'}</option>
+            <option value="기타">{language === 'en' ? 'Other' : '기타'}</option>
+          </select>
+        </label>
+      </div>
+
+      <div className="tool-drawer__manual-actions">
+        <button
+          type="button"
+          className="tool-drawer__manual-button"
+          disabled={!activePortfolio?.id || !hasManualStockDraft || Boolean(editingHolding)}
+          onClick={handleAddManualRow}
+        >
+          {language === 'en' ? 'Add stock' : '종목 추가'}
+        </button>
+        {activePortfolio?.id && !editingHolding ? (
+          <button
+            type="button"
+            className="tool-drawer__manual-button"
+            disabled={!manualRows.length && !hasManualStockDraft}
+            onClick={handleAppendManualRows}
+          >
+            {language === 'en' ? 'Add to current portfolio' : '현재 포트폴리오에 종목 추가'}
+          </button>
+        ) : null}
+        {editingHolding ? (
+          <button
+            type="button"
+            className="tool-drawer__manual-button tool-drawer__manual-button--primary"
+            disabled={!hasManualDraft}
+            onClick={handleSaveManualPortfolio}
+          >
+            {language === 'en' ? 'Save changes' : '변경 저장'}
+          </button>
+        ) : null}
+      </div>
+
+      {manualRows.length && !editingHolding ? (
+        <div className="tool-drawer__manual-preview">
+          {manualRows.map((row) => (
+            <div key={row.id} className="tool-drawer__manual-row">
+              <span>
+                <strong>{compactLabel(row.stockName || row.ticker, 16)}</strong>
+                <em>{compactLabel(row.ticker || row.assetClass, 12)}</em>
+              </span>
+              <button
+                type="button"
+                className="tool-drawer__manual-remove"
+                onClick={() => removeManualRow(row.id)}
+                aria-label={language === 'en' ? 'Remove stock' : '종목 제거'}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <MarketLivePreview
+        data={manualMarketData}
+        status={manualMarketStatus}
+        error={manualMarketError}
+        language={language}
+        onApplyQuote={applyMarketQuoteToDraft}
+      />
+    </section>
+  );
+
+  const renderActivePanel = () => {
+    if (!resolvedTool) {
+      return null;
+    }
+
+    if (resolvedTool.key === 'accounts') {
+      return (
+        <div className="tool-drawer__accounts">
+          <div className="tool-drawer__account-actions">
+            <span>
+              {language === 'en'
+                ? `${portfolioEntries.length} portfolios`
+                : `${portfolioEntries.length}개 포트폴리오`}
+            </span>
+            <button
+              type="button"
+              className="tool-drawer__account-upload"
+              disabled={portfolioEntries.length >= MAX_PORTFOLIOS}
+              onClick={() => {
+                onInteract?.();
+                onOpenPortfolioPicker?.();
+              }}
+            >
+              {language === 'en' ? 'Import file' : '파일 가져오기'}
+            </button>
+          </div>
+          <div className="tool-drawer__account-create">
+            <label className="tool-drawer__account-create-field">
+              <input
+                type="text"
+                value={manualAccountName}
+                onChange={(event) => setManualAccountName(event.target.value)}
+                aria-label={language === 'en' ? 'Portfolio name' : '포트폴리오명'}
+                placeholder={language === 'en' ? 'Growth portfolio, dividend portfolio' : '예: isa, 연금저축'}
+              />
+            </label>
+            <button
+              type="button"
+              className="tool-drawer__account-create-button"
+              disabled={!hasAtomName || portfolioEntries.length >= MAX_PORTFOLIOS}
+              onClick={handleCreateManualAtom}
+            >
+              {language === 'en' ? 'Create portfolio' : '포트폴리오 생성'}
+            </button>
+          </div>
+
+          {portfolioEntries.length ? (
+            <div className="tool-drawer__account-list">
+              {portfolioEntries.map((entry) => {
+                const entryReviewStatus = resolveEntryReviewStatus(entry);
+                const entryReviewLabel = reviewStatusLabel(text, entryReviewStatus);
+                const accountSummary = summarizePortfolioEntryAccounts(entry, language);
+                const isActive = entry.id === activePortfolioId;
+
+                return (
+                  <article
+                    key={entry.id}
+                    className={`tool-drawer__account-card${isActive ? ' is-active' : ''}`}
+                  >
+                    <button
+                      type="button"
+                      className="tool-drawer__account-main"
+                      onClick={() => {
+                        onInteract?.();
+                        onSelectPortfolio?.(entry.id);
+                      }}
+                      aria-label={`${entry.fileName} · ${entryReviewLabel}`}
+                    >
+                      <span
+                        className={`upload-file-chip__status upload-file-chip__status--${entryReviewStatus}`}
+                        aria-hidden="true"
+                      />
+                      <span className="tool-drawer__account-copy">
+                        <strong title={entry.fileName}>{compactFileName(entry.fileName, 28)}</strong>
+                        <em title={accountSummary.accountText}>{accountSummary.accountText}</em>
+                        <small>
+                          {language === 'en'
+                            ? `${accountSummary.securityCount} assets · ${accountSummary.rowCount} rows`
+                            : `${accountSummary.securityCount}개 종목 · ${accountSummary.rowCount}개 행`}
+                        </small>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="tool-drawer__account-clear"
+                      onClick={() => {
+                        onInteract?.();
+                        onClearPortfolio?.(entry.id);
+                      }}
+                      aria-label={text.clearUploadAria}
+                    >
+                      ×
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {activeAccountEntry ? (
+            <section className="tool-drawer__holdings">
+              <div className="tool-drawer__holdings-head">
+                <span>{language === 'en' ? 'Portfolio holdings' : '포트폴리오 종목 구성'}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onInteract?.();
+                    onSelectTool?.('manual');
+                  }}
+                >
+                  {language === 'en' ? 'Add stock' : '종목 추가'}
+                </button>
+              </div>
+
+              {activeAccountItems.length ? (
+                <div className="tool-drawer__holding-list">
+                  {activeAccountItems.map((item, itemIndex) => {
+                    const itemId = item.id ?? '';
+                    const itemIds = Array.isArray(item.groupedSourceItemIds)
+                      ? item.groupedSourceItemIds
+                      : [];
+                    const itemIndexes = Array.isArray(item.groupedSourceItemIndexes)
+                      ? item.groupedSourceItemIndexes
+                      : [];
+                    const isSelected =
+                      selectedHolding?.entryId === activeAccountEntry.id &&
+                      (item.holdingGroupKey
+                        ? selectedHolding.holdingGroupKey === item.holdingGroupKey
+                        : itemId
+                          ? selectedHolding.itemId === itemId
+                          : selectedHolding.itemIndex === itemIndex);
+
+                    return (
+                      <article
+                        key={item.holdingGroupKey || itemId || `${activeAccountEntry.id}-${itemIndex}`}
+                        className={`tool-drawer__holding-row${isSelected ? ' is-active' : ''}`}
+                      >
+                        <button
+                          type="button"
+                          className="tool-drawer__holding-main"
+                          onClick={() => {
+                            onInteract?.();
+                            setSelectedHolding({
+                              entryId: activeAccountEntry.id,
+                              itemId,
+                              itemIds,
+                              itemIndex,
+                              itemIndexes,
+                              holdingGroupKey: item.holdingGroupKey,
+                              item,
+                            });
+                            onFocusHolding?.({
+                              entryId: activeAccountEntry.id,
+                              item,
+                              itemIndex,
+                            });
+                          }}
+                        >
+                          <span>
+                            <strong>{compactLabel(resolveHoldingName(item), 18)}</strong>
+                            <em>{formatHoldingListMeta(item, language)}</em>
+                          </span>
+                          <small>{String(item.detail ?? item.return ?? '').trim() || '-'}</small>
+                        </button>
+                        <button
+                          type="button"
+                          className="tool-drawer__holding-edit"
+                          onClick={() => beginEditHolding(activeAccountEntry, item, itemIndex)}
+                        >
+                          {language === 'en' ? 'Edit' : '수정'}
+                        </button>
+                        <button
+                          type="button"
+                          className="tool-drawer__holding-remove"
+                          onClick={() => {
+                            onInteract?.();
+                            onRemovePortfolioHolding?.({
+                              entryId: activeAccountEntry.id,
+                              itemId,
+                              itemIds,
+                              itemIndex,
+                              itemIndexes,
+                            });
+                          }}
+                          aria-label={language === 'en' ? 'Remove holding' : '종목 삭제'}
+                        >
+                          ×
+                        </button>
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="tool-drawer__empty">
+                  {language === 'en' ? 'No stocks in this portfolio.' : '이 포트폴리오에 종목이 없습니다.'}
+                </p>
+              )}
+
+            </section>
+          ) : null}
+        </div>
+      );
+    }
+
+    if (resolvedTool.key === 'manual') {
+      return <div className="tool-drawer__manual-panel">{renderManualEntryPanel()}</div>;
+    }
+
+    if (resolvedTool.key === 'overview') {
+      return (
+        <div className="tool-drawer__overview">
+          {groupOptions.length ? (
+            <section className="tool-drawer__overview-card tool-drawer__overview-card--wide tool-drawer__overview-card--groups">
+              <p>{language === 'en' ? 'Category Filter' : '카테고리 필터'}</p>
+              <div className="tool-drawer__group-grid">
+                {groupOptions.map((option) => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    className={`group-dock__option tool-drawer__group-option${option.key === activeGroupKey ? ' is-active' : ''}`}
+                    onClick={() => {
+                      onInteract?.();
+                      onGroupChange(option.key);
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {heatmap ? (
+            <section className="tool-drawer__overview-card tool-drawer__overview-card--wide">
+              <p>{language === 'en' ? 'Daily P/L' : '날짜별 손익률'}</p>
+              <HeatmapCard
+                heatmap={heatmap}
+                language={language}
+                className="heatmap-panel heatmap-panel--drawer"
+              />
+            </section>
+          ) : null}
+
+          <div className="tool-drawer__overview-grid">
+            {scorecard || overallScorecard ? (
+              <section className="tool-drawer__overview-card tool-drawer__overview-card--score">
+                <div className="tool-drawer__overview-card-head">
+                  <p>{language === 'en' ? 'Portfolio Scores' : '포트폴리오 점수'}</p>
+                </div>
+
+                <div className="tool-drawer__score-mode-grid" aria-label={language === 'en' ? 'Score weighting mode' : '점수 가중치 선택'}>
+                  {[
+                    {
+                      key: 'balanced',
+                      label: language === 'en' ? 'Balanced' : '균형형',
+                    },
+                    {
+                      key: 'longTermReturnFocus',
+                      label: language === 'en' ? 'Future' : '미래지향',
+                    },
+                    {
+                      key: 'stabilityFocus',
+                      label: language === 'en' ? 'Stable' : '안정형',
+                    },
+                    {
+                      key: 'returnFocus',
+                      label: language === 'en' ? 'Aggressive' : '공격형',
+                    },
+                  ].map((option) => (
+                    <button
+                      key={option.key}
+                      type="button"
+                      className={`tool-drawer__score-mode${scoreWeightPreset === option.key ? ' is-active' : ''}`}
+                      onClick={() => {
+                        onInteract?.();
+                        onScoreWeightPresetChange?.(option.key);
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="tool-drawer__score-chart-stack">
+                  {scorecard ? (
+                    <div className="tool-drawer__score-chart-block">
+                      <span>{language === 'en' ? 'Current portfolio score' : '현재 포트폴리오 점수'}</span>
+                      <PortfolioScoreCard
+                        scorecard={scorecard}
+                        axes={scoreAxes}
+                        language={language}
+                        className="score-panel score-panel--drawer"
+                      />
+                    </div>
+                  ) : null}
+
+                  {overallScorecard ? (
+                    <div className="tool-drawer__score-chart-block">
+                      <span>{language === 'en' ? 'Total portfolio score' : '전체 포트폴리오 점수'}</span>
+                      <PortfolioScoreCard
+                        scorecard={overallScorecard}
+                        axes={scoreAxes}
+                        language={language}
+                        className="score-panel score-panel--drawer"
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+            ) : null}
+
+            {allocation ? (
+              <section className="tool-drawer__overview-card">
+                <p>{language === 'en' ? 'Portfolio Mix' : '포트폴리오 비중'}</p>
+                <PortfolioAllocationCard
+                  allocation={allocation}
+                  language={language}
+                  className="allocation-panel allocation-panel--drawer"
+                  onInteract={onInteract}
+                />
+              </section>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+
+    if (resolvedTool.key === 'twin') {
+      return (
+        <DigitalTwinPanel
+          items={items}
+          timelineItems={timelineItems}
+          className="twin-panel--drawer"
+        />
+      );
+    }
+
+    if (resolvedTool.key === 'news') {
+      return <MarketNewsPanel items={items} language={language} />;
+    }
+
+    return null;
+  };
+
+  return (
+    <aside
+      className={`tool-drawer${open ? ' is-open' : ''}${open && resolvedTool ? ' has-panel' : ''}${resizing ? ' is-resizing' : ''}`}
+      style={{
+        ...layerStyle,
+        '--tool-drawer-width': `${drawerWidth}px`,
+        width: open ? `${drawerWidth}px` : undefined,
+        minWidth: open ? `${drawerWidth}px` : undefined,
+      }}
+    >
+      <div className="tool-drawer__window">
+        <div className="tool-drawer__rail" aria-label={text.toolMenuAria}>
+          {tools.map((tool) => (
+            <button
+              key={tool.key}
+              type="button"
+              className={`tool-drawer__button tool-drawer__button--${tool.key}${open && tool.key === resolvedTool?.key ? ' is-active' : ''}`}
+              aria-label={tool.label}
+              title={tool.label}
+              onClick={() => {
+                onInteract?.();
+                onSelectTool(tool.key);
+              }}
+            >
+              {tool.icon}
+            </button>
+          ))}
+        </div>
+
+        <section className="tool-drawer__panel" aria-live="polite">
+          {open && resolvedTool ? (
+            <div className="tool-drawer__body">{renderActivePanel()}</div>
+          ) : (
+            <div className="tool-drawer__body">
+              <p className="tool-drawer__empty">
+                {language === 'en'
+                  ? 'Choose a tool from the left rail.'
+                  : '왼쪽 도구를 선택하면 이 창에서 열립니다.'}
+              </p>
+            </div>
+          )}
+        </section>
+
+        <div
+          className="tool-drawer__resize-handle"
+          role="separator"
+          aria-label={language === 'en' ? 'Resize tool panel' : '도구 패널 너비 조절'}
+          aria-orientation="vertical"
+          tabIndex={open ? 0 : -1}
+          onPointerDown={handleResizePointerDown}
+          onKeyDown={handleResizeKeyDown}
+        />
+      </div>
+
+      {open && resolvedTool?.key === 'accounts' && activeAccountEntry && activeSelectedHolding ? (
+        <aside className="tool-drawer__detail-popout" aria-label={language === 'en' ? 'Stock details' : '종목 정보'}>
+          <StockDetailCard
+            item={activeSelectedHolding.item}
+            language={language}
+            onEdit={() =>
+              beginEditHolding(activeAccountEntry, activeSelectedHolding.item, activeSelectedHolding.itemIndex)
+            }
+            onClose={() => {
+              onInteract?.();
+              setSelectedHolding(null);
+            }}
+          />
+        </aside>
+      ) : null}
+
+    </aside>
   );
 }
 
@@ -5432,8 +7945,8 @@ function FloatingToolTrigger({
     const height = dockRef.current?.offsetHeight ?? triggerSize;
     const stackReachY = open
       ? triggerSize * 0.5 +
-        toolDockStackStepFor(viewportWidth) * 4 +
-        allocationWidgetSizeFor(viewportWidth) * 0.5
+        toolDockStackStepFor(viewportWidth) * 5 +
+        twinDockSizeFor(viewportWidth) * 0.5
       : height;
 
     return {
@@ -6059,6 +8572,7 @@ function AtomSketch({
   svgRef,
   ariaLabel,
   highlightActive,
+  centerFocusActive,
   onCenterClick,
   onPointerDown,
   onPointerEnter,
@@ -6075,19 +8589,42 @@ function AtomSketch({
     .sort((left, right) => left.position.z - right.position.z);
   const centerGlowDrift = standalone ? (Math.sin(centerMotion * 0.56 - 0.6) * 0.5 + 0.5) : 0;
   const centerBlinkWave = standalone ? (Math.sin(centerMotion * 1.74 - 0.85) * 0.5 + 0.5) : 0;
+  const centerFocusWave = centerFocusActive ? Math.sin(phase * 0.72 + 0.4) * 0.5 + 0.5 : 0;
   const centerScale = standalone
     ? 1.4 + centerClickBurst * 0.22
-    : 0.985 + Math.sin(phase * 0.5) * 0.012;
+    : centerFocusActive
+      ? 1.08 + centerFocusWave * 0.03
+      : 0.985 + Math.sin(phase * 0.5) * 0.012;
   const centerBlink = standalone
     ? 0.34 + centerBlinkWave * 0.88 + centerClickBurst * 0.2
-    : 1;
-  const centerAuraOpacity = standalone ? 0.04 + centerBlink * 0.92 : 0;
-  const centerCoreOpacity = standalone ? 0.08 + centerBlink * 0.72 : 0;
-  const centerHighlightOpacity = standalone ? 0.06 + centerBlink * 0.62 : 0;
+    : centerFocusActive
+      ? 0.76 + centerFocusWave * 0.24
+      : 1;
+  const centerAuraOpacity = standalone
+    ? 0.04 + centerBlink * 0.92
+    : centerFocusActive
+      ? 0.32 + centerFocusWave * 0.18
+      : 0;
+  const centerCoreOpacity = standalone
+    ? 0.08 + centerBlink * 0.72
+    : centerFocusActive
+      ? 0.36 + centerFocusWave * 0.18
+      : 0;
+  const centerHighlightOpacity = standalone
+    ? 0.06 + centerBlink * 0.62
+    : centerFocusActive
+      ? 0.28 + centerFocusWave * 0.28
+      : 0;
   const centerAuraScale = standalone
     ? 1 + centerClickBurst * 0.24 + centerGlowDrift * 0.04 + centerBlinkWave * 0.015
-    : 1;
-  const centerCoreScale = standalone ? 1 + centerClickBurst * 0.1 + centerGlowDrift * 0.02 : 1;
+    : centerFocusActive
+      ? 1.12 + centerFocusWave * 0.05
+      : 1;
+  const centerCoreScale = standalone
+    ? 1 + centerClickBurst * 0.1 + centerGlowDrift * 0.02
+    : centerFocusActive
+      ? 1.04 + centerFocusWave * 0.025
+      : 1;
 
   return (
     <svg
@@ -6111,7 +8648,7 @@ function AtomSketch({
       </defs>
 
       <g className="aura-layer" filter={useDetailFilters ? 'url(#glow)' : undefined}>
-        {standalone ? (
+        {standalone || centerFocusActive ? (
           <g
             className="center-aura"
             opacity={centerAuraOpacity}
@@ -6174,7 +8711,7 @@ function AtomSketch({
             centerScale * (0.98 + centerClickBurst * 0.04 + centerGlowDrift * 0.02),
           )})`}
         >
-          {standalone ? (
+          {standalone || centerFocusActive ? (
             <g opacity={centerCoreOpacity}>
               <ellipse
                 className="center-shell-shadow"
@@ -6204,7 +8741,7 @@ function AtomSketch({
             </g>
           ) : null}
 
-          {standalone ? (
+          {standalone || centerFocusActive ? (
             <g
               opacity={0.08 + centerBlink * 0.68}
               transform={`scale(${format(1 + centerClickBurst * 0.06)} ${format(
@@ -6234,7 +8771,7 @@ function AtomSketch({
                 opacity={
                   (standalone
                     ? 0.46 + centerBlink * 0.78 + index * 0.02
-                    : highlightActive
+                    : highlightActive || centerFocusActive
                       ? 0.86 + pulse * 0.08 + index * 0.015
                       : 0.68 + pulse * 0.08) * centerBlink
                 }
@@ -6299,7 +8836,6 @@ export default function App() {
   const shellRef = useRef(null);
   const svgRef = useRef(null);
   const fileInputRef = useRef(null);
-  const uploadButtonRef = useRef(null);
   const uploadPlusWrapRef = useRef(null);
   const toolTriggerRef = useRef(null);
   const scoreDockRef = useRef(null);
@@ -6329,13 +8865,22 @@ export default function App() {
   const targetTiltRef = useRef({ x: 0, y: 0 });
   const currentTiltRef = useRef({ x: 0, y: 0 });
   const pendingHoverInfoRef = useRef(null);
-  const [portfolioEntries, setPortfolioEntries] = useState([]);
-  const [activePortfolioId, setActivePortfolioId] = useState(null);
+  const restoredPortfolioStateRef = useRef(null);
+  if (restoredPortfolioStateRef.current === null) {
+    restoredPortfolioStateRef.current = readStoredPortfolioState();
+  }
+  const restoredPortfolioState = restoredPortfolioStateRef.current;
+  const [portfolioEntries, setPortfolioEntries] = useState(() => restoredPortfolioState.entries);
+  const [activePortfolioId, setActivePortfolioId] = useState(
+    () => restoredPortfolioState.activePortfolioId,
+  );
   const [portfolioError, setPortfolioError] = useState('');
   const [portfolioErrorClosing, setPortfolioErrorClosing] = useState(false);
   const [hoveredFileEntryId, setHoveredFileEntryId] = useState(null);
   const [hoveredFileAnchorRect, setHoveredFileAnchorRect] = useState(null);
   const [toolTrayOpen, setToolTrayOpen] = useState(false);
+  const [activeDrawerTool, setActiveDrawerTool] = useState(null);
+  const [toolDrawerWidth, setToolDrawerWidth] = useState(TOOL_DRAWER_DEFAULT_WIDTH);
   const [toolTriggerPosition, setToolTriggerPosition] = useState(() =>
     readStoredPosition(STORAGE_KEYS.toolTriggerPosition),
   );
@@ -6348,8 +8893,8 @@ export default function App() {
   const [scoreDockPosition, setScoreDockPosition] = useState(() =>
     readStoredPosition(STORAGE_KEYS.scoreDockPosition),
   );
-  const [showGroupDock, setShowGroupDock] = useState(false);
-  const [showScoreDock, setShowScoreDock] = useState(false);
+  const [showGroupDock, setShowGroupDock] = useState(() => restoredPortfolioState.entries.length > 0);
+  const [showScoreDock, setShowScoreDock] = useState(() => restoredPortfolioState.entries.length > 0);
   const [groupDockSpawn, setGroupDockSpawn] = useState(null);
   const [scoreDockSpawn, setScoreDockSpawn] = useState(null);
   const [dockResetAt, setDockResetAt] = useState(0);
@@ -6422,6 +8967,27 @@ export default function App() {
   const interactWithAllocationTool = useCallback(
     () => interactWithFloatingTool('allocation'),
     [interactWithFloatingTool],
+  );
+  const interactWithTwinTool = useCallback(
+    () => interactWithFloatingTool('twin'),
+    [interactWithFloatingTool],
+  );
+  const interactWithDrawerTool = useCallback(
+    () => interactWithFloatingTool('tool-drawer'),
+    [interactWithFloatingTool],
+  );
+  const handleDrawerToolSelect = useCallback(
+    (toolKey) => {
+      setActiveDrawerTool(toolKey);
+      setToolTrayOpen((currentOpen) => {
+        if (currentOpen && activeDrawerTool === toolKey) {
+          return false;
+        }
+
+        return true;
+      });
+    },
+    [activeDrawerTool],
   );
 
   const openPortfolioPicker = () => {
@@ -6536,7 +9102,6 @@ export default function App() {
     onPress: () => {
       setSettingsOpen((current) => !current);
     },
-    storageKey: STORAGE_KEYS.settingsDockPosition,
   });
 
   const createDockSpawn = (rect, size) => ({
@@ -6922,6 +9487,10 @@ export default function App() {
   }, [scoreWeightPreset]);
 
   useEffect(() => {
+    writeStoredPortfolioState(portfolioEntries, activePortfolioId);
+  }, [activePortfolioId, portfolioEntries]);
+
+  useEffect(() => {
     if (!settingsOpen) {
       return undefined;
     }
@@ -6954,8 +9523,6 @@ export default function App() {
       if (event.key === 'Escape') {
         if (settingsOpen) {
           setSettingsOpen(false);
-        } else if (toolTrayOpen) {
-          setToolTrayOpen(false);
         }
         return;
       }
@@ -6969,7 +9536,7 @@ export default function App() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [settingsOpen, toolTrayOpen]);
+  }, [settingsOpen]);
 
   useEffect(() => {
     if (!portfolioError) {
@@ -6994,6 +9561,13 @@ export default function App() {
     portfolioEntries.find((entry) => entry.id === activePortfolioId) ?? portfolioEntries[0] ?? null;
   const portfolioItems = activePortfolio?.items ?? [];
   const portfolioTimelineItems = activePortfolio?.timelineItems ?? portfolioItems;
+  const allPortfolioItems = useMemo(
+    () =>
+      portfolioEntries.flatMap((entry) =>
+        Array.isArray(entry.items) ? entry.items : [],
+      ),
+    [portfolioEntries],
+  );
 
   useEffect(() => {
     atomsRef.current = generateAtomLayout(portfolioItems).map(createAtomState);
@@ -7010,7 +9584,14 @@ export default function App() {
   }, [portfolioItems]);
 
   useEffect(() => {
-    if (!activePortfolioId && portfolioEntries.length) {
+    if (!portfolioEntries.length) {
+      if (activePortfolioId) {
+        setActivePortfolioId(null);
+      }
+      return;
+    }
+
+    if (!portfolioEntries.some((entry) => entry.id === activePortfolioId)) {
       setActivePortfolioId(portfolioEntries[0].id);
     }
   }, [activePortfolioId, portfolioEntries]);
@@ -7205,18 +9786,10 @@ export default function App() {
     }
   };
 
-  const handlePointerMove = (event) => {
+  const handlePointerMove = () => {
     noteInteraction();
-    if (interactionRef.current.hoveringAtomId) {
-      return;
-    }
-    const viewportWidth = window.innerWidth || event.currentTarget.clientWidth || 1;
-    const viewportHeight = window.innerHeight || event.currentTarget.clientHeight || 1;
-    const relativeX = event.clientX / viewportWidth;
-    const relativeY = event.clientY / viewportHeight;
-
-    targetTiltRef.current.x = clamp(relativeX * 2 - 1, -1, 1);
-    targetTiltRef.current.y = clamp(relativeY * 2 - 1, -1, 1);
+    targetTiltRef.current.x = 0;
+    targetTiltRef.current.y = 0;
   };
 
   const handlePointerLeave = () => {
@@ -7226,23 +9799,11 @@ export default function App() {
   };
 
   const handleWheel = (event) => {
-    if (event.deltaY <= 0) {
-      return;
-    }
-
     event.preventDefault();
     noteInteraction();
-
-    spreadRef.current.target = clamp(
-      spreadRef.current.target + event.deltaY * 0.0015,
-      0,
-      0.52,
-    );
-
     window.clearTimeout(spreadRef.current.timeoutId);
-    spreadRef.current.timeoutId = window.setTimeout(() => {
-      spreadRef.current.target = 0;
-    }, 90);
+    spreadRef.current.target = 0;
+    spreadRef.current.current = 0;
   };
 
   const handlePortfolioFileChange = async (event) => {
@@ -7295,7 +9856,6 @@ export default function App() {
       }
 
       clearPortfolioError();
-      setToolTrayOpen(false);
       setSelectedAtomId(null);
       setActiveGroupKey(null);
       setShowGroupDock(true);
@@ -7434,7 +9994,6 @@ export default function App() {
       }
 
       clearPortfolioError();
-      setToolTrayOpen(false);
       setSelectedAtomId(null);
       setActiveGroupKey(null);
       setShowGroupDock(true);
@@ -7572,7 +10131,6 @@ export default function App() {
     setActivePortfolioId(nextActiveId);
     clearPortfolioError();
     if (!nextEntries.length) {
-      setToolTrayOpen(false);
       setShowGroupDock(false);
       setShowScoreDock(false);
       setGroupDockSpawn(null);
@@ -7585,8 +10143,262 @@ export default function App() {
     }
   };
 
+  const handleCreateManualAtom = ({ accountName }) => {
+    const safeAccountName = String(accountName ?? '').trim();
+
+    if (!safeAccountName) {
+      return;
+    }
+
+    if (portfolioEntries.length >= MAX_PORTFOLIOS) {
+      showPortfolioError(textFor(language).maxFilesError);
+      return;
+    }
+
+    noteInteraction();
+    clearPortfolioError();
+
+    const entryId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `manual-atom-${Date.now()}`;
+    const payload = buildLocalPortfolioPayload(
+      `${safeAccountName}.manual.csv`,
+      [],
+      {
+        reviewStatus: 'ok',
+        warnings: [],
+      },
+      {
+        agentReview: {
+          status: 'ok',
+          summary: '사용자가 직접 생성한 포트폴리오입니다.',
+          warnings: [],
+          agents: [],
+        },
+        ingestSource: 'manual-entry',
+      },
+    );
+    const entry = createPortfolioEntryFromPayload(payload, entryId);
+
+    setPortfolioEntries((current) => [...current, entry].slice(0, MAX_PORTFOLIOS));
+    setActivePortfolioId(entryId);
+    setToolTrayOpen(true);
+    setActiveDrawerTool('accounts');
+  };
+
+  const handleCreateManualPortfolio = ({ accountName, rows }) => {
+    const cleanedRows = Array.isArray(rows)
+      ? rows.filter((row) => String(row?.stockName ?? row?.ticker ?? '').trim())
+      : [];
+
+    if (!cleanedRows.length) {
+      return;
+    }
+
+    if (portfolioEntries.length >= MAX_PORTFOLIOS) {
+      showPortfolioError(textFor(language).maxFilesError);
+      return;
+    }
+
+    noteInteraction();
+    clearPortfolioError();
+
+    const entryId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `manual-portfolio-${Date.now()}`;
+    const safeAccountName = String(accountName ?? '').trim() || '직접 입력 포트폴리오';
+    const manualItems = cleanedRows.map((row, index) =>
+      createManualPortfolioItem(
+        {
+          ...row,
+          accountName: String(row?.accountName ?? '').trim() || safeAccountName,
+        },
+        index,
+      ),
+    );
+    const payload = buildLocalPortfolioPayload(
+      `${safeAccountName}.manual.csv`,
+      manualItems,
+      {
+        reviewStatus: 'ok',
+        warnings: [],
+      },
+      {
+        agentReview: {
+          status: 'ok',
+          summary: '사용자가 직접 입력한 포트폴리오별 종목입니다.',
+          warnings: [],
+          agents: [],
+        },
+        ingestSource: 'manual-entry',
+      },
+    );
+    const entry = createPortfolioEntryFromPayload(payload, entryId);
+
+    setPortfolioEntries((current) => [...current, entry].slice(0, MAX_PORTFOLIOS));
+    setActivePortfolioId(entryId);
+    setToolTrayOpen(true);
+    setActiveDrawerTool('accounts');
+  };
+
+  const handleAppendManualHoldings = ({ entryId, accountName, rows }) => {
+    const cleanedRows = Array.isArray(rows)
+      ? rows.filter((row) => String(row?.stockName ?? row?.ticker ?? '').trim())
+      : [];
+
+    if (!entryId || !cleanedRows.length) {
+      return;
+    }
+
+    noteInteraction();
+    clearPortfolioError();
+
+    setPortfolioEntries((current) =>
+      current.map((entry) => {
+        if (entry.id !== entryId) {
+          return entry;
+        }
+
+        const safeAccountName =
+          String(accountName ?? '').trim() ||
+          summarizePortfolioEntryAccounts(entry, language).accountText ||
+          '직접 입력 포트폴리오';
+        const sourceItems = (entry.timelineItems?.length ? entry.timelineItems : entry.items) ?? [];
+        const nextItems = [
+          ...sourceItems,
+          ...cleanedRows.map((row, index) =>
+            createManualPortfolioItem(
+              {
+                ...row,
+                accountName: String(row?.accountName ?? '').trim() || safeAccountName,
+              },
+              sourceItems.length + index,
+            ),
+          ),
+        ];
+
+        return {
+          ...entry,
+          items: collapsePortfolioItemsForDisplayShared(nextItems),
+          timelineItems: nextItems,
+          parserDiagnostics: {
+            ...(entry.parserDiagnostics ?? {}),
+            reviewStatus: entry.parserDiagnostics?.reviewStatus ?? 'ok',
+          },
+        };
+      }),
+    );
+    setActivePortfolioId(entryId);
+  };
+
+  const handleUpdatePortfolioHolding = ({ entryId, itemId, itemIndex, accountName, row }) => {
+    if (!entryId || !row) {
+      return;
+    }
+
+    noteInteraction();
+    clearPortfolioError();
+
+    setPortfolioEntries((current) =>
+      current.map((entry) => {
+        if (entry.id !== entryId) {
+          return entry;
+        }
+
+        const sourceItems = (entry.timelineItems?.length ? entry.timelineItems : entry.items) ?? [];
+        const targetIndex = sourceItems.findIndex((item, index) =>
+          itemId ? item.id === itemId : index === itemIndex,
+        );
+
+        if (targetIndex < 0) {
+          return entry;
+        }
+
+        const previousItem = sourceItems[targetIndex];
+        const nextItem = createManualPortfolioItem(
+          {
+            ...row,
+            id: previousItem.id ?? itemId,
+            accountName:
+              String(row?.accountName ?? '').trim() ||
+              String(accountName ?? '').trim() ||
+              resolveHoldingAccount(previousItem),
+          },
+          targetIndex,
+        );
+        const nextItems = sourceItems.map((item, index) =>
+          index === targetIndex ? nextItem : item,
+        );
+
+        return {
+          ...entry,
+          items: collapsePortfolioItemsForDisplayShared(nextItems),
+          timelineItems: nextItems,
+          parserDiagnostics: {
+            ...(entry.parserDiagnostics ?? {}),
+            reviewStatus: entry.parserDiagnostics?.reviewStatus ?? 'ok',
+          },
+        };
+      }),
+    );
+    setActivePortfolioId(entryId);
+  };
+
+  const handleRemovePortfolioHolding = ({ entryId, itemId, itemIds, itemIndex, itemIndexes }) => {
+    if (!entryId) {
+      return;
+    }
+
+    noteInteraction();
+    clearPortfolioError();
+
+    setPortfolioEntries((current) =>
+      current.map((entry) => {
+        if (entry.id !== entryId) {
+          return entry;
+        }
+
+        const sourceItems = (entry.timelineItems?.length ? entry.timelineItems : entry.items) ?? [];
+        const groupedIds = new Set(
+          (Array.isArray(itemIds) && itemIds.length ? itemIds : [itemId])
+            .map((id) => String(id ?? '').trim())
+            .filter(Boolean),
+        );
+        const groupedIndexes = new Set(
+          (Array.isArray(itemIndexes) && itemIndexes.length ? itemIndexes : [itemIndex])
+            .map((index) => Number(index))
+            .filter((index) => Number.isInteger(index) && index >= 0),
+        );
+        const nextItems = sourceItems.filter((item, index) => {
+          const sourceId = String(item?.id ?? '').trim();
+
+          if (sourceId && groupedIds.has(sourceId)) {
+            return false;
+          }
+
+          if (!groupedIds.size && groupedIndexes.has(index)) {
+            return false;
+          }
+
+          return true;
+        });
+
+        return {
+          ...entry,
+          items: collapsePortfolioItemsForDisplayShared(nextItems),
+          timelineItems: nextItems,
+        };
+      }),
+    );
+    setActivePortfolioId(entryId);
+  };
+
   const hasPortfolio = portfolioEntries.length > 0;
+  const hasPortfolioItems = portfolioItems.length > 0;
   const showPortfolioChrome = hasPortfolio;
+  const showToolDrawer = true;
   const text = textFor(language);
   const hoveredFileEntry = useMemo(
     () => portfolioEntries.find((entry) => entry.id === hoveredFileEntryId) ?? null,
@@ -7790,6 +10602,7 @@ export default function App() {
       : '';
   const normalizedActiveGroupValue = normalizeDisplayKey(activeGroupValue);
   const highlightActive = Boolean(selectedAtom && activeGroupKey && normalizedActiveGroupValue);
+  const selectedAtomFocusActive = Boolean(selectedAtomId && !highlightActive);
   const portfolioScorecard = useMemo(() => {
     if (!hasPortfolio) {
       return null;
@@ -7799,18 +10612,42 @@ export default function App() {
       weightPreset: scoreWeightPreset,
     });
   }, [hasPortfolio, language, portfolioItems, scoreWeightPreset]);
+  const overallPortfolioScorecard = useMemo(() => {
+    if (!allPortfolioItems.length) {
+      return null;
+    }
+
+    return createPortfolioScorecard(allPortfolioItems, language, {
+      weightPreset: scoreWeightPreset,
+    });
+  }, [allPortfolioItems, language, scoreWeightPreset]);
   const showCenterClearHit = Boolean(selectedAtomId || activeGroupKey);
   const clearCenterSelection = () => {
     noteInteraction();
     setSelectedAtomId(null);
     setActiveGroupKey(null);
   };
+  const handleFocusPortfolioHolding = useCallback(
+    ({ entryId, item, itemIndex }) => {
+      noteInteraction();
+      if (entryId && entryId !== activePortfolioId) {
+        setActivePortfolioId(entryId);
+      }
+
+      const atomId = resolveHoldingAtomId(atomsRef.current, item, itemIndex);
+      if (atomId) {
+        setSelectedAtomId(atomId);
+        setActiveGroupKey(null);
+      }
+    },
+    [activePortfolioId],
+  );
   const triggerIntroCenterBurst = () => {
     noteInteraction();
     setIntroCenterBurstAt(performance.now());
   };
   const introCenterBurst =
-    !hasPortfolio && introCenterBurstAt >= 0
+    !hasPortfolioItems && introCenterBurstAt >= 0
       ? Math.sin(clamp((frameTime - introCenterBurstAt) / 420, 0, 1) * Math.PI)
       : 0;
   const settingsPanelSide =
@@ -7824,8 +10661,8 @@ export default function App() {
 
   const pulse = 0.5 + Math.sin(frameTime * 0.00042) * 0.5;
   const centerMotion = frameTime * 0.00112;
-  const spreadScale = 1 + spreadRef.current.current;
-  const nodeShrink = 1 - spreadRef.current.current * 0.1;
+  const spreadScale = 1;
+  const nodeShrink = 1;
   const cameraMotion = cameraRef.current.current;
   const stageCameraX = cameraMotion.panX * 0.2 + cameraMotion.driftX * 0.84;
   const stageCameraY = cameraMotion.panY * 0.17 + cameraMotion.driftY * 0.9;
@@ -7841,6 +10678,7 @@ export default function App() {
     ),
     '--camera-stage-roll': `${format(cameraMotion.roll * 0.46)}deg`,
     '--camera-glow': format(0.28 + cameraMotion.focus * 0.5),
+    '--tool-drawer-current-width': toolTrayOpen ? `${toolDrawerWidth}px` : '0px',
   };
   const shootingStarStyle = useMemo(() => {
     if (!shootingStar) {
@@ -7880,7 +10718,11 @@ export default function App() {
           scale: projection.scale * nodeShrink,
           isSelected: atom.id === selectedAtomId,
           isGroupMatch: matchesActiveGroup,
-          dimmed: highlightActive ? !matchesActiveGroup : false,
+          dimmed: selectedAtomFocusActive
+            ? atom.id !== selectedAtomId
+            : highlightActive
+              ? !matchesActiveGroup
+              : false,
           position,
         };
       }),
@@ -7891,6 +10733,7 @@ export default function App() {
       highlightActive,
       nodeShrink,
       normalizedActiveGroupValue,
+      selectedAtomFocusActive,
       selectedAtomId,
       spreadScale,
     ],
@@ -7900,7 +10743,7 @@ export default function App() {
   return (
     <main
       ref={shellRef}
-      className={`app-shell${fileDragActive ? ' is-file-drag' : ''}`}
+      className={`app-shell${fileDragActive ? ' is-file-drag' : ''}${toolTrayOpen ? ' is-tool-drawer-open' : ''}`}
       style={sceneStyle}
       onPointerMove={handlePointerMove}
       onPointerLeave={handlePointerLeave}
@@ -7938,99 +10781,48 @@ export default function App() {
       </div>
 
       <div className="floating-ui-layer">
-        {showPortfolioChrome && showGroupDock ? (
-          <FloatingGroupDock
-            anchorRef={toolTriggerRef}
-            anchorPosition={toolTriggerPosition}
-            options={groupOptions}
-            activeKey={activeGroupKey}
-            spawn={groupDockSpawn}
-            resetSignal={dockResetAt}
-            visible={toolTrayOpen}
-            layerStyle={floatingLayerStyleFor('group')}
-            onAnchorPositionChange={setGroupDockPosition}
-            onChange={setActiveGroupKey}
-            onInteract={interactWithGroupTool}
-          />
-        ) : null}
-
-        {showPortfolioChrome && showScoreDock ? (
-          <FloatingHeatmapDock
-            anchorRef={toolTriggerRef}
-            anchorPosition={groupDockPosition}
-            anchorSize={groupDockSizeFor(typeof window === 'undefined' ? 1280 : window.innerWidth)}
-            heatmap={{
-              ...portfolioHeatmap,
-              columns: contributionPreview.columns,
-              rows: contributionPreview.rows,
-            }}
-            language={language}
-            visible={toolTrayOpen}
-            resetSignal={dockResetAt}
-            layerStyle={floatingLayerStyleFor('heatmap')}
-            onAnchorPositionChange={setHeatmapDockPosition}
-            onInteract={interactWithHeatmapTool}
-          />
-        ) : null}
-
-        {showPortfolioChrome && portfolioScorecard && showScoreDock ? (
-          <FloatingRadarDock
-            anchorRef={toolTriggerRef}
-            anchorPosition={heatmapDockPosition}
-            anchorSize={heatmapDockSizeFor(typeof window === 'undefined' ? 1280 : window.innerWidth)}
-            externalDockRef={scoreDockRef}
-            scorecard={portfolioScorecard}
-            axes={scoreAxes}
-            language={language}
-            spawn={scoreDockSpawn}
-            resetSignal={dockResetAt}
-            visible={toolTrayOpen}
-            layerStyle={floatingLayerStyleFor('score')}
-            onPositionChange={setScoreDockPosition}
-            onInteract={interactWithScoreTool}
-          />
-        ) : null}
-
-        {showPortfolioChrome ? (
-          <FloatingToolTrigger
-            anchorRef={uploadButtonRef}
-            triggerRef={toolTriggerRef}
-            language={language}
+        {showToolDrawer ? (
+          <ToolSideDrawer
             open={toolTrayOpen}
-            resetSignal={dockResetAt}
-            onToggle={() => {
-              setToolTrayOpen((current) => {
-                const next = !current;
-                if (next) {
-                  setShowGroupDock(true);
-                  setShowScoreDock(true);
-                }
-                return next;
-              });
-              setShowGroupDock(true);
-              setShowScoreDock(true);
-            }}
-            onResetAlignment={handleResetDockLayout}
-            onPositionChange={setToolTriggerPosition}
-            layerStyle={floatingLayerStyleFor('tool-menu')}
-            onInteract={interactWithToolMenu}
-          />
-        ) : null}
-
-        {showPortfolioChrome && portfolioAllocation && showScoreDock ? (
-          <PortfolioAllocationWidget
+            activeTool={activeDrawerTool}
+            onSelectTool={handleDrawerToolSelect}
+            groupOptions={groupOptions}
+            activeGroupKey={activeGroupKey}
+            onGroupChange={setActiveGroupKey}
+            heatmap={
+              portfolioHeatmap
+                ? {
+                    ...portfolioHeatmap,
+                    columns: contributionPreview.columns,
+                    rows: contributionPreview.rows,
+                  }
+                : null
+            }
             allocation={portfolioAllocation}
+            scorecard={portfolioScorecard}
+            overallScorecard={overallPortfolioScorecard}
+            scoreAxes={scoreAxes}
+            scoreWeightPreset={scoreWeightPreset}
+            onScoreWeightPresetChange={setScoreWeightPreset}
+            items={portfolioItems}
+            timelineItems={portfolioTimelineItems}
+            portfolioEntries={portfolioEntries}
+            activePortfolio={activePortfolio}
+            activePortfolioId={activePortfolio?.id ?? activePortfolioId}
+            onSelectPortfolio={setActivePortfolioId}
+            onFocusHolding={handleFocusPortfolioHolding}
+            onClearPortfolio={handleClearPortfolio}
+            onOpenPortfolioPicker={openPortfolioPicker}
+            onCreateManualAtom={handleCreateManualAtom}
+            onCreateManualPortfolio={handleCreateManualPortfolio}
+            onAppendManualHoldings={handleAppendManualHoldings}
+            onUpdatePortfolioHolding={handleUpdatePortfolioHolding}
+            onRemovePortfolioHolding={handleRemovePortfolioHolding}
+            drawerWidth={toolDrawerWidth}
+            onDrawerWidthChange={setToolDrawerWidth}
             language={language}
-            anchorRef={toolTriggerRef}
-            anchorSelector=".tool-menu--floating"
-            anchorPosition={toolTriggerPosition}
-            anchorSize={toolTriggerSizeFor(typeof window === 'undefined' ? 1280 : window.innerWidth)}
-            anchorSteps={4}
-            resetSignal={dockResetAt}
-            visible={toolTrayOpen}
-            settingsOpen={settingsOpen}
-            layerStyle={floatingLayerStyleFor('allocation')}
-            onInteract={interactWithAllocationTool}
+            layerStyle={floatingLayerStyleFor('tool-drawer')}
+            onInteract={interactWithDrawerTool}
           />
         ) : null}
 
@@ -8046,7 +10838,10 @@ export default function App() {
             <button
               className="settings-gear"
               type="button"
-              onPointerDown={settingsDock.handlePointerDown}
+              onClick={() => {
+                interactWithSettingsTool();
+                setSettingsOpen((current) => !current);
+              }}
               aria-label={text.settingsAria}
               aria-expanded={settingsOpen}
             >
@@ -8054,7 +10849,12 @@ export default function App() {
             </button>
 
             {settingsOpen ? (
-              <div className="settings-panel" onPointerDown={settingsDock.handleDragPointerDown}>
+              <div
+                className="settings-panel"
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                }}
+              >
                 {settingsSections.map((section) => (
                   <section key={section.key} className="settings-panel__section">
                     <p className="settings-panel__title">{section.title}</p>
@@ -8099,102 +10899,6 @@ export default function App() {
             accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values"
             onChange={handlePortfolioFileChange}
           />
-          {showPortfolioChrome ? (
-            <>
-              <div ref={uploadPlusWrapRef} className="upload-plus-wrap is-loaded">
-                <button
-                  ref={uploadButtonRef}
-                  className={`upload-plus${portfolioLoading ? ' is-loading' : ''}`}
-                  type="button"
-                  onClick={openPortfolioPicker}
-                  aria-label={text.uploadAria}
-                  aria-busy={portfolioLoading}
-                >
-                  <SketchUploadArrowIcon />
-                </button>
-                <div className="upload-file-chip-list">
-                  {portfolioEntries.map((entry) => {
-                    const entryReviewStatus = resolveEntryReviewStatus(entry);
-                    const entryReviewLabel = reviewStatusLabel(text, entryReviewStatus);
-
-                    return (
-                      <div
-                        key={entry.id}
-                        className={`upload-file-chip${entry.id === activePortfolio?.id ? ' is-active' : ''}`}
-                      >
-                        <button
-                          className="upload-file-chip__trigger"
-                          type="button"
-                          onMouseEnter={(event) => {
-                            if (!supportsHoverTooltip()) {
-                              return;
-                            }
-
-                            openHoveredFileTooltip(entry, event.currentTarget);
-                          }}
-                          onMouseLeave={clearHoveredFileTooltip}
-                          onFocus={(event) => {
-                            if (
-                              typeof event.currentTarget.matches === 'function' &&
-                              !event.currentTarget.matches(':focus-visible')
-                            ) {
-                              return;
-                            }
-
-                            openHoveredFileTooltip(entry, event.currentTarget);
-                          }}
-                          onBlur={clearHoveredFileTooltip}
-                          onClick={() => {
-                            noteInteraction();
-                            setActivePortfolioId(entry.id);
-                          }}
-                          aria-label={`${entry.fileName} · ${entryReviewLabel}`}
-                          title={entry.fileName}
-                        >
-                          <span
-                            className={`upload-file-chip__status upload-file-chip__status--${entryReviewStatus}`}
-                            aria-hidden="true"
-                          />
-                          <span className="upload-file-chip__name" title={entry.fileName}>
-                            {entry.fileName}
-                          </span>
-                        </button>
-                        <button
-                          className="upload-file-chip__clear"
-                          type="button"
-                          onMouseEnter={clearHoveredFileTooltip}
-                          onFocus={clearHoveredFileTooltip}
-                          onClick={() => handleClearPortfolio(entry.id)}
-                          aria-label={text.clearUploadAria}
-                        >
-                          ×
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-                {hoveredFileEntry && hoveredFileTooltipStyle ? (
-                  <div className="upload-file-name-tooltip" style={hoveredFileTooltipStyle}>
-                    {hoveredFileEntry.fileName}
-                  </div>
-                ) : null}
-              </div>
-
-            </>
-          ) : (
-            <div className="upload-plus-wrap">
-              <button
-                ref={uploadButtonRef}
-                className={`upload-plus upload-plus--large${portfolioLoading ? ' is-loading' : ''}`}
-                type="button"
-                onClick={openPortfolioPicker}
-                aria-label={text.uploadAria}
-                aria-busy={portfolioLoading}
-              >
-                <SketchUploadArrowIcon />
-              </button>
-            </div>
-          )}
           {portfolioError ? (
             <p className={`upload-error${portfolioErrorClosing ? ' is-fading' : ''}`}>
               {portfolioError}
@@ -8206,18 +10910,19 @@ export default function App() {
       <div className="stage-frame">
         <div className="stage-tilt">
           <div className="stage-reveal">
-            <div className={`stage-breath${!hasPortfolio ? ' is-intro' : ''}`}>
+              <div className={`stage-breath${!hasPortfolioItems ? ' is-intro' : ''}`}>
               <div className="stage-camera">
                 <AtomSketch
                   atoms={atoms}
                   pulse={pulse}
                   centerMotion={centerMotion}
                   centerClickBurst={introCenterBurst}
-                  standalone={!hasPortfolio}
+                  standalone={!hasPortfolioItems}
                   svgRef={svgRef}
                   ariaLabel={text.atomAria}
                   highlightActive={highlightActive}
-                  onCenterClick={hasPortfolio ? clearCenterSelection : triggerIntroCenterBurst}
+                  centerFocusActive={Boolean(selectedAtomId)}
+                  onCenterClick={hasPortfolioItems ? clearCenterSelection : triggerIntroCenterBurst}
                   onPointerDown={handleNodePointerDown}
                   onPointerEnter={handleNodeEnter}
                   onPointerMove={handleNodeMove}

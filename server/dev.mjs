@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
+const viteArgs = process.argv.slice(2);
 
 const backend = spawn(process.execPath, ['--watch', path.join(projectRoot, 'server', 'index.mjs')], {
   cwd: projectRoot,
@@ -15,11 +16,15 @@ const backend = spawn(process.execPath, ['--watch', path.join(projectRoot, 'serv
   },
 });
 
-const vite = spawn(process.execPath, [path.join(projectRoot, 'node_modules', 'vite', 'bin', 'vite.js')], {
-  cwd: projectRoot,
-  stdio: 'inherit',
-  env: process.env,
-});
+const vite = spawn(
+  process.execPath,
+  [path.join(projectRoot, 'node_modules', 'vite', 'bin', 'vite.js'), ...viteArgs],
+  {
+    cwd: projectRoot,
+    stdio: 'inherit',
+    env: process.env,
+  },
+);
 
 let shuttingDown = false;
 

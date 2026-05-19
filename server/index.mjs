@@ -8,6 +8,11 @@ import {
   enrichSecurityItems,
   getSecurityEnrichmentCacheStats,
 } from './securityEnrichment.mjs';
+import {
+  fetchLiveMarketDataFromProviders,
+  searchMarketSymbolSuggestions,
+} from '../src/lib/liveMarketData.js';
+import { fetchMarketNewsFromProviders } from '../src/lib/marketNews.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -102,6 +107,72 @@ const server = http.createServer(async (request, response) => {
       securityEnrichment: getSecurityEnrichmentCacheStats(),
     });
     return;
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/api/market/live') {
+    try {
+      const ticker = requestUrl.searchParams.get('ticker') ?? '';
+      const name = requestUrl.searchParams.get('name') ?? '';
+
+      if (!ticker.trim() && !name.trim()) {
+        sendJson(response, 400, { error: 'Provide ticker or name.' });
+        return;
+      }
+
+      const payload = await fetchLiveMarketDataFromProviders({ ticker, name });
+      sendJson(response, 200, payload);
+      return;
+    } catch (error) {
+      sendJson(response, 502, {
+        error: error instanceof Error ? error.message : 'Market data fetch failed.',
+      });
+      return;
+    }
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/api/market/search') {
+    try {
+      const query = String(
+        requestUrl.searchParams.get('query') ?? requestUrl.searchParams.get('q') ?? '',
+      ).trim();
+      const limit = Math.min(12, Math.max(1, Number(requestUrl.searchParams.get('limit') ?? 10) || 10));
+
+      if (query.length < 2 && !/[가-힣]/.test(query)) {
+        sendJson(response, 200, { suggestions: [] });
+        return;
+      }
+
+      const suggestions = await searchMarketSymbolSuggestions(query, { limit });
+      sendJson(response, 200, { suggestions });
+      return;
+    } catch (error) {
+      sendJson(response, 502, {
+        error: error instanceof Error ? error.message : 'Market search failed.',
+      });
+      return;
+    }
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/api/market/news') {
+    try {
+      const query = String(requestUrl.searchParams.get('query') ?? '').trim().slice(0, 80);
+      const tickers = String(requestUrl.searchParams.get('tickers') ?? '')
+        .split(',')
+        .map((ticker) => ticker.trim().slice(0, 18))
+        .filter(Boolean)
+        .slice(0, 5);
+      const language = requestUrl.searchParams.get('language') === 'en' ? 'en' : 'ko';
+      const mode = requestUrl.searchParams.get('mode') === 'search' ? 'search' : 'today';
+      const payload = await fetchMarketNewsFromProviders({ query, tickers, language, mode });
+
+      sendJson(response, 200, payload);
+      return;
+    } catch (error) {
+      sendJson(response, 502, {
+        error: error instanceof Error ? error.message : 'Market news fetch failed.',
+      });
+      return;
+    }
   }
 
   if (request.method === 'POST' && requestUrl.pathname === '/api/securities/enrich') {

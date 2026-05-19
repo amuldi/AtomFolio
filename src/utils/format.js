@@ -72,6 +72,12 @@ export function normalizeDisplayKey(value) {
     .replace(/[\s_.\-/%()[\]]+/g, '');
 }
 
+const LEGACY_ATOM_TERM_PATTERN = new RegExp(`원${'자'}(?!재)`, 'g');
+
+export function normalizePortfolioVocabulary(value) {
+  return String(value ?? '').replace(LEGACY_ATOM_TERM_PATTERN, '포트폴리오');
+}
+
 export function canHighlightGroupField(atom, groupKey) {
   if (!atom || !groupKey) {
     return false;
@@ -87,7 +93,7 @@ export function canHighlightGroupField(atom, groupKey) {
 }
 
 export function resolveFieldLabelKey(label) {
-  const normalized = normalizeDisplayKey(label);
+  const normalized = normalizeDisplayKey(normalizePortfolioVocabulary(label));
 
   if (['종목코드', 'ticker', 'symbol', 'stockcode', 'securitycode'].map(normalizeDisplayKey).includes(normalized)) {
     return 'stockCode';
@@ -101,11 +107,19 @@ export function resolveFieldLabelKey(label) {
     return 'stockName';
   }
 
-  if (['계좌id', '계좌번호', '계좌코드', 'acctid', 'accountid', 'accountnumber'].map(normalizeDisplayKey).includes(normalized)) {
+  if (
+    ['계좌id', '계좌번호', '계좌코드', '포트폴리오id', '포트폴리오번호', '포트폴리오코드', 'acctid', 'accountid', 'accountnumber']
+      .map(normalizeDisplayKey)
+      .includes(normalized)
+  ) {
     return 'accountId';
   }
 
-  if (['계좌유형', '계좌종류', '계좌구분', 'accounttype', 'accountkind', 'accountclass'].map(normalizeDisplayKey).includes(normalized)) {
+  if (
+    ['계좌유형', '계좌종류', '계좌구분', '계좌명', '포트폴리오 유형', '포트폴리오종류', '포트폴리오구분', '포트폴리오명', 'accounttype', 'accountkind', 'accountclass']
+      .map(normalizeDisplayKey)
+      .includes(normalized)
+  ) {
     return 'accountType';
   }
 
@@ -171,7 +185,7 @@ export function resolveFieldLabelKey(label) {
 export function formatFieldLabel(label, language = 'ko') {
   const key = resolveFieldLabelKey(label);
   if (!key) {
-    return label;
+    return normalizePortfolioVocabulary(label);
   }
 
   return textFor(language).fieldLabels[key] ?? label;
@@ -200,7 +214,7 @@ export function buildAtomInfoFields(atom, language = 'ko') {
   const fallbackValue = atomInfoFallbackValue(language);
 
   const pushField = (label, value) => {
-    const trimmedLabel = String(label ?? '').trim();
+    const trimmedLabel = normalizePortfolioVocabulary(label).trim();
     const trimmedValue = String(value ?? '').trim();
 
     if (!trimmedLabel || !trimmedValue) {

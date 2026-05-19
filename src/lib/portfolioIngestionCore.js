@@ -143,8 +143,14 @@ function normalizeHeader(value) {
     .replace(/[\s_.\-/%()[\]]+/g, '');
 }
 
+const LEGACY_ATOM_TERM_PATTERN = new RegExp(`원${'자'}(?!재)`, 'g');
+
+function normalizePortfolioVocabulary(value) {
+  return String(value ?? '').replace(LEGACY_ATOM_TERM_PATTERN, '포트폴리오');
+}
+
 function resolveFieldLabelKey(label) {
-  const normalized = normalizeDisplayKey(label);
+  const normalized = normalizeDisplayKey(normalizePortfolioVocabulary(label));
 
   if (['종목코드', 'ticker', 'symbol', 'stockcode', 'securitycode'].map(normalizeDisplayKey).includes(normalized)) {
     return 'stockCode';
@@ -158,11 +164,11 @@ function resolveFieldLabelKey(label) {
     return 'stockName';
   }
 
-  if (['계좌id', '계좌번호', '계좌코드', 'acctid', 'accountid', 'accountnumber'].map(normalizeDisplayKey).includes(normalized)) {
+  if (['계좌id', '계좌번호', '계좌코드', '포트폴리오id', '포트폴리오번호', '포트폴리오코드', 'acctid', 'accountid', 'accountnumber'].map(normalizeDisplayKey).includes(normalized)) {
     return 'accountId';
   }
 
-  if (['계좌유형', '계좌종류', '계좌구분', 'accounttype', 'accountkind', 'accountclass'].map(normalizeDisplayKey).includes(normalized)) {
+  if (['계좌유형', '계좌종류', '계좌구분', '계좌명', '포트폴리오 유형', '포트폴리오종류', '포트폴리오구분', '포트폴리오명', 'accounttype', 'accountkind', 'accountclass'].map(normalizeDisplayKey).includes(normalized)) {
     return 'accountType';
   }
 
@@ -724,7 +730,7 @@ function inferHeaderLabels(headerLabels, bodyRows) {
   const columnCount = Math.max(labels.length, ...bodyRows.map((row) => row.length));
   const candidateDefinitions = [
     { key: 'stockCode', label: '종목코드', minScore: 0.72, score: (values) => matchRatio(values, isTickerLikeValue) },
-    { key: 'accountType', label: '계좌유형', minScore: 0.74, score: (values) => matchRatio(values, isAccountTypeValue) },
+    { key: 'accountType', label: '포트폴리오 유형', minScore: 0.74, score: (values) => matchRatio(values, isAccountTypeValue) },
     { key: 'buyDate', label: '날짜', minScore: 0.8, score: (values) => matchRatio(values, isDateLikeValue) },
     { key: 'buyPrice', label: '매수가', minScore: 0.76, score: (values) => matchRatio(values, isPriceLikeValue) },
     { key: 'shares', label: '보유수량', minScore: 0.78, score: (values) => matchRatio(values, isShareLikeValue) },
@@ -975,7 +981,7 @@ function normalizePortfolioFieldLabels(headerLabels, bodyRows) {
     .find((column) => column.score >= 0.78);
 
   if (bestAccountIdColumn) {
-    labels[bestAccountIdColumn.columnIndex] = '계좌 ID';
+    labels[bestAccountIdColumn.columnIndex] = '포트폴리오 ID';
   }
 
   const bestAccountColumn = [...columns]
@@ -992,7 +998,7 @@ function normalizePortfolioFieldLabels(headerLabels, bodyRows) {
     .find((column) => column.score >= 0.7);
 
   if (bestAccountColumn) {
-    labels[bestAccountColumn.columnIndex] = '계좌유형';
+    labels[bestAccountColumn.columnIndex] = '포트폴리오 유형';
   }
 
   return labels;
