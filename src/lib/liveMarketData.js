@@ -1,6 +1,7 @@
 const YAHOO_CHART_BASE = 'https://query1.finance.yahoo.com/v8/finance/chart';
 const YAHOO_SEARCH_URL = 'https://query1.finance.yahoo.com/v1/finance/search';
 const STOOQ_QUOTE_URL = 'https://stooq.com/q/l/';
+const NAVER_STOCK_BASIC_BASE = 'https://m.stock.naver.com/api/stock';
 const DEFAULT_SEARCH_LIMIT = 10;
 const MARKET_WINDOWS = [
   { range: '1d', interval: '5m' },
@@ -994,6 +995,49 @@ function toFiniteNumber(value) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+function toFiniteNumberFromText(value) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const normalized = String(value ?? '')
+    .trim()
+    .replace(/[−–—]/g, '-')
+    .replace(/[,₩원$€¥￦%\s]/g, '')
+    .replace(/[^0-9.+-]/g, '');
+  const numeric = Number(normalized);
+
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function readRuntimeEnv(key) {
+  return typeof globalThis !== 'undefined' ? globalThis.process?.env?.[key] ?? '' : '';
+}
+
+function toNaverStockCode(symbol) {
+  const normalized = normalizeSymbol(symbol);
+  const match = normalized.match(/^(\d{6})(?:\.(?:KS|KQ))?$/);
+  return match?.[1] ?? '';
+}
+
+async function fetchJsonResource(url, signal, headers = {}) {
+  const response = await fetch(url.toString(), {
+    signal,
+    cache: 'no-store',
+    headers: {
+      accept: 'application/json,text/plain,*/*',
+      'user-agent': 'Mozilla/5.0 AtomFolio/1.0',
+      ...headers,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('json-fetch-failed:' + response.status);
+  }
+
+  return response.json();
+}
+
 function extractMarketPoints(result) {
   const timestamps = Array.isArray(result?.timestamp) ? result.timestamp : [];
   const quote = result?.indicators?.quote?.[0] ?? {};
@@ -1240,6 +1284,191 @@ function parseCsvLine(line) {
   return values.map((value) => value.trim());
 }
 
+function createQuotePoints({ previousClose, latestPrice, updatedAt }) {
+  const timestamp = Number.isFinite(updatedAt) ? updatedAt : Date.now();
+
+  if (!Number.isFinite(latestPrice)) {
+    return [];
+  }
+
+  if (!Number.isFinite(previousClose) || previousClose === latestPrice) {
+    return [
+      { time: timestamp - 60 * 1000, close: latestPrice },
+      { time: timestamp, close: latestPrice },
+    ];
+  }
+
+  const midpoint = previousClose + (latestPrice - previousClose) * 0.42;
+
+  return [
+    { time: timestamp - 6 * 60 * 60 * 1000, close: previousClose },
+    { time: timestamp - 30 * 60 * 1000, close: midpoint },
+    { time: timestamp, close: latestPrice },
+  ];
+}
+
+function normalizeMiraeQuotePayload(payload, symbol, name = '') {
+  const data = payload?.output ?? payload?.data ?? payload?.result ?? payload?.quote ?? payload;
+  const latestPrice =
+    toFiniteNumberFromText(data?.latestPrice) ??
+    toFiniteNumberFromText(data?.currentPrice) ??
+    toFiniteNumberFromText(data?.closePrice) ??
+    toFiniteNumberFromText(data?.price) ??
+    toFiniteNumberFromText(data?.stck_prpr) ??
+    toFiniteNumberFromText(data?.현재가);
+  const change =
+    toFiniteNumberFromText(data?.change) ??
+    toFiniteNumberFromText(data?.compareToPreviousClosePrice) ??
+    toFiniteNumberFromText(data?.prdy_vrss) ??
+    toFiniteNumberFromText(data?.전일대비);
+  const changePercent =
+    toFiniteNumberFromText(data?.changePercent) ??
+    toFiniteNumberFromText(data?.fluctuationsRatio) ??
+    toFiniteNumberFromText(data?.prdy_ctrt) ??
+    toFiniteNumberFromText(data?.등락률);
+  const previousClose =
+    toFiniteNumberFromText(data?.previousClose) ??
+    toFiniteNumberFromText(data?.prdy_clpr) ??
+    (Number.isFinite(latestPrice) && Number.isFinite(change) ? latestPrice - change : null);
+
+  if (!Number.isFinite(latestPrice)) {
+    throw new Error('mirae-quote-empty');
+  }
+
+  const normalizedSymbol = normalizeSymbol(data?.symbol ?? data?.code ?? data?.stck_shrn_iscd ?? symbol);
+  const localMetadata = LOCAL_SYMBOL_METADATA[normalizedSymbol] ?? {};
+  const rawName = String(
+    data?.stockName ?? data?.name ?? data?.hts_kor_isnm ?? data?.종목명 ?? name ?? normalizedSymbol,
+  ).trim();
+  const updatedAt = Date.parse(data?.updatedAt ?? data?.localTradedAt ?? data?.stck_cntg_hour ?? '') || Date.now();
+
+  return {
+    symbol: normalizedSymbol,
+    name: cleanMarketDisplayName(rawName, normalizedSymbol),
+    rawName,
+    displayName: cleanMarketDisplayName(rawName, normalizedSymbol),
+    exchangeName: cleanExchangeName(localMetadata.exchangeName || data?.exchangeName || 'Mirae Asset', normalizedSymbol),
+    quoteType: localMetadata.quoteType || '',
+    typeDisp: cleanQuoteTypeLabel(localMetadata.typeDisp || '', normalizedSymbol),
+    sector: localMetadata.sector || '',
+    assetClass: localMetadata.assetClass || '',
+    currency: data?.currency || 'KRW',
+    latestPrice,
+    previousClose,
+    change: Number.isFinite(change) ? change : latestPrice - previousClose,
+    changePercent:
+      Number.isFinite(changePercent)
+        ? changePercent
+        : Number.isFinite(previousClose) && previousClose !== 0
+          ? ((latestPrice - previousClose) / previousClose) * 100
+          : null,
+    points: createQuotePoints({ previousClose, latestPrice, updatedAt }),
+    range: 'live',
+    interval: 'quote',
+    updatedAt,
+    source: '미래에셋증권',
+  };
+}
+
+async function fetchMiraeAssetQuote(symbol, name, signal) {
+  const endpoint = readRuntimeEnv('MIRAE_ASSET_QUOTE_PROXY_URL');
+
+  if (!endpoint) {
+    throw new Error('mirae-proxy-not-configured');
+  }
+
+  const normalizedSymbol = normalizeSymbol(symbol);
+  const code = toNaverStockCode(normalizedSymbol) || normalizedSymbol;
+  const url = new URL(
+    endpoint
+      .replace(/\{code\}/g, encodeURIComponent(code))
+      .replace(/\{symbol\}/g, encodeURIComponent(normalizedSymbol))
+      .replace(/\{name\}/g, encodeURIComponent(name || '')),
+  );
+
+  if (!/\{code\}|\{symbol\}|\{name\}/.test(endpoint)) {
+    url.searchParams.set('code', code);
+    url.searchParams.set('symbol', normalizedSymbol);
+    if (name) {
+      url.searchParams.set('name', name);
+    }
+  }
+
+  const token = readRuntimeEnv('MIRAE_ASSET_QUOTE_PROXY_TOKEN');
+  const payload = await fetchJsonResource(url, signal, token ? { authorization: 'Bearer ' + token } : {});
+  return normalizeMiraeQuotePayload(payload, normalizedSymbol, name);
+}
+
+async function fetchNaverStockQuote(symbol, name, signal) {
+  const code = toNaverStockCode(symbol);
+
+  if (!code) {
+    throw new Error('naver-code-required');
+  }
+
+  const url = new URL(NAVER_STOCK_BASIC_BASE + '/' + code + '/basic');
+  url.searchParams.set('_ts', String(Date.now()));
+
+  const payload = await fetchJsonResource(url, signal, {
+    referer: 'https://m.stock.naver.com/domestic/stock/' + code,
+  });
+  const regularPrice = toFiniteNumberFromText(payload?.closePrice);
+  const regularChange = toFiniteNumberFromText(payload?.compareToPreviousClosePrice);
+  const regularChangePercent = toFiniteNumberFromText(payload?.fluctuationsRatio);
+  const regularUpdatedAt = Date.parse(payload?.localTradedAt ?? '') || Date.now();
+  const overMarket = payload?.overMarketPriceInfo ?? null;
+  const overPrice = toFiniteNumberFromText(overMarket?.overPrice);
+  const overUpdatedAt = Date.parse(overMarket?.localTradedAt ?? '') || 0;
+  const useOverMarket = Number.isFinite(overPrice) && overUpdatedAt >= regularUpdatedAt;
+  const latestPrice = useOverMarket ? overPrice : regularPrice;
+  const change = useOverMarket
+    ? toFiniteNumberFromText(overMarket?.compareToPreviousClosePrice)
+    : regularChange;
+  const changePercent = useOverMarket
+    ? toFiniteNumberFromText(overMarket?.fluctuationsRatio)
+    : regularChangePercent;
+  const previousClose =
+    Number.isFinite(latestPrice) && Number.isFinite(change) ? latestPrice - change : null;
+  const updatedAt = useOverMarket ? overUpdatedAt : regularUpdatedAt;
+
+  if (!Number.isFinite(latestPrice)) {
+    throw new Error('naver-quote-empty');
+  }
+
+  const normalizedSymbol = normalizeSymbol(payload?.itemCode ?? code);
+  const exchangeCode = payload?.stockExchangeType?.code === 'KQ' ? 'KQ' : 'KS';
+  const localMetadata = LOCAL_SYMBOL_METADATA[normalizedSymbol + '.' + exchangeCode] ??
+    LOCAL_SYMBOL_METADATA[normalizedSymbol] ??
+    {};
+  const rawName = String(payload?.stockName ?? name ?? normalizedSymbol).trim();
+
+  return {
+    symbol: normalizedSymbol,
+    name: cleanMarketDisplayName(rawName, normalizedSymbol),
+    rawName,
+    displayName: cleanMarketDisplayName(rawName, normalizedSymbol),
+    exchangeName: cleanExchangeName(
+      payload?.stockExchangeName || payload?.stockExchangeType?.nameKor || localMetadata.exchangeName || '한국',
+      normalizedSymbol,
+    ),
+    quoteType: localMetadata.quoteType || payload?.stockEndType || '',
+    typeDisp: cleanQuoteTypeLabel(localMetadata.typeDisp || payload?.stockEndType || '', normalizedSymbol),
+    sector: localMetadata.sector || '',
+    assetClass: localMetadata.assetClass || '',
+    currency: 'KRW',
+    latestPrice,
+    previousClose,
+    change,
+    changePercent,
+    points: createQuotePoints({ previousClose, latestPrice, updatedAt }),
+    range: payload?.delayTimeName === '실시간' ? 'realtime' : 'quote',
+    interval: 'naver',
+    updatedAt,
+    source: payload?.delayTimeName === '실시간' ? '네이버 증권 실시간' : '네이버 증권',
+    marketStatus: payload?.marketStatus || overMarket?.overMarketStatus || '',
+  };
+}
+
 async function fetchStooqQuote(symbol, signal) {
   const stooqSymbol = toStooqSymbol(symbol);
 
@@ -1347,6 +1576,44 @@ export async function fetchLiveMarketDataFromProviders({ ticker, name, signal } 
   let lastError = null;
 
   for (const candidate of candidates) {
+    if (toNaverStockCode(candidate.symbol)) {
+      try {
+        const quote = await fetchNaverStockQuote(candidate.symbol, candidate.name || searchQuery, signal);
+        const displayName = cleanMarketDisplayName(candidate.name || quote.name, quote.symbol);
+
+        return {
+          ...quote,
+          name: displayName,
+          displayName,
+          rawName: candidate.rawName || quote.rawName || quote.name,
+          quoteType: candidate.quoteType || quote.quoteType || '',
+          typeDisp: candidate.typeDisp || quote.typeDisp || '',
+          sector: candidate.sector || quote.sector || '',
+          assetClass: candidate.assetClass || quote.assetClass || '',
+        };
+      } catch (error) {
+        lastError = error;
+      }
+
+      try {
+        const quote = await fetchMiraeAssetQuote(candidate.symbol, candidate.name || searchQuery, signal);
+        const displayName = cleanMarketDisplayName(candidate.name || quote.name, quote.symbol);
+
+        return {
+          ...quote,
+          name: displayName,
+          displayName,
+          rawName: candidate.rawName || quote.rawName || quote.name,
+          quoteType: candidate.quoteType || quote.quoteType || '',
+          typeDisp: candidate.typeDisp || quote.typeDisp || '',
+          sector: candidate.sector || quote.sector || '',
+          assetClass: candidate.assetClass || quote.assetClass || '',
+        };
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
     for (const windowConfig of MARKET_WINDOWS) {
       try {
         const quote = await fetchYahooChart(candidate.symbol, windowConfig, signal);
