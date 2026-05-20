@@ -24,18 +24,18 @@ const BUCKET_FIELDS = [
   ['other', '기타'],
 ];
 const SCENARIO_PLACEHOLDERS = {
-  globalShock: '예: -7',
-  usShock: '예: 0',
-  techShock: '예: -8',
-  goldCashShock: '예: 3',
-  reitShock: '예: -5',
+  globalShock: '-7',
+  usShock: '0',
+  techShock: '-8',
+  goldCashShock: '3',
+  reitShock: '-5',
 };
 const TARGET_PLACEHOLDERS = {
-  stock: '예: 50',
-  dividend: '예: 20',
-  goldCash: '예: 15',
-  reit: '예: 5',
-  other: '예: 10',
+  stock: '50',
+  dividend: '20',
+  goldCash: '15',
+  reit: '5',
+  other: '10',
 };
 
 function formatPercentValue(value) {
@@ -294,9 +294,9 @@ export default function DigitalTwinPanel({
           <span>미래 투자 시뮬레이션</span>
         </div>
         <div className="twin-scenario-grid">
-          <NumberInput label="월 추가 투자" value={future.monthlyContribution} placeholder="예: 300000" suffix="원" onChange={(value) => setFutureValue('monthlyContribution', value)} />
-          <NumberInput label="기간" value={future.months} placeholder="예: 36" suffix="개월" onChange={(value) => setFutureValue('months', value)} />
-          <NumberInput label="연평균" value={future.annualReturnRate} placeholder="예: 6" onChange={(value) => setFutureValue('annualReturnRate', value)} />
+          <NumberInput label="월 추가 투자" value={future.monthlyContribution} placeholder="300000" suffix="원" onChange={(value) => setFutureValue('monthlyContribution', value)} />
+          <NumberInput label="기간" value={future.months} placeholder="36" suffix="개월" onChange={(value) => setFutureValue('months', value)} />
+          <NumberInput label="연평균" value={future.annualReturnRate} placeholder="6" onChange={(value) => setFutureValue('annualReturnRate', value)} />
         </div>
         {futureProjection ? (
           <div className="twin-future-row">

@@ -3021,8 +3021,214 @@ function mergeSecurityMetadataItems(baseItems, enrichedItems) {
 
   return baseItems.map((item, index) => {
     const key = metadataMergeKey(item) || `index:${index}`;
-    return enrichedByKey.get(key) ?? enrichedItems[index] ?? item;
+    return mergeSecurityMetadataItem(item, enrichedByKey.get(key) ?? enrichedItems[index]);
   });
+}
+
+const LIVE_QUOTE_ITEM_KEYS = [
+  'marketPrice',
+  'marketCurrency',
+  'currency',
+  'marketUpdatedAt',
+  'marketSource',
+  'quoteSource',
+  'latestPrice',
+  'marketChange',
+  'marketChangePercent',
+];
+const LIVE_QUOTE_FIELD_LABELS = new Set(
+  ['현재가', '전일대비', '등락률', '통화', '시세시각', '시세출처'].map(normalizeDisplayKey),
+);
+
+function mergeSecurityMetadataFields(currentFields, enrichedFields, keepLiveQuoteFields) {
+  const nextFields = Array.isArray(currentFields) ? [...currentFields] : [];
+
+  for (const field of enrichedFields ?? []) {
+    const label = String(field?.label ?? '').trim();
+    const value = String(field?.value ?? '').trim();
+
+    if (!label || !value) {
+      continue;
+    }
+
+    const normalizedLabel = normalizeDisplayKey(label);
+    const existingIndex = nextFields.findIndex(
+      (currentField) => normalizeDisplayKey(currentField?.label) === normalizedLabel,
+    );
+
+    if (existingIndex >= 0) {
+      if (keepLiveQuoteFields && LIVE_QUOTE_FIELD_LABELS.has(normalizedLabel)) {
+        continue;
+      }
+
+      nextFields[existingIndex] = { label, value };
+    } else {
+      nextFields.push({ label, value });
+    }
+  }
+
+  return nextFields;
+}
+
+function mergeSecurityMetadataItem(currentItem, enrichedItem) {
+  if (!enrichedItem) {
+    return currentItem;
+  }
+
+  const keepLiveQuoteFields = Boolean(
+    currentItem?.marketSource || currentItem?.quoteSource || Number.isFinite(currentItem?.latestPrice),
+  );
+  const nextItem = {
+    ...currentItem,
+    ...enrichedItem,
+    fields: mergeSecurityMetadataFields(currentItem?.fields, enrichedItem?.fields, keepLiveQuoteFields),
+    metadataSourceByField: {
+      ...(currentItem?.metadataSourceByField ?? {}),
+      ...(enrichedItem?.metadataSourceByField ?? {}),
+    },
+  };
+
+  if (keepLiveQuoteFields) {
+    for (const key of LIVE_QUOTE_ITEM_KEYS) {
+      if (currentItem?.[key] !== undefined && currentItem?.[key] !== null && currentItem?.[key] !== '') {
+        nextItem[key] = currentItem[key];
+      }
+    }
+  }
+
+  return nextItem;
+}
+
+function normalizeQuoteFieldValue(value) {
+  return String(value ?? '').trim();
+}
+
+function upsertQuoteField(fields, label, value) {
+  const cleanValue = normalizeQuoteFieldValue(value);
+
+  if (!cleanValue) {
+    return Array.isArray(fields) ? fields : [];
+  }
+
+  const nextFields = Array.isArray(fields) ? [...fields] : [];
+  const index = nextFields.findIndex((field) => normalizeDisplayKey(field?.label) === normalizeDisplayKey(label));
+  const nextField = { label, value: cleanValue };
+
+  if (index >= 0) {
+    nextFields[index] = nextField;
+  } else {
+    nextFields.push(nextField);
+  }
+
+  return nextFields;
+}
+
+function applyLiveQuoteToPortfolioItem(item, quote) {
+  if (!quote || !Number.isFinite(quote.latestPrice)) {
+    return item;
+  }
+
+  const displayName = resolveMarketDisplayName(quote) || item?.stockName || item?.name || item?.label;
+  const symbol = String(quote.symbol ?? item?.ticker ?? item?.stockCode ?? item?.code ?? '').trim();
+  const marketPrice = formatMarketPrice(quote.latestPrice, quote.currency);
+  const marketUpdatedAt = formatMarketTime(quote.updatedAt, 'ko');
+  let fields = Array.isArray(item?.fields) ? [...item.fields] : [];
+
+  fields = upsertQuoteField(fields, '종목코드', symbol);
+  fields = upsertQuoteField(fields, '종목명', displayName);
+  fields = upsertQuoteField(fields, '현재가', marketPrice);
+  fields = upsertQuoteField(fields, '전일대비', formatMarketChange(quote.change));
+  fields = upsertQuoteField(fields, '등락률', formatMarketChangePercent(quote.changePercent));
+  fields = upsertQuoteField(fields, '통화', quote.currency || 'KRW');
+  fields = upsertQuoteField(fields, '시세시각', marketUpdatedAt);
+  fields = upsertQuoteField(fields, '시세출처', quote.source);
+  fields = upsertQuoteField(fields, '상장 시장', quote.exchangeName);
+
+  return {
+    ...item,
+    label: displayName || item.label,
+    name: displayName || item.name,
+    companyName: displayName || item.companyName,
+    stockName: displayName || item.stockName,
+    stockCode: symbol || item.stockCode,
+    ticker: symbol || item.ticker,
+    code: symbol || item.code,
+    marketPrice,
+    marketCurrency: quote.currency || item.marketCurrency || 'KRW',
+    currency: quote.currency || item.currency || 'KRW',
+    marketUpdatedAt,
+    marketSource: quote.source,
+    quoteSource: quote.source,
+    latestPrice: quote.latestPrice,
+    marketChange: quote.change,
+    marketChangePercent: quote.changePercent,
+    fields,
+    metadataSourceByField: {
+      ...(item.metadataSourceByField ?? {}),
+      stockName: 'live-market',
+      stockCode: 'live-market',
+      ticker: 'live-market',
+      marketPrice: 'live-market',
+      currency: 'live-market',
+    },
+  };
+}
+
+function liveQuoteLookupForItem(item) {
+  const ticker =
+    String(item?.ticker ?? item?.stockCode ?? item?.code ?? '').trim() ||
+    getItemFieldValue(item, ['종목코드', 'ticker', 'stockCode', 'code']);
+  const name =
+    String(item?.stockName ?? item?.name ?? item?.companyName ?? item?.label ?? '').trim() ||
+    getItemFieldValue(item, ['종목명', 'stockName', 'name']);
+
+  return { ticker, name, key: normalizeDisplayKey(ticker || name) };
+}
+
+async function enrichPortfolioItemsWithLiveQuotes(items) {
+  if (!Array.isArray(items) || !items.length) {
+    return items;
+  }
+
+  const lookups = [];
+  const seen = new Set();
+
+  items.forEach((item) => {
+    const lookup = liveQuoteLookupForItem(item);
+    if (!lookup.key || seen.has(lookup.key)) {
+      return;
+    }
+
+    seen.add(lookup.key);
+    lookups.push(lookup);
+  });
+
+  const quoteByKey = new Map();
+
+  for (const lookup of lookups.slice(0, 80)) {
+    try {
+      const quote = await fetchLiveMarketData({
+        ticker: lookup.ticker,
+        name: lookup.name,
+      });
+      quoteByKey.set(lookup.key, quote);
+    } catch {
+      // Leave the uploaded value as-is when every live provider fails.
+    }
+  }
+
+  return items.map((item) => {
+    const lookup = liveQuoteLookupForItem(item);
+    return quoteByKey.has(lookup.key) ? applyLiveQuoteToPortfolioItem(item, quoteByKey.get(lookup.key)) : item;
+  });
+}
+
+function mergePortfolioItemUpdates(baseItems, updatedItems) {
+  if (!Array.isArray(baseItems) || !Array.isArray(updatedItems) || !updatedItems.length) {
+    return baseItems;
+  }
+
+  return baseItems.map((item, index) => updatedItems[index] ?? item);
 }
 
 function midpoint(a, b) {
@@ -9206,6 +9412,31 @@ export default function App() {
     [clearHoveredFileTooltip],
   );
 
+  const scheduleLiveQuoteEnrichment = useCallback((entryId, seedItems) => {
+    if (!entryId || !Array.isArray(seedItems) || !seedItems.length) {
+      return;
+    }
+
+    void (async () => {
+      try {
+        const enrichedItems = await enrichPortfolioItemsWithLiveQuotes(seedItems);
+
+        setPortfolioEntries((current) =>
+          current.map((entry) =>
+            entry.id === entryId
+              ? {
+                  ...entry,
+                  items: mergePortfolioItemUpdates(entry.items, enrichedItems),
+                }
+              : entry,
+          ),
+        );
+      } catch {
+        // Keep uploaded portfolio data when live quote normalization fails.
+      }
+    })();
+  }, []);
+
   const scheduleSecurityMetadataEnrichment = useCallback((entryId, seedItems) => {
     if (!entryId || !Array.isArray(seedItems) || !seedItems.some(hasMissingCoreMetadata)) {
       return;
@@ -10157,6 +10388,7 @@ export default function App() {
               current.map((entry) => (entry.id === entryId ? nextEntry : entry)),
             );
             queueImportHistorySync(nextEntry);
+            scheduleLiveQuoteEnrichment(entryId, nextEntry.items);
             scheduleSecurityMetadataEnrichment(entryId, payload?.items);
           })();
         },
@@ -10292,6 +10524,7 @@ export default function App() {
               current.map((entry) => (entry.id === entryId ? nextEntry : entry)),
             );
             queueImportHistorySync(nextEntry);
+            scheduleLiveQuoteEnrichment(entryId, nextEntry.items);
             scheduleSecurityMetadataEnrichment(entryId, payload?.items);
           })();
         },
