@@ -2730,7 +2730,7 @@ body::after {
 }
 
 .tool-drawer {
-  --tool-drawer-width: 35rem;
+  --tool-drawer-width: 32.625rem;
   --tool-drawer-rail-width: 4.55rem;
   position: fixed;
   top: 0;
