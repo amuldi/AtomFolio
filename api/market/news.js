@@ -16,7 +16,8 @@ export default async function handler(request, response) {
       .slice(0, 5);
     const language = String(request.query?.language ?? 'ko') === 'en' ? 'en' : 'ko';
     const mode = String(request.query?.mode ?? 'today') === 'search' ? 'search' : 'today';
-    const payload = await fetchMarketNewsFromProviders({ query, tickers, language, mode });
+    const refreshKey = String(request.query?._ts ?? request.query?.refresh ?? '').trim().slice(0, 32);
+    const payload = await fetchMarketNewsFromProviders({ query, tickers, language, mode, refreshKey });
 
     sendJson(response, 200, payload);
   } catch (error) {

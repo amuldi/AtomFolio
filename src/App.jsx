@@ -8,6 +8,7 @@ import {
   shouldFallbackToLocalTimeline as shouldFallbackToLocalTimelineShared,
 } from './lib/portfolioIngestionCore.js';
 import { createPortfolioScorecard } from './lib/portfolioScoring.js';
+import { createPortfolioAnalyticsSummary } from './lib/portfolioAnalyticsSummary.js';
 import { enrichPortfolioItem } from './lib/securityKnowledge.js';
 import {
   fetchLiveMarketData,
@@ -19,6 +20,12 @@ import {
   formatMarketTime,
 } from './lib/liveMarketData.js';
 import { fetchMarketNews, formatNewsTime } from './lib/marketNews.js';
+import {
+  createServerPortfolio,
+  deleteServerPortfolio,
+  listServerPortfolios,
+  saveServerImportHistory,
+} from './utils/storage.js';
 import DigitalTwinPanel from './components/panels/DigitalTwinPanel.jsx';
 
 const VIEWBOX_SIZE = 640;
@@ -120,8 +127,16 @@ const FLOATING_TOOL_Z_INDEX = {
   twin: 36,
   'tool-drawer': 37,
 };
-const TOOL_DRAWER_DEFAULT_WIDTH = 38 * 16;
+const TOOL_DRAWER_DEFAULT_WIDTH = 35 * 16;
 const TOOL_DRAWER_MAX_WIDTH = 760;
+const SERVER_SYNC_DEBOUNCE_MS = 850;
+const DEFAULT_REBALANCE_TARGET_WEIGHTS = {
+  stock: 60,
+  dividend: 15,
+  goldCash: 15,
+  reit: 5,
+  other: 5,
+};
 const UI_TEXT = {
   ko: {
     groupLabels: {
@@ -839,6 +854,36 @@ function resolveEntryReviewStatus(entry) {
   return entry.agentReview?.status ?? entry.parserDiagnostics?.reviewStatus ?? 'ok';
 }
 
+function buildImportRecordFromPortfolioEntry(entry) {
+  const timelineItems =
+    Array.isArray(entry?.timelineItems) && entry.timelineItems.length
+      ? entry.timelineItems
+      : Array.isArray(entry?.items)
+        ? entry.items
+        : [];
+  const displayItems = Array.isArray(entry?.items) ? entry.items : [];
+
+  return {
+    id: 'import-' + String(entry?.id ?? Date.now()),
+    portfolioId: String(entry?.id ?? ''),
+    fileName: String(entry?.fileName ?? 'portfolio.csv'),
+    status: resolveEntryReviewStatus(entry),
+    itemCount: timelineItems.length,
+    securityCount: displayItems.length || timelineItems.length,
+    parserDiagnostics: entry?.parserDiagnostics ?? null,
+    agentReview: entry?.agentReview ?? null,
+    ingestSource: entry?.ingestSource ?? 'client-local',
+  };
+}
+
+function queueImportHistorySync(entry) {
+  if (typeof window === 'undefined' || !entry?.id) {
+    return;
+  }
+
+  void saveServerImportHistory(buildImportRecordFromPortfolioEntry(entry)).catch(() => {});
+}
+
 function buildUploadReviewPreview(entry) {
   if (!entry) {
     return null;
@@ -1484,6 +1529,46 @@ function formatAllocationPercent(value) {
   const fixed = percentValue >= 10 ? percentValue.toFixed(1) : percentValue.toFixed(2);
   const trimmed = fixed.replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0$/, '');
   return `${trimmed}%`;
+}
+
+function formatAnalyticsCompactValue(value, language = 'ko') {
+  if (!Number.isFinite(value)) {
+    return '-';
+  }
+
+  const absoluteValue = Math.abs(value);
+  const formatter = new Intl.NumberFormat(language === 'en' ? 'en-US' : 'ko-KR', {
+    maximumFractionDigits: absoluteValue >= 100000 ? 1 : 0,
+    notation: absoluteValue >= 100000 ? 'compact' : 'standard',
+  });
+
+  return formatter.format(value);
+}
+
+function formatAnalyticsSignedValue(value, language = 'ko') {
+  if (!Number.isFinite(value)) {
+    return '-';
+  }
+
+  return (value > 0 ? '+' : '') + formatAnalyticsCompactValue(value, language);
+}
+
+function formatAnalyticsPercentValue(value) {
+  if (!Number.isFinite(value)) {
+    return '-';
+  }
+
+  const fixed = Math.abs(value) >= 10 ? value.toFixed(1) : value.toFixed(2);
+  const trimmed = fixed.replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0$/, '');
+  return (value > 0 ? '+' : '') + trimmed + '%';
+}
+
+function concentrationLevelLabel(level, language = 'ko') {
+  if (language === 'en') {
+    return level === 'high' ? 'High' : level === 'medium' ? 'Medium' : 'Low';
+  }
+
+  return level === 'high' ? '높음' : level === 'medium' ? '보통' : '낮음';
 }
 
 function normalizeDisplayKey(value) {
@@ -5167,6 +5252,7 @@ function MarketNewsPanel({ language }) {
           query: cleanQuery,
           language,
           mode: cleanQuery ? 'search' : 'today',
+          refreshKey: `${Date.now()}-${requestId}`,
           signal: controller.signal,
         });
 
@@ -6143,6 +6229,7 @@ function ToolSideDrawer({
   onGroupChange,
   heatmap,
   allocation,
+  analyticsSummary,
   scorecard,
   overallScorecard,
   scoreAxes,
@@ -6210,7 +6297,7 @@ function ToolSideDrawer({
       key: 'overview',
       label: language === 'en' ? 'Overview' : '요약',
       icon: <SketchBurstIcon />,
-      available: Boolean(heatmap || allocation || scorecard || groupOptions.length),
+      available: Boolean(analyticsSummary || heatmap || allocation || scorecard || groupOptions.length),
     },
     {
       key: 'twin',
@@ -6706,6 +6793,35 @@ function ToolSideDrawer({
     activeAccountEntry && selectedHolding?.entryId === activeAccountEntry.id
       ? selectedHolding
       : null;
+  const analyticsTotals = analyticsSummary?.totals ?? null;
+  const analyticsTopHolding = analyticsSummary?.concentration?.topHoldings?.[0] ?? null;
+  const analyticsGap = analyticsSummary?.rebalanceGaps?.bucket?.[0] ?? null;
+  const analyticsKpis = analyticsSummary
+    ? [
+        {
+          key: 'market-value',
+          label: language === 'en' ? 'Market value' : '평가금액',
+          value: formatAnalyticsCompactValue(analyticsTotals?.totalMarketValue, language),
+        },
+        {
+          key: 'profit',
+          label: language === 'en' ? 'P/L' : '누적손익',
+          value: formatAnalyticsSignedValue(analyticsTotals?.totalProfitAmount, language),
+          tone: Number(analyticsTotals?.totalProfitAmount) >= 0 ? 'positive' : 'negative',
+        },
+        {
+          key: 'return',
+          label: language === 'en' ? 'Return' : '수익률',
+          value: formatAnalyticsPercentValue(analyticsTotals?.totalReturnRate),
+          tone: Number(analyticsTotals?.totalReturnRate) >= 0 ? 'positive' : 'negative',
+        },
+        {
+          key: 'holdings',
+          label: language === 'en' ? 'Holdings' : '종목수',
+          value: formatAnalyticsCompactValue(analyticsTotals?.holdingsCount, language),
+        },
+      ]
+    : [];
 
   useEffect(() => {
     if (!selectedHolding) {
@@ -7244,6 +7360,52 @@ function ToolSideDrawer({
                     {option.label}
                   </button>
                 ))}
+              </div>
+            </section>
+          ) : null}
+
+          {analyticsSummary ? (
+            <section className="tool-drawer__overview-card tool-drawer__overview-card--wide tool-drawer__analytics-card">
+              <p>{language === 'en' ? 'Service Analytics' : '서비스 분석'}</p>
+              <div className="tool-drawer__analytics-grid">
+                {analyticsKpis.map((metric) => (
+                  <div
+                    key={metric.key}
+                    className={'tool-drawer__analytics-metric' + (metric.tone ? ' is-' + metric.tone : '')}
+                  >
+                    <span>{metric.label}</span>
+                    <strong>{metric.value}</strong>
+                  </div>
+                ))}
+              </div>
+              <div className="tool-drawer__analytics-readout">
+                <span>
+                  <em>{language === 'en' ? 'Top' : '상위종목'}</em>
+                  <strong>
+                    {analyticsTopHolding
+                      ? compactLabel(analyticsTopHolding.label, 14) + ' · ' + formatAllocationPercent(analyticsTopHolding.weight)
+                      : '-'}
+                  </strong>
+                </span>
+                <span>
+                  <em>{language === 'en' ? 'Concentration' : '집중도'}</em>
+                  <strong>
+                    {concentrationLevelLabel(
+                      analyticsSummary.concentration?.concentrationLevel,
+                      language,
+                    )}
+                    {' · '}
+                    {formatAnalyticsCompactValue(analyticsSummary.concentration?.effectiveHoldings, language)}
+                  </strong>
+                </span>
+                <span>
+                  <em>{language === 'en' ? 'Rebalance' : '리밸런싱'}</em>
+                  <strong>
+                    {analyticsGap
+                      ? analyticsGap.label + ' ' + formatAnalyticsPercentValue(analyticsGap.gapWeightPercent)
+                      : '-'}
+                  </strong>
+                </span>
               </div>
             </section>
           ) : null}
@@ -8866,6 +9028,7 @@ export default function App() {
   const currentTiltRef = useRef({ x: 0, y: 0 });
   const pendingHoverInfoRef = useRef(null);
   const restoredPortfolioStateRef = useRef(null);
+  const portfolioSyncTimerRef = useRef(0);
   if (restoredPortfolioStateRef.current === null) {
     restoredPortfolioStateRef.current = readStoredPortfolioState();
   }
@@ -9487,7 +9650,67 @@ export default function App() {
   }, [scoreWeightPreset]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    void listServerPortfolios()
+      .then((payload) => {
+        if (cancelled) {
+          return;
+        }
+
+        const serverEntries = Array.isArray(payload?.portfolios)
+          ? payload.portfolios
+              .slice(0, MAX_PORTFOLIOS)
+              .map((portfolio) => createPortfolioEntryFromPayload(portfolio, portfolio?.id))
+              .filter((entry) => entry.id)
+          : [];
+
+        if (!serverEntries.length) {
+          return;
+        }
+
+        setPortfolioEntries((current) => (current.length ? current : serverEntries));
+        setActivePortfolioId((current) => current ?? serverEntries[0]?.id ?? null);
+        setShowGroupDock(true);
+        setShowScoreDock(true);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     writeStoredPortfolioState(portfolioEntries, activePortfolioId);
+
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    window.clearTimeout(portfolioSyncTimerRef.current);
+    const safeEntries = Array.isArray(portfolioEntries)
+      ? portfolioEntries
+          .slice(0, MAX_PORTFOLIOS)
+          .map(serializePortfolioEntryForStorage)
+          .filter((entry) => entry.id)
+      : [];
+
+    if (!safeEntries.length) {
+      return undefined;
+    }
+
+    portfolioSyncTimerRef.current = window.setTimeout(() => {
+      void Promise.allSettled(safeEntries.map((entry) => createServerPortfolio(entry)));
+    }, SERVER_SYNC_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(portfolioSyncTimerRef.current);
+    };
   }, [activePortfolioId, portfolioEntries]);
 
   useEffect(() => {
@@ -9929,11 +10152,11 @@ export default function App() {
               });
             }
 
+            const nextEntry = createPortfolioEntryFromPayload(payload, entryId);
             setPortfolioEntries((current) =>
-              current.map((entry) =>
-                entry.id === entryId ? createPortfolioEntryFromPayload(payload, entryId) : entry,
-              ),
+              current.map((entry) => (entry.id === entryId ? nextEntry : entry)),
             );
+            queueImportHistorySync(nextEntry);
             scheduleSecurityMetadataEnrichment(entryId, payload?.items);
           })();
         },
@@ -10064,11 +10287,11 @@ export default function App() {
               });
             }
 
+            const nextEntry = createPortfolioEntryFromPayload(payload, entryId);
             setPortfolioEntries((current) =>
-              current.map((entry) =>
-                entry.id === entryId ? createPortfolioEntryFromPayload(payload, entryId) : entry,
-              ),
+              current.map((entry) => (entry.id === entryId ? nextEntry : entry)),
             );
+            queueImportHistorySync(nextEntry);
             scheduleSecurityMetadataEnrichment(entryId, payload?.items);
           })();
         },
@@ -10129,6 +10352,7 @@ export default function App() {
 
     setPortfolioEntries(nextEntries);
     setActivePortfolioId(nextActiveId);
+    void deleteServerPortfolio(entryId).catch(() => {});
     clearPortfolioError();
     if (!nextEntries.length) {
       setShowGroupDock(false);
@@ -10588,6 +10812,17 @@ export default function App() {
       }),
     [allocationWeightMode, assetClassMode, portfolioItems],
   );
+  const portfolioAnalyticsSummary = useMemo(() => {
+    if (!hasPortfolio) {
+      return null;
+    }
+
+    return createPortfolioAnalyticsSummary(portfolioItems, portfolioTimelineItems, {
+      period: 'month',
+      topN: 5,
+      targetBucketWeights: DEFAULT_REBALANCE_TARGET_WEIGHTS,
+    });
+  }, [hasPortfolio, portfolioItems, portfolioTimelineItems]);
   const portfolioHeatmap = useMemo(
     () => createPortfolioHeatmap(portfolioTimelineItems, { weeks: 24 }),
     [portfolioTimelineItems],
@@ -10799,6 +11034,7 @@ export default function App() {
                 : null
             }
             allocation={portfolioAllocation}
+            analyticsSummary={portfolioAnalyticsSummary}
             scorecard={portfolioScorecard}
             overallScorecard={overallPortfolioScorecard}
             scoreAxes={scoreAxes}

@@ -118,6 +118,14 @@ function todayStockNewsQuery(language = 'ko') {
   return language === 'en' ? 'latest stock market news' : '최신 주식 뉴스';
 }
 
+function applyCacheBust(url, cacheBust) {
+  if (cacheBust) {
+    url.searchParams.set('_ts', String(cacheBust));
+  }
+
+  return url;
+}
+
 function isStockRelatedNewsItem(item) {
   const text = [item?.title, item?.description].filter(Boolean).join(' ').toLowerCase();
   return /(주식|증시|코스피|코스닥|주가|증권|종목|상장|투자|etf|펀드|나스닥|뉴욕증시|다우|s&p|반도체|금리|환율|stock|market|nasdaq|dow|equity|shares|investor)/i.test(text);
@@ -306,17 +314,17 @@ function parseNaverSearchItems(html, limit = 12) {
   return uniqueNewsItems(items, limit);
 }
 
-async function fetchNaverFinanceNews({ signal } = {}) {
+async function fetchNaverFinanceNews({ signal, cacheBust } = {}) {
   const url = new URL(NAVER_FINANCE_NEWS_URL);
   url.searchParams.set('mode', 'LSS2D');
   url.searchParams.set('section_id', '101');
   url.searchParams.set('section_id2', '258');
 
-  const html = await fetchText(url, { signal, encoding: 'euc-kr' });
+  const html = await fetchText(applyCacheBust(url, cacheBust), { signal, encoding: 'euc-kr' });
   return parseNaverFinanceItems(html, 12);
 }
 
-async function fetchNaverSearchNews({ query, tickers = [], signal, todayOnly = false } = {}) {
+async function fetchNaverSearchNews({ query, tickers = [], signal, todayOnly = false, cacheBust } = {}) {
   const cleanQuery = normalizeQuery(query);
   const tickerText = Array.isArray(tickers)
     ? tickers.map(normalizeTicker).filter(Boolean).slice(0, 5).join(' ')
@@ -342,7 +350,7 @@ async function fetchNaverSearchNews({ query, tickers = [], signal, todayOnly = f
     url.searchParams.set('nso', 'so:dd,p:from' + compactDateValue + 'to' + compactDateValue + ',a:all');
   }
 
-  const html = await fetchText(url, { signal });
+  const html = await fetchText(applyCacheBust(url, cacheBust), { signal });
   return parseNaverSearchItems(html, 12);
 }
 
@@ -409,9 +417,10 @@ function parseRssItems(xml, limit = 10) {
     .filter((item) => item.title && item.link);
 }
 
-export async function fetchMarketNewsFromProviders({ query, tickers = [], language = 'ko', mode = 'today', signal } = {}) {
+export async function fetchMarketNewsFromProviders({ query, tickers = [], language = 'ko', mode = 'today', signal, refreshKey } = {}) {
   const normalizedLanguage = normalizeLanguage(language);
   const cleanQuery = normalizeQuery(query);
+  const cacheBust = refreshKey || Date.now();
   const tickerText = Array.isArray(tickers)
     ? tickers.map(normalizeTicker).filter(Boolean).slice(0, 5).join(' OR ')
     : '';
@@ -419,12 +428,35 @@ export async function fetchMarketNewsFromProviders({ query, tickers = [], langua
   let primaryPayload = null;
 
   if (normalizedLanguage === 'ko') {
+    if (isDefaultTodayMode) {
+      try {
+        const items = todayNewsItems(await fetchNaverFinanceNews({ signal, cacheBust }), 12);
+
+        if (items.length) {
+          primaryPayload = {
+            query: todayStockNewsQuery('ko'),
+            items,
+            source: '네이버 증시뉴스',
+            mode: 'today',
+            fetchedAt: Date.now(),
+          };
+
+          if (items.length >= 4) {
+            return primaryPayload;
+          }
+        }
+      } catch {
+        // Try Naver search before falling back to RSS.
+      }
+    }
+
     try {
       const rawItems = await fetchNaverSearchNews({
         query: isDefaultTodayMode ? DEFAULT_KOREAN_STOCK_NEWS_QUERY : cleanQuery,
         tickers: isDefaultTodayMode ? [] : tickers,
         signal,
         todayOnly: isDefaultTodayMode,
+        cacheBust,
       });
       const items = isDefaultTodayMode ? todayNewsItems(rawItems, 12) : rawItems;
 
@@ -432,7 +464,7 @@ export async function fetchMarketNewsFromProviders({ query, tickers = [], langua
         primaryPayload = {
           query: isDefaultTodayMode ? todayStockNewsQuery('ko') : cleanQuery || tickerText || '주식 뉴스',
           items,
-          source: isDefaultTodayMode ? '최신 주식 뉴스' : '검색 결과',
+          source: isDefaultTodayMode ? '네이버 최신뉴스' : '검색 결과',
           mode: isDefaultTodayMode ? 'today' : 'search',
           fetchedAt: Date.now(),
         };
@@ -466,7 +498,7 @@ export async function fetchMarketNewsFromProviders({ query, tickers = [], langua
   url.searchParams.set('cc', normalizedLanguage === 'en' ? 'US' : 'KR');
 
   try {
-    const xml = await fetchText(url, { signal });
+    const xml = await fetchText(applyCacheBust(url, cacheBust), { signal });
     const rawItems = uniqueNewsItems(parseRssItems(xml, 12), 12);
     const items = isDefaultFallbackMode ? todayNewsItems(rawItems, 12) : rawItems;
 
@@ -487,7 +519,7 @@ export async function fetchMarketNewsFromProviders({ query, tickers = [], langua
 
   return primaryPayload;
 }
-export async function fetchMarketNews({ query, tickers, language, mode, signal } = {}) {
+export async function fetchMarketNews({ query, tickers, language, mode, refreshKey, signal } = {}) {
   if (typeof window !== 'undefined') {
     const url = new URL('/api/market/news', window.location.origin);
 
@@ -503,6 +535,10 @@ export async function fetchMarketNews({ query, tickers, language, mode, signal }
     if (mode) {
       url.searchParams.set('mode', mode === 'search' ? 'search' : 'today');
     }
+    if (refreshKey) {
+      url.searchParams.set('_ts', String(refreshKey));
+      url.searchParams.set('refresh', '1');
+    }
 
     const response = await fetch(url.toString(), { signal, cache: 'no-store' });
 
@@ -513,7 +549,7 @@ export async function fetchMarketNews({ query, tickers, language, mode, signal }
     throw new Error('news-api-failed:' + response.status);
   }
 
-  return fetchMarketNewsFromProviders({ query, tickers, language, mode, signal });
+  return fetchMarketNewsFromProviders({ query, tickers, language, mode, refreshKey, signal });
 }
 
 export function formatNewsTime(value, language = 'ko') {

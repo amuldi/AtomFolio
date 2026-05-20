@@ -57,3 +57,70 @@ export function clearStoredPosition(key) {
 
   window.localStorage.removeItem(key);
 }
+
+export const ANONYMOUS_WORKSPACE_ID = 'anonymous';
+
+async function fetchJson(url, options = {}) {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'x-atomfolio-workspace-id': options.workspaceId ?? ANONYMOUS_WORKSPACE_ID,
+      ...(options.headers ?? {}),
+    },
+  });
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(payload?.error ?? `Request failed with status ${response.status}.`);
+  }
+
+  return payload;
+}
+
+export function getPortfolioWorkspaceId() {
+  return ANONYMOUS_WORKSPACE_ID;
+}
+
+export async function listServerPortfolios(workspaceId = ANONYMOUS_WORKSPACE_ID) {
+  return fetchJson('/api/portfolio', { workspaceId });
+}
+
+export async function createServerPortfolio(portfolio, workspaceId = ANONYMOUS_WORKSPACE_ID) {
+  return fetchJson('/api/portfolio', {
+    method: 'POST',
+    workspaceId,
+    body: JSON.stringify(portfolio ?? {}),
+  });
+}
+
+export async function getServerPortfolio(portfolioId, workspaceId = ANONYMOUS_WORKSPACE_ID) {
+  return fetchJson(`/api/portfolio/${encodeURIComponent(portfolioId)}`, { workspaceId });
+}
+
+export async function updateServerPortfolio(portfolioId, portfolio, workspaceId = ANONYMOUS_WORKSPACE_ID) {
+  return fetchJson(`/api/portfolio/${encodeURIComponent(portfolioId)}`, {
+    method: 'PUT',
+    workspaceId,
+    body: JSON.stringify(portfolio ?? {}),
+  });
+}
+
+export async function deleteServerPortfolio(portfolioId, workspaceId = ANONYMOUS_WORKSPACE_ID) {
+  return fetchJson(`/api/portfolio/${encodeURIComponent(portfolioId)}`, {
+    method: 'DELETE',
+    workspaceId,
+  });
+}
+
+export async function listServerImportHistory(workspaceId = ANONYMOUS_WORKSPACE_ID) {
+  return fetchJson('/api/portfolio/imports', { workspaceId });
+}
+
+export async function saveServerImportHistory(importRecord, workspaceId = ANONYMOUS_WORKSPACE_ID) {
+  return fetchJson('/api/portfolio/imports', {
+    method: 'POST',
+    workspaceId,
+    body: JSON.stringify(importRecord ?? {}),
+  });
+}

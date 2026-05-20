@@ -13,6 +13,16 @@ import {
   searchMarketSymbolSuggestions,
 } from '../src/lib/liveMarketData.js';
 import { fetchMarketNewsFromProviders } from '../src/lib/marketNews.js';
+import {
+  createPortfolio,
+  deletePortfolio,
+  getPortfolio,
+  listImportHistory,
+  listPortfolios,
+  resolveWorkspaceId,
+  saveImportHistory,
+  updatePortfolio,
+} from './portfolioStore.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -65,6 +75,15 @@ function readJsonBody(request) {
     });
 
     request.on('error', reject);
+  });
+}
+
+function getWorkspaceIdFromUrl(request, requestUrl) {
+  return resolveWorkspaceId({
+    headers: request.headers,
+    query: {
+      workspaceId: requestUrl.searchParams.get('workspaceId'),
+    },
   });
 }
 
@@ -163,7 +182,10 @@ const server = http.createServer(async (request, response) => {
         .slice(0, 5);
       const language = requestUrl.searchParams.get('language') === 'en' ? 'en' : 'ko';
       const mode = requestUrl.searchParams.get('mode') === 'search' ? 'search' : 'today';
-      const payload = await fetchMarketNewsFromProviders({ query, tickers, language, mode });
+      const refreshKey = String(
+        requestUrl.searchParams.get('_ts') ?? requestUrl.searchParams.get('refresh') ?? '',
+      ).trim().slice(0, 32);
+      const payload = await fetchMarketNewsFromProviders({ query, tickers, language, mode, refreshKey });
 
       sendJson(response, 200, payload);
       return;
@@ -221,6 +243,110 @@ const server = http.createServer(async (request, response) => {
     } catch (error) {
       sendJson(response, 500, {
         error: error instanceof Error ? error.message : 'Portfolio ingestion failed.',
+      });
+      return;
+    }
+  }
+
+  if (requestUrl.pathname === '/api/portfolio') {
+    const workspaceId = getWorkspaceIdFromUrl(request, requestUrl);
+
+    try {
+      if (request.method === 'GET') {
+        sendJson(response, 200, await listPortfolios(workspaceId));
+        return;
+      }
+
+      if (request.method === 'POST') {
+        const body = await readJsonBody(request);
+        sendJson(response, 201, await createPortfolio(workspaceId, body));
+        return;
+      }
+
+      sendJson(response, 405, { error: 'Method not allowed.' });
+      return;
+    } catch (error) {
+      sendJson(response, 500, {
+        error: error instanceof Error ? error.message : 'Portfolio API failed.',
+      });
+      return;
+    }
+  }
+
+  if (requestUrl.pathname === '/api/portfolio/imports') {
+    const workspaceId = getWorkspaceIdFromUrl(request, requestUrl);
+
+    try {
+      if (request.method === 'GET') {
+        sendJson(response, 200, await listImportHistory(workspaceId));
+        return;
+      }
+
+      if (request.method === 'POST') {
+        const body = await readJsonBody(request);
+        sendJson(response, 201, await saveImportHistory(workspaceId, body));
+        return;
+      }
+
+      sendJson(response, 405, { error: 'Method not allowed.' });
+      return;
+    } catch (error) {
+      sendJson(response, 500, {
+        error: error instanceof Error ? error.message : 'Import history API failed.',
+      });
+      return;
+    }
+  }
+
+  if (requestUrl.pathname.startsWith('/api/portfolio/')) {
+    const workspaceId = getWorkspaceIdFromUrl(request, requestUrl);
+    const portfolioId = decodeURIComponent(requestUrl.pathname.replace('/api/portfolio/', '')).trim();
+
+    if (!portfolioId) {
+      sendJson(response, 400, { error: 'Portfolio id is required.' });
+      return;
+    }
+
+    try {
+      if (request.method === 'GET') {
+        const portfolio = await getPortfolio(workspaceId, portfolioId);
+        if (!portfolio) {
+          sendJson(response, 404, { error: 'Portfolio not found.' });
+          return;
+        }
+
+        sendJson(response, 200, { workspaceId, portfolio });
+        return;
+      }
+
+      if (request.method === 'PUT' || request.method === 'PATCH') {
+        const body = await readJsonBody(request);
+        const payload = await updatePortfolio(workspaceId, portfolioId, body);
+        if (!payload) {
+          sendJson(response, 404, { error: 'Portfolio not found.' });
+          return;
+        }
+
+        sendJson(response, 200, payload);
+        return;
+      }
+
+      if (request.method === 'DELETE') {
+        const deleted = await deletePortfolio(workspaceId, portfolioId);
+        if (!deleted) {
+          sendJson(response, 404, { error: 'Portfolio not found.' });
+          return;
+        }
+
+        sendJson(response, 200, { workspaceId, deleted: true, id: portfolioId });
+        return;
+      }
+
+      sendJson(response, 405, { error: 'Method not allowed.' });
+      return;
+    } catch (error) {
+      sendJson(response, 500, {
+        error: error instanceof Error ? error.message : 'Portfolio API failed.',
       });
       return;
     }

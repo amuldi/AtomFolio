@@ -2730,7 +2730,7 @@ body::after {
 }
 
 .tool-drawer {
-  --tool-drawer-width: 38rem;
+  --tool-drawer-width: 35rem;
   --tool-drawer-rail-width: 4.55rem;
   position: fixed;
   top: 0;
@@ -4193,6 +4193,78 @@ body::after {
 
 .tool-drawer__overview-card--groups {
   gap: 0.62rem;
+}
+
+.tool-drawer__analytics-card {
+  gap: 0.62rem;
+}
+
+.tool-drawer__analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.42rem;
+  min-width: 0;
+}
+
+.tool-drawer__analytics-metric {
+  min-width: 0;
+  padding: 0.5rem 0.46rem;
+  border: 1px solid rgba(255, 242, 216, 0.08);
+  border-radius: 8px;
+  background: rgba(5, 5, 5, 0.18);
+}
+
+.tool-drawer__analytics-metric span,
+.tool-drawer__analytics-readout em {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(255, 246, 226, 0.48);
+  font-family: var(--ui-font);
+  font-size: 0.58rem;
+  font-style: normal;
+  font-weight: 720;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-drawer__analytics-metric strong,
+.tool-drawer__analytics-readout strong {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  margin-top: 0.22rem;
+  color: rgba(255, 247, 232, 0.9);
+  font-family: var(--ui-font);
+  font-size: 0.78rem;
+  font-weight: 780;
+  letter-spacing: 0;
+  line-height: 1.12;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-drawer__analytics-metric.is-positive strong {
+  color: rgba(178, 255, 215, 0.92);
+}
+
+.tool-drawer__analytics-metric.is-negative strong {
+  color: rgba(255, 174, 174, 0.92);
+}
+
+.tool-drawer__analytics-readout {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.42rem;
+  min-width: 0;
+}
+
+.tool-drawer__analytics-readout span {
+  min-width: 0;
+  padding: 0.46rem 0.5rem;
+  border-radius: 8px;
+  background: rgba(255, 248, 233, 0.036);
 }
 
 .tool-drawer__overview-card--score {
@@ -6044,6 +6116,11 @@ body::after {
 
   .tool-drawer__overview-grid {
     grid-template-columns: 1fr;
+  }
+
+  .tool-drawer__analytics-grid,
+  .tool-drawer__analytics-readout {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .tool-drawer__score-mode-grid {
