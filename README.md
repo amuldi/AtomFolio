@@ -7,6 +7,7 @@ AtomFolio는 단순한 CSV 뷰어가 아니라 서로 다른 증권사 파일과
 ## 바로가기
 
 - GitHub 저장소: [https://github.com/amuldi/AtomFolio--](https://github.com/amuldi/AtomFolio--)
+- 배포 주소: [https://atomfolio-plus.vercel.app](https://atomfolio-plus.vercel.app)
 - 기획서 PDF: [docs/proposal/AtomFolio_Plus_Proposal.pdf](docs/proposal/AtomFolio_Plus_Proposal.pdf)
 - 핵심 규칙 문서: [Skills.md](Skills.md)
 
