@@ -10,9 +10,9 @@ AtomFolio는 표 형태로 흩어진 투자 데이터를 “중앙 포트폴리�
 
 - 배포 주소: [https://atomfolio-lyart.vercel.app](https://atomfolio-lyart.vercel.app)
 - GitHub 저장소: [https://github.com/amuldi/AtomFolio](https://github.com/amuldi/AtomFolio)
-- 기획서 Markdown: [docs/proposal/AtomFolio_Plus_Proposal.md](docs/proposal/AtomFolio_Plus_Proposal.md)
-- 기획서 HTML: [docs/proposal/AtomFolio_Plus_Proposal.html](docs/proposal/AtomFolio_Plus_Proposal.html)
-- 기획서 PDF: [docs/proposal/AtomFolio_Plus_Proposal.pdf](docs/proposal/AtomFolio_Plus_Proposal.pdf)
+- 기획서 Markdown: [docs/proposal/AtomFolio_Proposal.md](docs/proposal/AtomFolio_Proposal.md)
+- 기획서 HTML: [docs/proposal/AtomFolio_Proposal.html](docs/proposal/AtomFolio_Proposal.html)
+- 기획서 PDF: [docs/proposal/AtomFolio_Proposal.pdf](docs/proposal/AtomFolio_Proposal.pdf)
 
 ## 사용 기술
 
@@ -76,12 +76,6 @@ AtomFolio의 목표는 세 가지입니다.
 
 ![AtomFolio 시장 뉴스](docs/assets/atomfolio-news-current.png)
 
-### 모바일 화면
-
-작은 화면에서도 종목 라벨, 도구 버튼, 패널 텍스트가 겹치지 않도록 폭과 줄바꿈을 조정했습니다.
-
-![AtomFolio 모바일 화면](docs/assets/atomfolio-mobile.png)
-
 ## 주요 기능
 
 ### 1. 포트폴리오 생성과 저장
@@ -138,7 +132,7 @@ AtomFolio의 목표는 세 가지입니다.
 
 | 축 | 설명 |
 | --- | --- |
-| 수익성 | 평균 수익률, 플러스 종목 비율, 하방 변동성 |
+| 수익성 | 평균 수익률, 수익 종목 비율, 하방 변동성 |
 | 수익 안정성 | 손실 종목 비율, 변동성, 방어형 자산 비중 |
 | 투자 타이밍 | 매수일 분산, 월별 분산, 투자 기간 |
 | 포트폴리오 구성 | 자산군, 분야, 지역, 스타일의 균형 |
@@ -210,7 +204,7 @@ flowchart LR
 ### 프런트엔드
 
 - `src/App.jsx`: 앱 상태, 포트폴리오 저장/복원, 원자형 화면, 설정, 업로드, 도구 연결.
-- `src/styles.css`: 전체 UI, 반응형 레이아웃, 손익 색상, 도구 패널, 모바일 줄바꿈.
+- `src/styles.css`: 전체 UI, 데스크톱 웹 레이아웃, 손익 색상, 도구 패널.
 - `src/components/allocation/`: 자산 비중 도넛.
 - `src/components/panels/`: 투자 시뮬레이션, 도구 패널.
 - `src/lib/*`: 포트폴리오 분석 로직.
@@ -371,10 +365,6 @@ sequenceDiagram
 ### 배포 환경과 로컬 환경이 달랐다
 
 로컬에서는 Node 서버가 파일 기반 fallback 저장소를 사용할 수 있지만, Vercel 배포에서는 서버리스 함수와 외부 DB가 필요합니다. 그래서 `portfolioStore`를 추상화하고, `DATABASE_URL`이 있으면 Postgres를 쓰고 없으면 JSON 파일 저장소로 동작하게 나눴습니다.
-
-### 모바일에서 글자가 잘렸다
-
-도구 버튼, 설정 버튼, 패널 라벨이 작은 화면에서 세로로 떨어지거나 잘리는 문제가 있었습니다. 버튼 최소 높이, 줄바꿈, 패널 폭, 스크롤 영역을 조정해 모바일에서도 텍스트가 겹치지 않게 정리했습니다.
 
 ## 실행 방법
 
