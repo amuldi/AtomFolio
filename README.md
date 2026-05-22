@@ -4,7 +4,9 @@
 
 AtomFolio는 표 형태로 흩어진 투자 데이터를 “중앙 포트폴리오와 주변 보유 종목” 구조로 바꿔 보여줍니다. 처음 구상은 노트에 직접 그린 원자형 포트폴리오 스케치에서 시작했습니다. 여러 계좌와 종목이 한눈에 안 들어오는 문제를 해결하려고, 보유 종목을 중심에서 뻗어나가는 노드로 표현했습니다.
 
-![초기 손그림 구상](docs/assets/atomfolio-concept-sketch.png)
+<p align="center">
+  <img src="docs/assets/atomfolio-concept-sketch.png" alt="초기 손그림 구상" width="180">
+</p>
 
 ## 배포와 저장소
 
