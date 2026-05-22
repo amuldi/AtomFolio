@@ -8,7 +8,7 @@ AtomFolio는 표 형태로 흩어진 투자 데이터를 “중앙 포트폴리�
 
 ## 배포와 저장소
 
-- 배포 주소: [https://atomfolio.vercel.app](https://atomfolio.vercel.app)
+- 배포 주소: [https://atomfolio-lyart.vercel.app](https://atomfolio-lyart.vercel.app)
 - GitHub 저장소: [https://github.com/amuldi/AtomFolio](https://github.com/amuldi/AtomFolio)
 - 기획서 Markdown: [docs/proposal/AtomFolio_Plus_Proposal.md](docs/proposal/AtomFolio_Plus_Proposal.md)
 - 기획서 HTML: [docs/proposal/AtomFolio_Plus_Proposal.html](docs/proposal/AtomFolio_Plus_Proposal.html)
@@ -401,7 +401,7 @@ npm run dev
 http://localhost:5173
 ```
 
-`localhost`는 개발용 주소입니다. 실제 배포 사이트는 [https://atomfolio.vercel.app](https://atomfolio.vercel.app)입니다.
+`localhost`는 개발용 주소입니다. 실제 배포 사이트는 [https://atomfolio-lyart.vercel.app](https://atomfolio-lyart.vercel.app)입니다.
 
 ### 빌드
 
@@ -463,7 +463,7 @@ Vercel 설정은 [vercel.json](vercel.json)에 있습니다.
 최근 확인한 항목입니다.
 
 - `npm run build`
-- 배포 주소 `https://atomfolio.vercel.app` HTTP 200 확인
+- 배포 주소 `https://atomfolio-lyart.vercel.app` HTTP 200 확인
 - 설정 패널 렌더링 확인
 - 설정 패널 콘솔 에러 없음
 - 수익/손실 색상 규칙 적용 확인

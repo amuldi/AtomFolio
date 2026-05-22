@@ -7,7 +7,7 @@ AtomFolio는 투자 CSV와 직접 입력한 보유 종목을 포트폴리오 단
 서비스의 출발점은 “투자 종목이 표 안에 갇혀 있으면 전체 구조가 보이지 않는다”는 문제였다. 사용자가 처음 그린 손그림처럼, 포트폴리오를 중심에 두고 각 종목이 원자처럼 뻗어나가는 구조를 웹 화면으로 구현하는 것이 핵심 컨셉이다.
 
 - 서비스명: AtomFolio
-- 배포 주소: https://atomfolio.vercel.app
+- 배포 주소: https://atomfolio-lyart.vercel.app
 - 저장소: https://github.com/amuldi/AtomFolio
 - 주요 기술: React, Vite, JavaScript, Node.js, Vercel, Postgres
 - 핵심 입력: CSV/TSV/TXT, 직접 입력 종목, 실시간 시세 검색
