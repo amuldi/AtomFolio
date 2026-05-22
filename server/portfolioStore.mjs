@@ -2,6 +2,17 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  deletePostgresPortfolio,
+  getPostgresImportRecord,
+  getPostgresPortfolio,
+  getPostgresStoreStatus,
+  isPostgresStoreEnabled,
+  listPostgresImportHistory,
+  listPostgresPortfolios,
+  upsertPostgresImportHistory,
+  upsertPostgresPortfolio,
+} from './postgresPortfolioStore.mjs';
 
 export const DEFAULT_WORKSPACE_ID = 'anonymous';
 
@@ -9,9 +20,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
 const localDataPath = path.join(projectRoot, 'data', 'portfolio-store.json');
+const requestedStoreDriver = String(process.env.ATOMFOLIO_STORE_DRIVER ?? '').trim().toLowerCase();
 const useFileStore =
-  process.env.ATOMFOLIO_STORE_DRIVER === 'file' ||
-  (!process.env.VERCEL && process.env.NODE_ENV !== 'production');
+  requestedStoreDriver === 'file' ||
+  (!isPostgresStoreEnabled() &&
+    requestedStoreDriver !== 'memory' &&
+    !process.env.VERCEL &&
+    process.env.NODE_ENV !== 'production');
 
 const memoryStore = globalThis.__ATOMFOLIO_PORTFOLIO_STORE__ ?? {
   version: 1,
@@ -147,6 +162,21 @@ function ensureWorkspace(store, workspaceId) {
   };
 }
 
+export function getPortfolioStoreStatus() {
+  if (isPostgresStoreEnabled()) {
+    return {
+      driver: 'postgres',
+      ...getPostgresStoreStatus(),
+    };
+  }
+
+  return {
+    driver: useFileStore ? 'file' : 'memory',
+    databaseConfigured: false,
+    autoMigrate: false,
+  };
+}
+
 export function resolveWorkspaceId(requestOrValue) {
   if (typeof requestOrValue === 'string') {
     return cleanWorkspaceId(requestOrValue);
@@ -163,8 +193,14 @@ export function resolveWorkspaceId(requestOrValue) {
 }
 
 export async function listPortfolios(workspaceId) {
+  const safeWorkspaceId = cleanWorkspaceId(workspaceId);
+
+  if (isPostgresStoreEnabled()) {
+    return listPostgresPortfolios(safeWorkspaceId);
+  }
+
   const store = await readStore();
-  const resolved = ensureWorkspace(store, workspaceId);
+  const resolved = ensureWorkspace(store, safeWorkspaceId);
 
   return {
     workspaceId: resolved.workspaceId,
@@ -173,14 +209,24 @@ export async function listPortfolios(workspaceId) {
 }
 
 export async function getPortfolio(workspaceId, portfolioId) {
+  if (isPostgresStoreEnabled()) {
+    return getPostgresPortfolio(cleanWorkspaceId(workspaceId), String(portfolioId ?? ''));
+  }
+
   const { portfolios } = await listPortfolios(workspaceId);
   return portfolios.find((portfolio) => portfolio.id === String(portfolioId ?? '')) ?? null;
 }
 
 export async function createPortfolio(workspaceId, input) {
-  const store = await readStore();
-  const resolved = ensureWorkspace(store, workspaceId);
+  const safeWorkspaceId = cleanWorkspaceId(workspaceId);
   const portfolio = sanitizePortfolio(input);
+
+  if (isPostgresStoreEnabled()) {
+    return upsertPostgresPortfolio(safeWorkspaceId, portfolio);
+  }
+
+  const store = await readStore();
+  const resolved = ensureWorkspace(store, safeWorkspaceId);
 
   resolved.workspace.portfolios = [
     portfolio,
@@ -196,9 +242,22 @@ export async function createPortfolio(workspaceId, input) {
 }
 
 export async function updatePortfolio(workspaceId, portfolioId, input) {
-  const store = await readStore();
-  const resolved = ensureWorkspace(store, workspaceId);
+  const safeWorkspaceId = cleanWorkspaceId(workspaceId);
   const portfolioIdString = String(portfolioId ?? '');
+
+  if (isPostgresStoreEnabled()) {
+    const existing = await getPostgresPortfolio(safeWorkspaceId, portfolioIdString);
+
+    if (!existing) {
+      return null;
+    }
+
+    const nextPortfolio = sanitizePortfolio({ ...input, id: portfolioIdString }, existing);
+    return upsertPostgresPortfolio(safeWorkspaceId, nextPortfolio);
+  }
+
+  const store = await readStore();
+  const resolved = ensureWorkspace(store, safeWorkspaceId);
   const currentPortfolios = safeArray(resolved.workspace.portfolios);
   const existing = currentPortfolios.find((entry) => entry.id === portfolioIdString);
 
@@ -220,9 +279,15 @@ export async function updatePortfolio(workspaceId, portfolioId, input) {
 }
 
 export async function deletePortfolio(workspaceId, portfolioId) {
-  const store = await readStore();
-  const resolved = ensureWorkspace(store, workspaceId);
+  const safeWorkspaceId = cleanWorkspaceId(workspaceId);
   const portfolioIdString = String(portfolioId ?? '');
+
+  if (isPostgresStoreEnabled()) {
+    return deletePostgresPortfolio(safeWorkspaceId, portfolioIdString);
+  }
+
+  const store = await readStore();
+  const resolved = ensureWorkspace(store, safeWorkspaceId);
   const beforeCount = safeArray(resolved.workspace.portfolios).length;
 
   resolved.workspace.portfolios = safeArray(resolved.workspace.portfolios).filter(
@@ -239,8 +304,14 @@ export async function deletePortfolio(workspaceId, portfolioId) {
 }
 
 export async function listImportHistory(workspaceId) {
+  const safeWorkspaceId = cleanWorkspaceId(workspaceId);
+
+  if (isPostgresStoreEnabled()) {
+    return listPostgresImportHistory(safeWorkspaceId);
+  }
+
   const store = await readStore();
-  const resolved = ensureWorkspace(store, workspaceId);
+  const resolved = ensureWorkspace(store, safeWorkspaceId);
 
   return {
     workspaceId: resolved.workspaceId,
@@ -249,9 +320,19 @@ export async function listImportHistory(workspaceId) {
 }
 
 export async function saveImportHistory(workspaceId, input) {
+  const safeWorkspaceId = cleanWorkspaceId(workspaceId);
+  let importRecord = sanitizeImportRecord(input);
+
+  if (isPostgresStoreEnabled()) {
+    const existing = importRecord.id
+      ? await getPostgresImportRecord(safeWorkspaceId, importRecord.id)
+      : null;
+    importRecord = sanitizeImportRecord(input, existing);
+    return upsertPostgresImportHistory(safeWorkspaceId, importRecord);
+  }
+
   const store = await readStore();
-  const resolved = ensureWorkspace(store, workspaceId);
-  const importRecord = sanitizeImportRecord(input);
+  const resolved = ensureWorkspace(store, safeWorkspaceId);
 
   resolved.workspace.imports = [
     importRecord,

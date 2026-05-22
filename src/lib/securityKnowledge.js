@@ -883,19 +883,18 @@ function resolveRegion(item, reference) {
 }
 
 function resolveAssetClass(item, reference) {
+  const { normalized } = buildSecuritySignalText(item);
+  const hasEtfSignal =
+    ETF_PROVIDER_PATTERN.test(normalized) ||
+    /etf|fund|index|trust|상장지수/.test(normalized);
   const provided = resolveProvidedValue(item.assetClass);
-  if (provided) {
+  if (provided && !(normalizeSecurityKey(provided.value) === '주식' && hasEtfSignal)) {
     return provided;
   }
 
   if (reference?.assetClass) {
     return { value: reference.assetClass, source: 'reference' };
   }
-
-  const { normalized } = buildSecuritySignalText(item);
-  const hasEtfSignal =
-    ETF_PROVIDER_PATTERN.test(normalized) ||
-    /etf|fund|index|trust|상장지수/.test(normalized);
 
   if (/bond|treasury|fixedincome|credit|채권|국채/.test(normalized)) {
     return { value: hasEtfSignal ? '채권 ETF' : '채권', source: 'derived' };

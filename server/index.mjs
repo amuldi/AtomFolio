@@ -17,6 +17,7 @@ import {
   createPortfolio,
   deletePortfolio,
   getPortfolio,
+  getPortfolioStoreStatus,
   listImportHistory,
   listPortfolios,
   resolveWorkspaceId,
@@ -123,6 +124,7 @@ const server = http.createServer(async (request, response) => {
   if (request.method === 'GET' && requestUrl.pathname === '/api/health') {
     sendJson(response, 200, {
       ok: true,
+      portfolioStore: getPortfolioStoreStatus(),
       securityEnrichment: getSecurityEnrichmentCacheStats(),
     });
     return;

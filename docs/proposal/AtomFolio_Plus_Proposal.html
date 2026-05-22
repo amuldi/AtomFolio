@@ -1,150 +1,305 @@
 <!doctype html>
 <html lang="ko">
 <head>
-<meta charset="utf-8">
-<title>AtomFolio + 기획서</title>
-<style>
-@page { size: A4; margin: 18mm 17mm; }
-* { box-sizing: border-box; }
-body { margin: 0; color: #111827; background: #ffffff; font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", "Segoe UI", sans-serif; line-height: 1.62; font-size: 13.2px; }
-main { max-width: 760px; margin: 0 auto; }
-h1 { margin: 0 0 16px; padding-bottom: 12px; border-bottom: 3px solid #111827; font-size: 30px; line-height: 1.2; letter-spacing: 0; }
-h2 { margin: 25px 0 10px; padding-top: 4px; font-size: 19px; line-height: 1.35; letter-spacing: 0; page-break-after: avoid; }
-h3 { margin: 18px 0 7px; font-size: 15px; line-height: 1.4; letter-spacing: 0; page-break-after: avoid; }
-p { margin: 7px 0; }
-ul, ol { margin: 6px 0 10px 22px; padding: 0; }
-li { margin: 2px 0; }
-table { width: 100%; border-collapse: collapse; margin: 10px 0 16px; font-size: 12.2px; page-break-inside: avoid; }
-th, td { border: 1px solid #d1d5db; padding: 7px 8px; text-align: left; vertical-align: top; }
-th { background: #f3f4f6; font-weight: 700; }
-code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 0.92em; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 4px; padding: 0.08em 0.28em; }
-pre { margin: 10px 0 16px; padding: 12px 14px; background: #111827; color: #f9fafb; border-radius: 8px; overflow: hidden; font-size: 11.4px; line-height: 1.45; page-break-inside: avoid; }
-pre code { background: transparent; border: 0; color: inherit; padding: 0; }
-.cover-meta { margin: -6px 0 22px; color: #4b5563; font-size: 13px; }
-.summary-box { border: 1px solid #d1d5db; border-left: 5px solid #111827; padding: 12px 14px; margin: 12px 0 20px; background: #f9fafb; }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AtomFolio 기획서</title>
+  <style>
+    body { margin: 0; background: #f7f4ee; color: #1d1a16; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.65; }
+    .page { max-width: 920px; margin: 0 auto; padding: 56px 28px 80px; }
+    h1 { font-size: 42px; margin: 0 0 24px; }
+    h2 { font-size: 26px; margin: 44px 0 14px; border-bottom: 1px solid #ddd3c5; padding-bottom: 8px; }
+    h3 { font-size: 19px; margin: 28px 0 10px; }
+    p, li, td, th { font-size: 15px; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0 24px; background: #fffaf2; }
+    th, td { border: 1px solid #ddd3c5; padding: 9px 11px; text-align: left; vertical-align: top; }
+    th { background: #ece2d4; }
+    code { background: #eee2d1; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #171717; color: #f3eee6; padding: 16px; border-radius: 10px; overflow: auto; }
+    a { color: #7d251f; }
+    @media print {
+      body { background: #fff; }
+      .page { padding: 28px; }
+      h2 { break-after: avoid; }
+      pre, table { break-inside: avoid; }
+    }
+  </style>
 </head>
 <body>
-<main>
-<div class="cover-meta">DAKER 월간 해커톤 제출용 기획서</div>
-<div class="summary-box"><strong>요약:</strong> AtomFolio +는 Skills.md 기반 분석 규칙으로 다양한 투자 CSV를 자동 해석하고, 원자형 포트폴리오 뷰와 히트맵, 도넛 차트, 레이더 점수 차트를 생성하는 투자 데이터 시각화 대시보드입니다.</div>
-<h1>AtomFolio + 기획서</h1>
-<h2>1. 서비스 개요</h2>
-<p>AtomFolio +는 투자 CSV 파일을 업로드하면 포트폴리오 구조, 수익 흐름, 자산 비중, 위험/분산 상태를 자동으로 분석해 시각화하는 투자 데이터 대시보드이다.</p>
-<p>일반적인 투자 데이터는 증권사, 계좌, 자산 유형, 거래/평가 기준에 따라 컬럼 구조가 달라진다. 이 프로젝트는 고정된 CSV 템플릿을 요구하지 않고, 종목명·종목코드·날짜·수익률·비중·계좌 정보를 자동 추론하여 다양한 투자 데이터를 바로 분석할 수 있게 한다.</p>
-<p>핵심 컨셉은 “복잡한 투자 표를 직관적인 원자형 포트폴리오로 바꾸는 것”이다. 각 종목은 하나의 원자로 표현되고, 보조 패널에서 수익 히트맵, 자산 비중 도넛, 레이더 점수 차트를 함께 제공한다.</p>
+  <main class="page">
+<h1>AtomFolio 기획서</h1>
+<h2>1. 프로젝트 개요</h2>
+<p>AtomFolio는 투자 CSV와 직접 입력한 보유 종목을 포트폴리오 단위로 정리하고, 손익 흐름, 자산 비중, 포트폴리오 점수, 투자 시뮬레이션, 시장 뉴스를 한 화면에서 확인할 수 있게 만든 웹 애플리케이션이다.</p>
+<p>서비스의 출발점은 “투자 종목이 표 안에 갇혀 있으면 전체 구조가 보이지 않는다”는 문제였다. 사용자가 처음 그린 손그림처럼, 포트폴리오를 중심에 두고 각 종목이 원자처럼 뻗어나가는 구조를 웹 화면으로 구현하는 것이 핵심 컨셉이다.</p>
+<ul>
+<li>서비스명: AtomFolio</li>
+<li>배포 주소: https://atomfolio.vercel.app</li>
+<li>저장소: https://github.com/amuldi/AtomFolio</li>
+<li>주요 기술: React, Vite, JavaScript, Node.js, Vercel, Postgres</li>
+<li>핵심 입력: CSV/TSV/TXT, 직접 입력 종목, 실시간 시세 검색</li>
+<li>핵심 출력: 원자형 포트폴리오, 날짜별 손익 히트맵, 자산 비중, 점수, 시뮬레이션, 뉴스</li>
+</ul>
 <h2>2. 문제 정의</h2>
-<p>투자 데이터 분석에서는 다음 문제가 반복된다.</p>
-<ul><li>데이터 출처마다 컬럼명이 다르다.</li><li>날짜별 수익률 데이터와 현재 보유 비중 데이터가 섞여 있다.</li><li>종목명, 자산군, 계좌유형, 수익률의 위치가 일정하지 않다.</li><li>숫자 비중이나 지역명이 종목명으로 잘못 해석될 수 있다.</li><li>분석 기준이 문서화되지 않으면 같은 데이터를 매번 다른 방식으로 해석하게 된다.</li><li>표 형태의 투자 데이터는 초보자에게 직관적이지 않다.</li></ul>
-<p>AtomFolio +는 이러한 문제를 해결하기 위해 <code>Skills.md</code>에 분석 규칙을 정의하고, 그 규칙에 따라 자동 대시보드를 생성하는 방식을 채택한다.</p>
+<p>개인 투자자가 보유 종목을 분석하려고 하면 다음 문제가 반복된다.</p>
+<ol>
+<li>증권사마다 CSV 컬럼명이 다르다.</li>
+<li>국내 종목, 미국 종목, ETF, 금, 현금성 자산의 표현 방식이 다르다.</li>
+<li>같은 종목이 매수일이나 평가일 단위로 여러 줄 반복된다.</li>
+<li>날짜별 손익 데이터와 현재 보유 종목 데이터가 섞인다.</li>
+<li>수익률, 손실률, 평가금액, 비중이 파일마다 다른 형식으로 들어온다.</li>
+<li>사용자가 파일을 앱에 맞추는 과정 자체가 번거롭다.</li>
+<li>포트폴리오를 저장해도 시간이 지나며 손익 데이터가 누적되지 않으면 흐름 분석이 어렵다.</li>
+</ol>
+<p>AtomFolio는 사용자가 CSV를 고치는 대신 앱이 CSV 구조를 해석하도록 설계했다. 화면은 표 중심이 아니라 포트폴리오 구조를 먼저 보여주고, 분석 도구는 필요할 때 왼쪽 패널에서 펼치는 방식으로 정리했다.</p>
 <h2>3. 목표 사용자</h2>
 <h3>개인 투자자</h3>
-<p>증권사 또는 자산관리 앱에서 내려받은 보유 종목 CSV를 빠르게 확인하고, 포트폴리오가 특정 자산군이나 지역에 치우쳐 있는지 파악하고 싶은 사용자.</p>
-<h3>금융/데이터 분석 입문자</h3>
-<p>투자 데이터를 직접 시각화하고 싶지만, CSV 구조가 일정하지 않아 전처리에서 막히는 사용자.</p>
-<h3>해커톤 심사자와 운영자</h3>
-<p>제공 데이터가 없는 상황에서도 더미 데이터 또는 공개 투자 데이터를 업로드해 서비스의 범용성, 자동 분석 능력, 시각화 완성도를 바로 확인할 수 있는 사용자.</p>
-<h2>4. 핵심 가치 제안</h2>
-<table><thead><tr><th>가치</th><th>설명</th></tr></thead><tbody><tr><td>범용성</td><td>고정 템플릿 없이 다양한 투자 CSV 구조를 자동 추론한다.</td></tr><tr><td>직관성</td><td>종목을 원자 단위로 표현해 포트폴리오 구성을 한눈에 보여준다.</td></tr><tr><td>자동 분석</td><td>날짜, 수익률, 비중, 계좌, 자산군 정보를 자동으로 찾아 차트를 생성한다.</td></tr><tr><td>설명 가능성</td><td>업로드 진단과 점수 설명을 통해 어떤 기준으로 분석했는지 보여준다.</td></tr><tr><td>재현성</td><td><code>Skills.md</code>에 데이터 처리, 시각화, 점수 산정 규칙을 문서화한다.</td></tr></tbody></table>
-<h2>5. 분석 흐름 설계</h2>
-<h3>5.1 업로드</h3>
-<p>사용자는 CSV 파일을 업로드한다. 여러 포트폴리오는 최대 7개까지 추가할 수 있다.</p>
-<p>지원 구분자는 다음과 같다.</p>
-<ul><li>쉼표 CSV</li><li>탭 TSV</li><li>세미콜론</li><li>파이프</li></ul>
-<p>문자 인코딩은 UTF-8을 우선 사용하고, 깨짐 문자가 많으면 EUC-KR을 시도한다.</p>
-<h3>5.2 컬럼 자동 추론</h3>
-<p>업로드된 행에서 헤더 후보를 찾고, 각 컬럼을 표준 필드로 매핑한다.</p>
-<p>주요 표준 필드:</p>
-<ul><li>종목명 또는 종목코드</li><li>날짜</li><li>수익률 또는 손익</li><li>계좌유형 또는 계좌 ID</li><li>매수가와 보유수량</li><li>비중 또는 평가금액</li><li>지역, 분야, 스타일, 위험 등급, 자산군</li></ul>
-<p>컬럼명이 명확하지 않으면 본문 값의 패턴을 사용한다. 예를 들어 <code>2026-01-01</code> 형태가 반복되면 날짜 컬럼으로 추론하고, <code>TIGER 미국S&amp;P500</code>, <code>QQQM</code>, <code>AMD</code>처럼 종목 단서가 있으면 종목명 또는 종목코드 후보로 본다.</p>
-<h3>5.3 종목명 오인 방지</h3>
-<p>투자 데이터에서 <code>미국</code>, <code>선진국</code>, <code>대형주</code>, <code>40</code> 같은 값은 종목명이 아니라 메타데이터 또는 숫자일 가능성이 높다. AtomFolio +는 이런 값을 종목명 후보에서 제외한다.</p>
-<p>반대로 <code>TIGER</code>, <code>KODEX</code>, <code>SPDR</code>, <code>iShares</code>, <code>Vanguard</code>, <code>NASDAQ</code>, <code>S&amp;P</code>, <code>ETF</code> 같은 단서는 종목명으로 인정한다.</p>
-<h3>5.4 종목 메타데이터 보강</h3>
-<p>CSV에 지역, 분야, 스타일, 위험, 자산군이 없어도 종목명 또는 종목코드를 기반으로 가능한 범위에서 보강한다.</p>
-<p>보강 대상:</p>
-<ul><li>투자 지역</li><li>분야</li><li>투자 스타일</li><li>위험 등급</li><li>자산 구분</li><li>통화</li><li>규모 분류</li><li>변동성</li><li>과세 구분</li><li>비교 지수</li></ul>
-<p>중요하게, 보강 데이터는 종목 메타데이터에만 적용한다. 행별 날짜, 수익률, 손익, 원본 필드는 덮어쓰지 않는다.</p>
-<h3>5.5 표시용 데이터와 시계열 데이터 분리</h3>
-<p>같은 종목이 날짜만 다르게 반복되는 경우가 많다. 예를 들어 90일치 <code>TIGER 미국S&amp;P500</code> 수익률이 있으면 화면에 90개의 원자를 만들지 않고, 표시용 원자는 하나로 묶는다.</p>
-<p>대신 날짜별 원본 행은 <code>timelineItems</code>로 유지하고, 수익 캘린더 히트맵은 이 데이터를 사용한다.</p>
-<h2>6. 대시보드 구성</h2>
-<h3>6.1 원자형 포트폴리오 뷰</h3>
-<p>중앙의 원자형 인터페이스는 포트폴리오의 전체 구조를 상징적으로 보여준다.</p>
-<ul><li>중앙 원자: 포트폴리오 전체</li><li>주변 원자: 개별 종목</li><li>라벨: 종목명과 수익률</li><li>인터랙션: hover 정보 카드, 클릭 강조, 드래그/회전</li></ul>
-<p>이 방식은 표 형태의 금융 데이터를 시각적으로 탐색할 수 있게 한다.</p>
-<h3>6.2 그룹 하이라이트</h3>
-<p>다음 기준으로 종목을 강조한다.</p>
-<ul><li>투자 지역</li><li>분야</li><li>투자 스타일</li><li>위험 등급</li></ul>
-<p>사용자가 특정 종목을 선택하면 같은 그룹에 속한 종목이 함께 강조되어 포트폴리오 편중 여부를 확인할 수 있다.</p>
-<h3>6.3 수익 캘린더 히트맵</h3>
-<p>날짜별 수익률 또는 손익 흐름을 GitHub 잔디밭 형태로 보여준다.</p>
-<ul><li>양수 수익: 더 진한 긍정 색상</li><li>음수 수익: 손실 색상</li><li>데이터 없음: 빈 셀</li><li>hover: 날짜와 값 표시</li></ul>
-<p>시계열 데이터가 없으면 “날짜와 손익 데이터가 없어 히트맵을 표시할 수 없습니다”라는 빈 상태를 보여준다.</p>
-<h3>6.4 자산 비중 도넛 차트</h3>
-<p>포트폴리오 구성을 도넛 차트로 표시한다.</p>
-<p>지원 기준:</p>
-<ul><li>자동</li><li>종목별 비중</li><li>자산군 기준</li><li>계좌 기준</li></ul>
-<p>비중 계산 우선순위:</p>
-<ol><li>명시적 비중 컬럼</li><li>매수가 × 보유수량</li><li>균등 비중</li></ol>
-<p>도넛 중앙에는 가중 평균 총 수익률을 표시한다.</p>
-<h3>6.5 레이더 점수 차트</h3>
-<p>포트폴리오 품질을 6개 축으로 평가한다.</p>
-<table><thead><tr><th>축</th><th>의미</th></tr></thead><tbody><tr><td>수익성</td><td>평균 수익률, 플러스 종목 비율, 하방 변동성</td></tr><tr><td>분산투자</td><td>종목 수, 자산군, 분야, 지역, 스타일 분산</td></tr><tr><td>위험관리</td><td>고위험 비중, 저위험 비중, 방어형 비중, 집중도</td></tr><tr><td>포트폴리오 구성</td><td>메타데이터 충실도와 자산/분야 균형</td></tr><tr><td>투자 타이밍</td><td>매수일 분산, 월별 분산, 투자 기간</td></tr><tr><td>수익 안정성</td><td>변동성, 손실 종목 비율, 방어형 비중</td></tr></tbody></table>
-<p>사용자는 균형 중심, 수익 중심, 장기수익 중심, 안정 중심 프리셋을 선택할 수 있다.</p>
-<h2>7. Skills.md 설계 방향</h2>
-<p>본 프로젝트의 <code>Skills.md</code>는 단순 설명서가 아니라, 동일한 대시보드를 다시 만들 수 있는 분석 지침서 역할을 한다.</p>
-<p>포함 내용:</p>
-<ul><li>생성할 서비스의 목적과 기술 스택</li><li>화면 구성과 주요 도구</li><li>CSV 입력 규칙</li><li>핵심 컬럼 매핑 규칙</li><li>종목명 오인 방지 규칙</li><li>데이터 처리 파이프라인</li><li>종목 메타데이터 보강 규칙</li><li>히트맵 분석 규칙</li><li>자산군 분류 규칙</li><li>레이더 점수 산정 규칙</li><li>업로드 진단 규칙</li><li>API 규격</li><li>샘플 CSV 검증 기준</li></ul>
-<p>이 문서를 기준으로 바이브 코딩을 수행하면, 분석 로직과 UI 결과가 일관되게 유지된다.</p>
-<h2>8. 바이브 코딩 활용 구조</h2>
-<p>AtomFolio +는 구현 전에 분석 기준과 생성 결과를 <code>Skills.md</code>로 정의하고, 이를 개발 지침으로 사용한다.</p>
-<p>바이브 코딩 활용 방식:</p>
-<ol><li><code>Skills.md</code>에 데이터 해석 규칙을 먼저 정의한다.</li><li>규칙에 따라 CSV 파서, 종목 보강, 차트 생성 함수를 구현한다.</li><li>샘플 CSV를 반복 업로드하며 오인식 사례를 수정한다.</li><li>수정된 규칙을 다시 <code>Skills.md</code>에 반영한다.</li><li>UI는 랜딩 페이지가 아닌 실제 대시보드 중심으로 구성한다.</li></ol>
-<p>이를 통해 수동으로 특정 CSV에 맞춘 일회성 구현이 아니라, 다양한 투자 데이터를 처리할 수 있는 재사용 가능한 시스템을 목표로 한다.</p>
-<h2>9. 기술 구조</h2>
-<pre><code class="language-text">src/App.jsx                         # 메인 UI와 인터랙션
-src/lib/portfolioIngestionCore.js   # CSV 파싱과 컬럼 추론
-src/lib/securityKnowledge.js        # 종목 메타데이터 보강
-src/lib/portfolioHeatmap.js         # 수익 캘린더 생성
-src/lib/portfolioAllocation.js      # 자산 비중 계산
-src/lib/portfolioScoring.js         # 포트폴리오 점수 계산
-server/index.mjs                    # API 서버
-server/portfolioIngestion.mjs       # 업로드 파이프라인
-server/securityEnrichment.mjs       # 서버 보강 캐시
-server/agents/                      # 업로드 진단 에이전트
-samples/portfolio/                  # 샘플 투자 CSV
-Skills.md                           # 분석/구현 규칙 문서</code></pre>
-<h2>10. 샘플 데이터 검증 계획</h2>
-<p>프로젝트에는 검증용 CSV가 포함되어 있다.</p>
-<table><thead><tr><th>파일</th><th>검증 목적</th><th>기대 결과</th></tr></thead><tbody><tr><td><code>portfolio_test0.csv</code></td><td>날짜 없는 포트폴리오 구성</td><td>표시 종목 5개, 히트맵 제한</td></tr><tr><td><code>portfolio_test1.csv</code></td><td>날짜별 수익률 시계열</td><td>1,350행을 15개 종목으로 축약</td></tr><tr><td><code>portfolio_test2.csv</code></td><td>다종목 시계열</td><td>1,080행을 11개 종목으로 축약</td></tr><tr><td><code>portfolio_test3.csv</code></td><td>구조 변형 데이터</td><td>날짜/수익률 인식 확인</td></tr><tr><td><code>portfolio_test4.csv</code></td><td>추가 시계열 케이스</td><td>히트맵 정상 표시</td></tr><tr><td><code>portfolio_test5.csv</code></td><td>날짜 결측 케이스</td><td>히트맵 빈 상태 확인</td></tr></tbody></table>
-<h2>11. 기대 효과</h2>
-<ul><li>투자 CSV를 업로드하는 즉시 분석 결과를 확인할 수 있다.</li><li>고정 양식 없이 여러 데이터 구조에 대응할 수 있다.</li><li>투자 포트폴리오의 편중, 분산, 위험, 수익 흐름을 직관적으로 파악할 수 있다.</li><li>분석 규칙이 <code>Skills.md</code>로 문서화되어 재현성과 확장성이 높다.</li><li>금융 데이터 분석을 처음 접하는 사용자도 시각적 인터페이스로 포트폴리오를 탐색할 수 있다.</li></ul>
-<h2>12. 차별점</h2>
-<h3>원자형 시각화</h3>
-<p>일반적인 표와 카드 기반 대시보드 대신 원자형 인터페이스로 포트폴리오의 연결성과 구성감을 표현한다.</p>
-<h3>자동 구조 추론</h3>
-<p>정해진 템플릿에 맞춘 CSV만 처리하는 것이 아니라, 컬럼명과 값 패턴을 함께 분석해 종목, 날짜, 수익률, 계좌 정보를 추론한다.</p>
-<h3>표시 데이터와 시계열 데이터 분리</h3>
-<p>날짜별 반복 행은 히트맵에 유지하고, 화면 원자는 종목 단위로 축약해 정보 과밀을 줄인다.</p>
-<h3>진단 에이전트</h3>
-<p>업로드 후 스키마 매핑과 품질 상태를 진단해, 데이터가 어떤 수준으로 분석 가능한지 알려준다.</p>
-<h2>13. 확장 기능 아이디어</h2>
-<h3>벤치마크 비교</h3>
-<p>S&amp;P500, KOSPI, NASDAQ100 등 벤치마크와 포트폴리오 수익률을 비교한다.</p>
-<h3>리밸런싱 제안</h3>
-<p>자산군, 지역, 위험 등급이 특정 기준보다 편중되면 리밸런싱 후보를 제안한다.</p>
-<h3>고급 위험 지표</h3>
-<p>최대 낙폭, 변동성, 샤프 비율, 승률, 월별 수익률 분포를 추가한다.</p>
-<h3>PDF 리포트 출력</h3>
-<p>현재 대시보드 상태를 요약한 투자 리포트를 PDF로 저장한다.</p>
-<h3>다중 포트폴리오 비교</h3>
-<p>최대 7개 포트폴리오를 업로드할 수 있는 구조를 활용해 계좌별, 전략별, 기간별 비교 기능을 강화한다.</p>
-<h2>14. 제출 산출물</h2>
-<ul><li>기획서 PDF</li><li><code>Skills.md</code> 문서</li><li>배포된 웹 링크</li><li>GitHub 저장소 링크</li><li>샘플 CSV 데이터</li></ul>
-<h2>15. 결론</h2>
-<p>AtomFolio +는 투자 데이터 분석 규칙을 <code>Skills.md</code>로 정의하고, 그 규칙을 기반으로 투자 CSV를 자동 해석해 대시보드로 시각화하는 서비스이다.</p>
-<p>이 프로젝트의 핵심은 단순히 차트를 그리는 것이 아니라, 다양한 투자 데이터 구조를 일관된 분석 체계로 변환하는 데 있다. 이를 통해 해커톤 주제인 “투자 데이터를 시각화하라 - Skills 기반 대시보드 설계”에 맞춰 범용성, 자동 생성, 문서 기반 재현성, 실제 활용성을 함께 보여준다.</p>
-</main>
+<p>국내 주식, 미국 주식, ETF, 리츠, 금/현금성 자산을 함께 보유하고 있고, 보유 종목을 한 화면에서 확인하고 싶은 사용자.</p>
+<h3>투자 기록을 직접 관리하는 사용자</h3>
+<p>증권사 앱 화면이 아니라 CSV, 직접 입력, 자체 정리 파일을 기반으로 포트폴리오를 추적하고 싶은 사용자.</p>
+<h3>데이터 분석 입문자</h3>
+<p>투자 CSV를 시각화하고 싶지만 파일 구조가 일정하지 않아 전처리에서 막히는 사용자.</p>
+<h2>4. 핵심 가치</h2>
+<table><thead><tr><th>가치</th><th>내용</th></tr></thead><tbody>
+<tr><td>자동 해석</td><td>고정 양식 없이 CSV 컬럼과 값 패턴을 분석한다.</td></tr>
+<tr><td>시각화</td><td>종목을 원자형 노드로 보여줘 포트폴리오 구조를 바로 파악한다.</td></tr>
+<tr><td>저장 지속성</td><td>브라우저 저장과 서버 저장을 함께 사용한다.</td></tr>
+<tr><td>날짜 누적</td><td>마지막 저장 이후 지난 날짜만큼 손익 스냅샷을 자동 생성한다.</td></tr>
+<tr><td>한국 투자자 UX</td><td>수익은 빨간색, 손실은 파란색으로 표현한다.</td></tr>
+<tr><td>확장성</td><td>Vercel Functions와 Postgres 저장소로 배포 환경을 분리한다.</td></tr>
+</tbody></table>
+<h2>5. 기능 범위</h2>
+<h3>5.1 포트폴리오 생성</h3>
+<ul>
+<li>CSV/TSV/TXT 파일 업로드</li>
+<li>빈 포트폴리오 직접 생성</li>
+<li>현재 포트폴리오에 직접 종목 추가</li>
+<li>여러 포트폴리오 저장과 전환</li>
+<li>포트폴리오 삭제</li>
+<li>업로드 이력 저장</li>
+</ul>
+<h3>5.2 CSV 자동 추론</h3>
+<ul>
+<li>헤더 후보 탐색</li>
+<li>구분자 분석</li>
+<li>종목명, 티커, 날짜, 매수가, 수량, 수익률, 비중, 계좌 정보 추론</li>
+<li>분류값과 종목명 오인 방지</li>
+<li>원본 행과 화면 표시용 데이터 분리</li>
+</ul>
+<h3>5.3 종목 검색과 보강</h3>
+<ul>
+<li>한글명, 영문명, 티커, 한국식 줄임말 검색</li>
+<li>ETF 브랜드와 자산 키워드 처리</li>
+<li>지역, 분야, 투자 스타일, 위험 등급, 자산군 보강</li>
+<li>Yahoo Finance와 Stooq 기반 시세 조회</li>
+</ul>
+<h3>5.4 분석 도구</h3>
+<ul>
+<li>그룹 필터: 지역, 분야, 스타일, 위험 등급</li>
+<li>날짜별 손익 히트맵</li>
+<li>포트폴리오 점수 레이더</li>
+<li>자산 비중 도넛</li>
+<li>투자 시뮬레이션</li>
+<li>시장 뉴스 검색</li>
+</ul>
+<h3>5.5 설정</h3>
+<p>설정은 필수 항목만 남긴다.</p>
+<table><thead><tr><th>항목</th><th>옵션</th></tr></thead><tbody>
+<tr><td>언어</td><td>한국어, 영어</td></tr>
+<tr><td>기준 통화</td><td>KRW, USD</td></tr>
+<tr><td>날짜 기준</td><td>한국 시간, 내 기기 시간</td></tr>
+<tr><td>자동 저장</td><td>켜짐, 꺼짐</td></tr>
+<tr><td>일별 손익 누적</td><td>켜짐, 꺼짐</td></tr>
+<tr><td>저장 상태</td><td>마지막 저장, 서버 동기화</td></tr>
+</tbody></table>
+<h2>6. 화면 설계</h2>
+<h3>6.1 메인 화면</h3>
+<p>메인 화면은 원자형 포트폴리오를 중심으로 한다.</p>
+<ul>
+<li>중앙 노드: 현재 포트폴리오</li>
+<li>주변 노드: 보유 종목</li>
+<li>라벨: 종목명과 수익률</li>
+<li>인터랙션: hover 카드, 선택 강조, 3D 회전감</li>
+<li>왼쪽 도구: 포트폴리오 목록, 종목 추가, 요약, 투자 시뮬레이션, 뉴스</li>
+<li>오른쪽 상단: 설정</li>
+</ul>
+<h3>6.2 요약 패널</h3>
+<p>요약 패널은 분석 도구를 한 곳에 묶는다.</p>
+<ul>
+<li>그룹 필터</li>
+<li>손익 히트맵</li>
+<li>포트폴리오 점수</li>
+<li>자산 비중</li>
+<li>주요 수익/손실 종목</li>
+</ul>
+<h3>6.3 투자 시뮬레이션</h3>
+<p>투자 시뮬레이션은 사용자가 직접 입력한 가정만 계산한다.</p>
+<ul>
+<li>시장 충격 입력</li>
+<li>스트레스 테스트</li>
+<li>목표 비중 비교</li>
+<li>월 추가 투자와 기간 입력</li>
+<li>연평균 수익률 입력</li>
+<li>예상 결과와 경고</li>
+</ul>
+<h3>6.4 뉴스 패널</h3>
+<p>뉴스 패널은 복잡한 설명문보다 최신 정보 접근성을 우선한다.</p>
+<ul>
+<li>최신 주식 뉴스 기본 노출</li>
+<li>검색어 기반 뉴스 조회</li>
+<li>오늘 뉴스가 없으면 최신 뉴스 fallback</li>
+<li>제목, 출처, 시간 중심 카드</li>
+</ul>
+<h2>7. 아키텍처</h2>
+<pre><code>flowchart LR
+  User["사용자"]
+  UI["React UI"]
+  Parser["CSV 파서"]
+  Knowledge["종목 지식"]
+  Analytics["분석 엔진"]
+  Api["Vercel Functions"]
+  Server["Node 공통 서버 로직"]
+  Store["Postgres 또는 JSON fallback"]
+  External["Yahoo / Stooq / Naver / Bing"]
+
+  User --&gt; UI
+  UI --&gt; Parser
+  Parser --&gt; Knowledge
+  UI --&gt; Analytics
+  UI --&gt; Api
+  Api --&gt; Server
+  Server --&gt; Store
+  Server --&gt; External
+  External --&gt; UI
+</code></pre>
+<h3>프런트엔드 구성</h3>
+<ul>
+<li><code>src/App.jsx</code>: 앱 전체 상태, 저장 복원, 설정, 원자형 화면, 도구 연결</li>
+<li><code>src/styles.css</code>: 전체 디자인, 손익 색상, 반응형 레이아웃</li>
+<li><code>src/lib/portfolioIngestionCore.js</code>: CSV 파싱과 필드 추론</li>
+<li><code>src/lib/securityKnowledge.js</code>: 종목 별칭과 자산 분류</li>
+<li><code>src/lib/portfolioHeatmap.js</code>: 날짜별 손익 히트맵</li>
+<li><code>src/lib/portfolioAllocation.js</code>: 자산 비중 계산</li>
+<li><code>src/lib/portfolioScoring.js</code>: 점수 계산</li>
+<li><code>src/lib/digitalTwin.js</code>: 투자 시뮬레이션 계산</li>
+</ul>
+<h3>서버 구성</h3>
+<ul>
+<li><code>api/</code>: Vercel 서버리스 함수</li>
+<li><code>server/index.mjs</code>: 로컬 개발 서버</li>
+<li><code>server/portfolioStore.mjs</code>: 저장소 인터페이스</li>
+<li><code>server/postgresPortfolioStore.mjs</code>: Postgres 저장소 구현</li>
+<li><code>db/schema.sql</code>: 테이블 스키마</li>
+</ul>
+<h2>8. 데이터 흐름</h2>
+<pre><code>flowchart TD
+  A["CSV 업로드 / 직접 입력"]
+  B["텍스트 읽기"]
+  C["구분자와 헤더 추론"]
+  D["표준 필드 매핑"]
+  E["종목 정보 보강"]
+  F["화면용 종목 병합"]
+  G["시계열 원본 유지"]
+  H["브라우저 저장"]
+  I["서버 저장"]
+  J["일별 손익 누적"]
+  K["분석 계산"]
+  L["화면 렌더링"]
+
+  A --&gt; B --&gt; C --&gt; D --&gt; E
+  E --&gt; F
+  E --&gt; G
+  F --&gt; H
+  G --&gt; H
+  H --&gt; I
+  H --&gt; J
+  F --&gt; K
+  G --&gt; K
+  J --&gt; K
+  K --&gt; L
+</code></pre>
+<h3>일별 손익 누적 정책</h3>
+<ol>
+<li>포트폴리오 저장 시 <code>savedAt</code>을 기록한다.</li>
+<li>다시 접속하거나 포커스가 돌아오면 마지막 저장일과 오늘 날짜를 비교한다.</li>
+<li>날짜가 지났으면 빠진 날짜를 모두 계산한다.</li>
+<li>각 날짜마다 현재 보유 종목을 스냅샷으로 추가한다.</li>
+<li>이미 같은 날짜와 종목 스냅샷이 있으면 추가하지 않는다.</li>
+<li>히트맵과 분석은 누적된 <code>timelineItems</code>를 사용한다.</li>
+</ol>
+<h2>9. 저장소 설계</h2>
+<h3>브라우저 저장</h3>
+<ul>
+<li>localStorage에 포트폴리오, 활성 포트폴리오, 마지막 저장 시각을 저장한다.</li>
+<li>자동 저장이 꺼져 있으면 저장과 동기화를 일시 중지한다.</li>
+<li>설정값도 localStorage에 저장한다.</li>
+</ul>
+<h3>서버 저장</h3>
+<ul>
+<li>workspace id로 사용자 브라우저 단위 저장 공간을 분리한다.</li>
+<li>Postgres 환경에서는 <code>atomfolio_workspaces</code>, <code>atomfolio_portfolios</code>, <code>atomfolio_imports</code> 테이블을 사용한다.</li>
+<li><code>DATABASE_URL</code>이 없으면 로컬 JSON fallback을 사용한다.</li>
+</ul>
+<h2>10. 색상 정책</h2>
+<p>한국 투자 앱에서 일반적으로 쓰는 규칙에 맞춰 손익 색상을 통일한다.</p>
+<table><thead><tr><th>상태</th><th>색상</th></tr></thead><tbody>
+<tr><td>수익</td><td>빨간색</td></tr>
+<tr><td>손실</td><td>파란색</td></tr>
+<tr><td>중립</td><td>흰색/회색 계열</td></tr>
+</tbody></table>
+<p>적용 대상:</p>
+<ul>
+<li>원자 라벨 수익률</li>
+<li>hover 카드</li>
+<li>손익 히트맵</li>
+<li>도넛 중앙 총 수익률</li>
+<li>보유 종목 지표</li>
+<li>시장 시세 변동률</li>
+<li>투자 시뮬레이션 결과</li>
+</ul>
+<h2>11. 구현 난점과 해결 방향</h2>
+<h3>CSV 추론</h3>
+<p>문제: 파일마다 컬럼명과 위치가 달라서 단순 파서로는 안정적으로 처리하기 어렵다.</p>
+<p>해결: 컬럼명, 값 패턴, 숫자 형식, 날짜 형식, 종목명 단서를 함께 점수화한다.</p>
+<h3>종목명 오인식</h3>
+<p>문제: <code>미국</code>, <code>기술</code>, <code>고위험</code> 같은 분류값이 종목명으로 잡히는 경우가 있다.</p>
+<p>해결: 분류어 사전과 ETF/티커 단서를 분리하고, 한국식 별칭을 별도 관리한다.</p>
+<h3>반복 행 처리</h3>
+<p>문제: 날짜별 수익률 파일은 같은 종목이 반복되어 화면 노드가 너무 많아진다.</p>
+<p>해결: 화면용 데이터는 종목 단위로 묶고, 분석용 시계열은 <code>timelineItems</code>로 유지한다.</p>
+<h3>저장과 배포</h3>
+<p>문제: 로컬 개발 서버와 Vercel 서버리스 환경의 저장 방식이 다르다.</p>
+<p>해결: 저장소 인터페이스를 만들고, Postgres와 JSON fallback을 분리한다.</p>
+<h3>모바일 UI</h3>
+<p>문제: 긴 한국어 버튼과 패널 텍스트가 작은 화면에서 겹치거나 잘린다.</p>
+<p>해결: 패널 폭, 버튼 최소 높이, 줄바꿈, 스크롤 영역을 조정한다.</p>
+<h2>12. API 범위</h2>
+<table><thead><tr><th>API</th><th>설명</th></tr></thead><tbody>
+<tr><td><code>GET /api/health</code></td><td>서버 상태와 저장소 상태</td></tr>
+<tr><td><code>GET /api/market/live</code></td><td>실시간 시세와 차트</td></tr>
+<tr><td><code>GET /api/market/search</code></td><td>종목 검색</td></tr>
+<tr><td><code>GET /api/market/news</code></td><td>시장 뉴스</td></tr>
+<tr><td><code>POST /api/portfolio/ingest</code></td><td>CSV 텍스트 ingest</td></tr>
+<tr><td><code>GET /api/portfolio</code></td><td>포트폴리오 목록</td></tr>
+<tr><td><code>POST /api/portfolio</code></td><td>포트폴리오 저장</td></tr>
+<tr><td><code>PUT /api/portfolio/:id</code></td><td>포트폴리오 수정</td></tr>
+<tr><td><code>DELETE /api/portfolio/:id</code></td><td>포트폴리오 삭제</td></tr>
+<tr><td><code>GET /api/portfolio/imports</code></td><td>업로드 이력</td></tr>
+<tr><td><code>POST /api/securities/enrich</code></td><td>종목 보강</td></tr>
+</tbody></table>
+<h2>13. 향후 개선</h2>
+<ul>
+<li>계정 기반 로그인</li>
+<li>실제 사용자별 workspace 관리</li>
+<li>벤치마크 수익률 비교</li>
+<li>PDF 투자 리포트 출력</li>
+<li>다중 포트폴리오 비교</li>
+<li>월별 수익률 분포와 최대 낙폭</li>
+<li>목표 비중 기반 리밸런싱 추천</li>
+</ul>
+<h2>14. 결론</h2>
+<p>AtomFolio는 투자 데이터를 단순 표가 아니라 포트폴리오 구조로 보여주는 서비스다. 핵심은 CSV를 정해진 양식으로 맞추는 것이 아니라, 앱이 다양한 투자 데이터를 읽고 해석하는 데 있다.</p>
+<p>현재 버전은 원자형 시각화, 직접 입력, 실시간 시세, 최신 뉴스, 일별 손익 누적, 자동 저장, Postgres 배포 구조까지 포함한다. 이를 통해 개인 투자자가 자신의 포트폴리오를 더 빠르게 이해하고, 시간이 지나며 손익 흐름을 추적할 수 있는 기반을 만든다.</p>
+
+  </main>
 </body>
 </html>

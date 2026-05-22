@@ -1,4 +1,5 @@
 import { getSecurityEnrichmentCacheStats } from '../server/securityEnrichment.mjs';
+import { getPortfolioStoreStatus } from '../server/portfolioStore.mjs';
 import { sendJson } from './_utils/http.js';
 
 export default function handler(request, response) {
@@ -9,6 +10,7 @@ export default function handler(request, response) {
 
   sendJson(response, 200, {
     ok: true,
+    portfolioStore: getPortfolioStoreStatus(),
     securityEnrichment: getSecurityEnrichmentCacheStats(),
   });
 }

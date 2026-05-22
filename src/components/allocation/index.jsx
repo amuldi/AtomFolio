@@ -195,7 +195,11 @@ export function PortfolioAllocationRing({
           </text>
           <text
             className={`allocation-chart__center-value${
-              allocation.hasReturnData && allocation.totalReturn < 0 ? ' is-negative' : ''
+              allocation.hasReturnData && allocation.totalReturn > 0
+                ? ' is-positive'
+                : allocation.hasReturnData && allocation.totalReturn < 0
+                  ? ' is-negative'
+                  : ''
             }`}
             x={center}
             y="108"

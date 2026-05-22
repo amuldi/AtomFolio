@@ -85,11 +85,18 @@ const LANGUAGE_OPTIONS = ['ko', 'en'];
 const ASSET_CLASS_MODE_OPTIONS = ['auto', 'preferOriginal'];
 const ALLOCATION_WEIGHT_MODE_OPTIONS = ['auto', 'stock', 'assetClass', 'account'];
 const SCORE_WEIGHT_PRESET_OPTIONS = ['balanced', 'returnFocus', 'longTermReturnFocus', 'stabilityFocus'];
+const BASE_CURRENCY_OPTIONS = ['KRW', 'USD'];
+const DATE_BASIS_OPTIONS = ['kst', 'local'];
+const SETTING_TOGGLE_OPTIONS = ['on', 'off'];
 const STORAGE_KEYS = {
   language: 'atom-sketch-language',
   assetClassMode: 'atom-sketch-asset-class-mode',
   allocationWeightMode: 'atom-sketch-allocation-weight-mode',
   scoreWeightPreset: 'atom-sketch-score-weight-preset',
+  baseCurrency: 'atom-sketch-base-currency',
+  dateBasis: 'atom-sketch-date-basis',
+  autoSave: 'atom-sketch-auto-save',
+  dailySnapshots: 'atom-sketch-daily-snapshots',
   portfolioData: 'atom-sketch-portfolio-data-v1',
   settingsDockPosition: 'atom-sketch-settings-dock-position',
   toolTriggerPosition: 'atom-sketch-tool-trigger-position',
@@ -130,6 +137,7 @@ const FLOATING_TOOL_Z_INDEX = {
 const TOOL_DRAWER_DEFAULT_WIDTH = 522;
 const TOOL_DRAWER_MAX_WIDTH = 760;
 const SERVER_SYNC_DEBOUNCE_MS = 850;
+const DAILY_SNAPSHOT_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 const DEFAULT_REBALANCE_TARGET_WEIGHTS = {
   stock: 60,
   dividend: 15,
@@ -179,21 +187,27 @@ const UI_TEXT = {
     english: '영어',
     settingsAria: '설정 열기',
     settingsSectionLanguage: '언어',
-    settingsSectionAssetClassMode: '자산군 분류 방식',
-    settingsSectionAllocationWeightMode: '도넛 차트 표시 기준',
-    settingsSectionScoreWeightPreset: '스파이더 차트 축 가중치',
-    settingsSectionLayoutReset: '배치 초기화',
-    settingsAssetClassAuto: '자동 분류',
-    settingsAssetClassPreferOriginal: '원본 자산군 우선',
-    settingsAllocationWeightAuto: '자동',
-    settingsAllocationWeightStock: '종목별 비중',
-    settingsAllocationWeightAssetClass: '자산군 기준',
-    settingsAllocationWeightAccount: '포트폴리오 기준',
-    settingsScoreWeightBalanced: '균형 중심',
-    settingsScoreWeightReturnFocus: '수익 중심',
-    settingsScoreWeightLongTermReturnFocus: '장기수익 중심',
-    settingsScoreWeightStabilityFocus: '안정 중심',
-    settingsResetLayoutAction: '현재 배치 다시 맞추기',
+    settingsSectionBaseCurrency: '기준 통화',
+    settingsCurrencyKrw: 'KRW',
+    settingsCurrencyUsd: 'USD',
+    settingsSectionDateBasis: '날짜 기준',
+    settingsDateBasisKst: '한국 시간',
+    settingsDateBasisLocal: '내 기기 시간',
+    settingsSectionAutoSave: '자동 저장',
+    settingsAutoSaveOn: '켜짐',
+    settingsAutoSaveOff: '꺼짐',
+    settingsSectionDailySnapshots: '일별 손익 누적',
+    settingsDailySnapshotsOn: '켜짐',
+    settingsDailySnapshotsOff: '꺼짐',
+    settingsSectionSaveStatus: '저장 상태',
+    settingsStatusLastSaved: '마지막 저장',
+    settingsStatusNeverSaved: '저장 전',
+    settingsStatusServerSync: '서버 동기화',
+    settingsSyncIdle: '대기',
+    settingsSyncPending: '저장 중',
+    settingsSyncSaved: '완료',
+    settingsSyncOffline: '실패',
+    settingsSyncPaused: '일시 중지',
     uploadAria: '투자 데이터 업로드',
     uploadHint: '투자 데이터를 업로드 해주세요',
     uploadDragHint: 'CSV 파일을 여기에 끌어다 놓으세요',
@@ -269,21 +283,27 @@ const UI_TEXT = {
     english: 'English',
     settingsAria: 'Open settings',
     settingsSectionLanguage: 'Language',
-    settingsSectionAssetClassMode: 'Asset Class Mode',
-    settingsSectionAllocationWeightMode: 'Donut Weight Basis',
-    settingsSectionScoreWeightPreset: 'Spider Axis Weights',
-    settingsSectionLayoutReset: 'Dock Layout Reset',
-    settingsAssetClassAuto: 'Auto classify',
-    settingsAssetClassPreferOriginal: 'Prefer original class',
-    settingsAllocationWeightAuto: 'Auto',
-    settingsAllocationWeightStock: 'By security weight',
-    settingsAllocationWeightAssetClass: 'By asset class',
-    settingsAllocationWeightAccount: 'By portfolio',
-    settingsScoreWeightBalanced: 'Balanced',
-    settingsScoreWeightReturnFocus: 'Return focus',
-    settingsScoreWeightLongTermReturnFocus: 'Long-term return',
-    settingsScoreWeightStabilityFocus: 'Stability focus',
-    settingsResetLayoutAction: 'Realign current docks',
+    settingsSectionBaseCurrency: 'Base Currency',
+    settingsCurrencyKrw: 'KRW',
+    settingsCurrencyUsd: 'USD',
+    settingsSectionDateBasis: 'Date Basis',
+    settingsDateBasisKst: 'Korea time',
+    settingsDateBasisLocal: 'Device time',
+    settingsSectionAutoSave: 'Auto Save',
+    settingsAutoSaveOn: 'On',
+    settingsAutoSaveOff: 'Off',
+    settingsSectionDailySnapshots: 'Daily P/L History',
+    settingsDailySnapshotsOn: 'On',
+    settingsDailySnapshotsOff: 'Off',
+    settingsSectionSaveStatus: 'Save Status',
+    settingsStatusLastSaved: 'Last saved',
+    settingsStatusNeverSaved: 'Not saved',
+    settingsStatusServerSync: 'Server sync',
+    settingsSyncIdle: 'Idle',
+    settingsSyncPending: 'Saving',
+    settingsSyncSaved: 'Saved',
+    settingsSyncOffline: 'Failed',
+    settingsSyncPaused: 'Paused',
     uploadAria: 'Upload investment data',
     uploadHint: 'Please upload your investment data',
     uploadDragHint: 'Drop CSV files here',
@@ -709,6 +729,9 @@ function createPortfolioEntryFromPayload(payload, entryId) {
     parserDiagnostics: payload?.parserDiagnostics ?? null,
     agentReview: payload?.agentReview ?? null,
     ingestSource: payload?.ingestSource ?? 'server',
+    metadata: payload?.metadata && typeof payload.metadata === 'object' ? payload.metadata : {},
+    createdAt: payload?.createdAt ?? null,
+    updatedAt: payload?.updatedAt ?? null,
   };
 }
 
@@ -725,22 +748,293 @@ function serializePortfolioEntryForStorage(entry) {
     parserDiagnostics: entry?.parserDiagnostics ?? null,
     agentReview: entry?.agentReview ?? null,
     ingestSource: entry?.ingestSource ?? 'restored-local',
+    metadata: entry?.metadata && typeof entry.metadata === 'object' ? entry.metadata : {},
+    createdAt: entry?.createdAt ?? null,
+    updatedAt: entry?.updatedAt ?? null,
   };
+}
+
+function dateFromDateKey(dateKey) {
+  const match = String(dateKey ?? '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+
+  const [, yearValue, monthValue, dayValue] = match;
+  const year = Number.parseInt(yearValue, 10);
+  const month = Number.parseInt(monthValue, 10);
+  const day = Number.parseInt(dayValue, 10);
+  const date = new Date(year, month - 1, day);
+
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
+function normalizePortfolioDateKey(value) {
+  const dateKey = formatAtomDateLabel(value);
+
+  return dateFromDateKey(dateKey) ? dateKey : '';
+}
+
+function addDaysToDateKey(dateKey, days) {
+  const date = dateFromDateKey(dateKey);
+  if (!date) {
+    return '';
+  }
+
+  date.setDate(date.getDate() + days);
+  return formatDateKey(date);
+}
+
+function readSavedAtDateKey(savedAt, dateBasis = 'kst') {
+  if (!savedAt) {
+    return '';
+  }
+
+  const date = new Date(savedAt);
+  if (Number.isFinite(date.getTime())) {
+    return formatDateKeyForBasis(date, dateBasis);
+  }
+
+  return normalizePortfolioDateKey(savedAt);
+}
+
+function buildElapsedDateKeysSince(savedAt, today = new Date(), dateBasis = 'kst') {
+  const savedDateKey = readSavedAtDateKey(savedAt, dateBasis);
+  const todayDateKey = formatDateKeyForBasis(today, dateBasis);
+
+  if (!savedDateKey || savedDateKey >= todayDateKey) {
+    return [];
+  }
+
+  const dateKeys = [];
+  let cursorDateKey = addDaysToDateKey(savedDateKey, 1);
+
+  while (cursorDateKey && cursorDateKey <= todayDateKey) {
+    dateKeys.push(cursorDateKey);
+    cursorDateKey = addDaysToDateKey(cursorDateKey, 1);
+  }
+
+  return dateKeys;
+}
+
+function isPortfolioSnapshotDateLabel(label) {
+  const normalized = normalizeDisplayKey(label);
+
+  return [
+    '날짜',
+    '일자',
+    '기준일',
+    '기준일자',
+    '평가일',
+    '평가일자',
+    '조회일',
+    '조회일자',
+    'date',
+    'day',
+    'recorddate',
+    'valuedate',
+    'valuationdate',
+    'snapshotdate',
+    'asofdate',
+  ]
+    .map(normalizeDisplayKey)
+    .includes(normalized);
+}
+
+function readPortfolioSnapshotDateKey(item) {
+  const directDateKey = normalizePortfolioDateKey(
+    item?.dailySnapshotDate ?? item?.snapshotDate ?? item?.recordedAt ?? item?.asOfDate,
+  );
+
+  if (directDateKey) {
+    return directDateKey;
+  }
+
+  const dateField = (item?.fields ?? []).find((field) =>
+    isPortfolioSnapshotDateLabel(field?.label),
+  );
+
+  return normalizePortfolioDateKey(dateField?.value);
+}
+
+function upsertPortfolioSnapshotDateField(fields, dateKey) {
+  const nextFields = Array.isArray(fields) ? fields.map((field) => ({ ...field })) : [];
+  const dateFieldIndex = nextFields.findIndex((field) =>
+    isPortfolioSnapshotDateLabel(field?.label),
+  );
+
+  if (dateFieldIndex >= 0) {
+    nextFields[dateFieldIndex] = {
+      ...nextFields[dateFieldIndex],
+      value: dateKey,
+    };
+    return nextFields;
+  }
+
+  return [{ label: '날짜', value: dateKey }, ...nextFields];
+}
+
+function dailySnapshotItemKey(item, index) {
+  return [
+    item?.code,
+    item?.ticker,
+    item?.stockCode,
+    item?.name,
+    item?.stockName,
+    item?.companyName,
+    item?.label,
+  ]
+    .map((value) => normalizeDisplayKey(value))
+    .find(Boolean) ?? `row:${index}`;
+}
+
+function dailySnapshotId(item, dateKey, index) {
+  const baseId = String(item?.id ?? dailySnapshotItemKey(item, index))
+    .trim()
+    .replace(/[^a-zA-Z0-9_.:-]/g, '-')
+    .slice(0, 80);
+
+  return `${baseId || `holding-${index + 1}`}:snapshot:${dateKey}`;
+}
+
+function createDailyPortfolioSnapshotItem(item, dateKey, index) {
+  return {
+    ...item,
+    id: dailySnapshotId(item, dateKey, index),
+    recordedAt: dateKey,
+    snapshotDate: dateKey,
+    dailySnapshotDate: dateKey,
+    fields: upsertPortfolioSnapshotDateField(item?.fields, dateKey),
+    metadataSourceByField: {
+      ...(item?.metadataSourceByField ?? {}),
+      recordedAt: 'daily-roll-forward',
+      snapshotDate: 'daily-roll-forward',
+    },
+  };
+}
+
+function getDailySnapshotSourceItems(entry) {
+  if (Array.isArray(entry?.items) && entry.items.length) {
+    return entry.items;
+  }
+
+  const timelineItems = Array.isArray(entry?.timelineItems) ? entry.timelineItems : [];
+  return collapsePortfolioItemsForDisplayShared(timelineItems);
+}
+
+function rollForwardPortfolioEntry(entry, savedAt, dateBasis = 'kst') {
+  const elapsedDateKeys = buildElapsedDateKeysSince(savedAt, new Date(), dateBasis);
+  if (!elapsedDateKeys.length) {
+    return entry;
+  }
+
+  const sourceItems = getDailySnapshotSourceItems(entry);
+  if (!sourceItems.length) {
+    return entry;
+  }
+
+  const timelineItems = Array.isArray(entry?.timelineItems) && entry.timelineItems.length
+    ? entry.timelineItems
+    : sourceItems;
+  const existingSnapshotKeysByDate = new Map();
+
+  timelineItems.forEach((item, index) => {
+    const dateKey = readPortfolioSnapshotDateKey(item);
+    if (!dateKey) {
+      return;
+    }
+
+    const itemKey = dailySnapshotItemKey(item, index);
+    const itemKeys = existingSnapshotKeysByDate.get(dateKey) ?? new Set();
+    itemKeys.add(itemKey);
+    existingSnapshotKeysByDate.set(dateKey, itemKeys);
+  });
+
+  const appendedItems = [];
+  elapsedDateKeys.forEach((dateKey) => {
+    const existingItemKeys = existingSnapshotKeysByDate.get(dateKey) ?? new Set();
+
+    sourceItems.forEach((item, index) => {
+      const itemKey = dailySnapshotItemKey(item, index);
+      if (existingItemKeys.has(itemKey)) {
+        return;
+      }
+
+      existingItemKeys.add(itemKey);
+      appendedItems.push(createDailyPortfolioSnapshotItem(item, dateKey, index));
+    });
+
+    existingSnapshotKeysByDate.set(dateKey, existingItemKeys);
+  });
+
+  if (!appendedItems.length) {
+    return entry;
+  }
+
+  const nextTimelineItems = [...timelineItems, ...appendedItems];
+  const lastSnapshotDate = appendedItems.at(-1)?.dailySnapshotDate ?? elapsedDateKeys.at(-1);
+
+  return {
+    ...entry,
+    items: collapsePortfolioItemsForDisplayShared(nextTimelineItems),
+    timelineItems: nextTimelineItems,
+    metadata: {
+      ...(entry?.metadata ?? {}),
+      lastDailySnapshotAt: lastSnapshotDate,
+      dailySnapshotCount: Number(entry?.metadata?.dailySnapshotCount ?? 0) + appendedItems.length,
+    },
+  };
+}
+
+function rollForwardPortfolioEntriesSince(entries, savedAt, dateBasis = 'kst') {
+  if (!Array.isArray(entries) || !entries.length) {
+    return Array.isArray(entries) ? entries : [];
+  }
+
+  let changed = false;
+  const nextEntries = entries.map((entry) => {
+    const entrySavedAt =
+      savedAt ??
+      entry?.metadata?.lastSavedAt ??
+      entry?.metadata?.lastDailySnapshotAt ??
+      entry?.updatedAt ??
+      entry?.createdAt;
+    const nextEntry = rollForwardPortfolioEntry(entry, entrySavedAt, dateBasis);
+
+    if (nextEntry !== entry) {
+      changed = true;
+    }
+
+    return nextEntry;
+  });
+
+  return changed ? nextEntries : entries;
 }
 
 function readStoredPortfolioState() {
   if (typeof window === 'undefined') {
-    return { entries: [], activePortfolioId: null };
+    return { entries: [], activePortfolioId: null, savedAt: null };
   }
 
   try {
     const rawValue = window.localStorage.getItem(STORAGE_KEYS.portfolioData);
     if (!rawValue) {
-      return { entries: [], activePortfolioId: null };
+      return { entries: [], activePortfolioId: null, savedAt: null };
     }
 
     const parsed = JSON.parse(rawValue);
-    const restoredEntries = Array.isArray(parsed?.entries)
+    const savedAt = parsed?.savedAt ?? null;
+    const dateBasis = readStoredOption(STORAGE_KEYS.dateBasis, DATE_BASIS_OPTIONS, 'kst');
+    const dailySnapshots = readStoredOption(STORAGE_KEYS.dailySnapshots, SETTING_TOGGLE_OPTIONS, 'on');
+    const baseEntries = Array.isArray(parsed?.entries)
       ? parsed.entries
           .slice(0, MAX_PORTFOLIOS)
           .map((storedEntry) =>
@@ -756,12 +1050,19 @@ function readStoredPortfolioState() {
                 parserDiagnostics: storedEntry?.parserDiagnostics ?? null,
                 agentReview: storedEntry?.agentReview ?? null,
                 ingestSource: storedEntry?.ingestSource ?? 'restored-local',
+                metadata: storedEntry?.metadata,
+                createdAt: storedEntry?.createdAt,
+                updatedAt: storedEntry?.updatedAt,
               },
               storedEntry?.id,
             ),
           )
           .filter((entry) => entry.id)
       : [];
+    const restoredEntries =
+      dailySnapshots === 'on'
+        ? rollForwardPortfolioEntriesSince(baseEntries, savedAt, dateBasis)
+        : baseEntries;
 
     const parsedActiveId = String(parsed?.activePortfolioId ?? '');
     const activePortfolioId = restoredEntries.some((entry) => entry.id === parsedActiveId)
@@ -771,15 +1072,16 @@ function readStoredPortfolioState() {
     return {
       entries: restoredEntries,
       activePortfolioId,
+      savedAt,
     };
   } catch {
-    return { entries: [], activePortfolioId: null };
+    return { entries: [], activePortfolioId: null, savedAt: null };
   }
 }
 
 function writeStoredPortfolioState(entries, activePortfolioId) {
   if (typeof window === 'undefined') {
-    return;
+    return null;
   }
 
   try {
@@ -789,25 +1091,28 @@ function writeStoredPortfolioState(entries, activePortfolioId) {
 
     if (!safeEntries.length) {
       window.localStorage.removeItem(STORAGE_KEYS.portfolioData);
-      return;
+      return null;
     }
 
     const safeActiveId = String(activePortfolioId ?? '');
     const nextActivePortfolioId = safeEntries.some((entry) => entry.id === safeActiveId)
       ? safeActiveId
       : safeEntries[0].id;
+    const savedAt = new Date().toISOString();
 
     window.localStorage.setItem(
       STORAGE_KEYS.portfolioData,
       JSON.stringify({
         version: 1,
-        savedAt: new Date().toISOString(),
+        savedAt,
         activePortfolioId: nextActivePortfolioId,
         entries: safeEntries,
       }),
     );
+    return savedAt;
   } catch (error) {
     console.warn('portfolio-persist-failed', error);
+    return null;
   }
 }
 
@@ -1477,6 +1782,56 @@ function formatDateKey(value = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+function formatDateKeyForBasis(value = new Date(), dateBasis = 'kst') {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    return '';
+  }
+
+  if (dateBasis !== 'kst') {
+    return formatDateKey(date);
+  }
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+
+  return `${byType.year}-${byType.month}-${byType.day}`;
+}
+
+function formatSettingsDateTime(value, language = 'ko', dateBasis = 'kst') {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    return '';
+  }
+
+  return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'ko-KR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+    timeZone: dateBasis === 'kst' ? 'Asia/Seoul' : undefined,
+  }).format(date);
+}
+
+function settingsSyncStatusText(text, status) {
+  switch (status) {
+    case 'pending':
+      return text.settingsSyncPending;
+    case 'saved':
+      return text.settingsSyncSaved;
+    case 'offline':
+      return text.settingsSyncOffline;
+    case 'paused':
+      return text.settingsSyncPaused;
+    case 'idle':
+    default:
+      return text.settingsSyncIdle;
+  }
+}
+
 function textFor(language) {
   return UI_TEXT[language] ?? UI_TEXT.ko;
 }
@@ -1697,8 +2052,14 @@ const CORE_ATOM_INFO_FIELDS = [
   { key: 'risk', label: '위험 등급' },
 ];
 
+const PENDING_ATOM_INFO_VALUES = new Set(['확인중', 'checking']);
+
 function atomInfoFallbackValue(language = 'ko') {
   return language === 'en' ? 'Checking' : '확인 중';
+}
+
+function isPendingAtomInfoValue(value) {
+  return PENDING_ATOM_INFO_VALUES.has(normalizeDisplayKey(value));
 }
 
 function buildAtomInfoFields(atom, language = 'ko') {
@@ -1707,6 +2068,7 @@ function buildAtomInfoFields(atom, language = 'ko') {
   }
 
   const fields = Array.isArray(atom.fields) ? atom.fields : [];
+  const inferredAtom = enrichPortfolioItem(atom);
   const resolvedFields = [];
   const seenKeys = new Set();
   const seenLabels = new Set();
@@ -1741,8 +2103,15 @@ function buildAtomInfoFields(atom, language = 'ko') {
     const matchedField = fields.find((field) => resolveFieldLabelKey(field?.label) === key);
     const matchedValue = String(matchedField?.value ?? '').trim();
     const atomValue = String(atom[key] ?? '').trim();
+    const inferredValue = String(inferredAtom?.[key] ?? '').trim();
 
-    pushField(label, matchedValue || atomValue || fallbackValue);
+    pushField(
+      label,
+      (!isPendingAtomInfoValue(matchedValue) && matchedValue) ||
+        (!isPendingAtomInfoValue(atomValue) && atomValue) ||
+        (!isPendingAtomInfoValue(inferredValue) && inferredValue) ||
+        fallbackValue,
+    );
   });
 
   fields.forEach((field) => {
@@ -2888,6 +3257,35 @@ function formatReturnDetail(value, label = '') {
   return `${sign}${fixed}%`;
 }
 
+function parseSignedDisplayValue(value) {
+  const trimmed = String(value ?? '').trim().replace(/[−–—]/g, '-');
+  if (!trimmed) {
+    return null;
+  }
+
+  const numeric = Number.parseFloat(trimmed.replace(/[^0-9.+-]/g, ''));
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+
+  const shouldNegate = /^\(.*\)$/.test(trimmed) || /(?:손실|loss|▼|↓)/i.test(trimmed);
+  return shouldNegate && numeric > 0 ? -numeric : numeric;
+}
+
+function getSignedValueToneClass(value, positiveClass = 'is-up', negativeClass = 'is-down') {
+  const numeric = parseSignedDisplayValue(value);
+
+  if (numeric > 0) {
+    return positiveClass;
+  }
+
+  if (numeric < 0) {
+    return negativeClass;
+  }
+
+  return '';
+}
+
 function parseManualPriceValue(value) {
   const match = String(value ?? '')
     .replace(/,/g, '')
@@ -2992,6 +3390,15 @@ function hasMissingCoreMetadata(item) {
 
     return !value || !STRONG_METADATA_SOURCES.has(source);
   });
+}
+
+function hasMissingLiveQuote(item) {
+  const latestPrice = Number(item?.latestPrice);
+
+  return (
+    !String(item?.marketPrice ?? '').trim() &&
+    !(Number.isFinite(latestPrice) && latestPrice > 0)
+  );
 }
 
 function metadataMergeKey(item) {
@@ -4367,8 +4774,7 @@ function HoverCard({ atom, position, language }) {
   }
 
   const returnRaw = atom.detail ?? '';
-  const returnIsPositive = returnRaw.startsWith('+');
-  const returnIsNegative = returnRaw.startsWith('-');
+  const returnToneClass = getSignedValueToneClass(returnRaw, 'is-positive', 'is-negative');
   const displayFields = returnRaw
     ? infoFields.filter((field) => resolveFieldLabelKey(field.label) !== 'return')
     : infoFields;
@@ -4386,7 +4792,7 @@ function HoverCard({ atom, position, language }) {
           <strong className="hover-card__title">{atom.label}</strong>
           {returnRaw ? (
             <span
-              className={`hover-card__return${returnIsPositive ? ' is-positive' : returnIsNegative ? ' is-negative' : ''}`}
+              className={`hover-card__return${returnToneClass ? ` ${returnToneClass}` : ''}`}
             >
               {returnRaw}
             </span>
@@ -5034,7 +5440,7 @@ function MarketLivePreview({
   const hasData = Boolean(data);
   const path = hasData ? buildMarketSparklinePath(data.points ?? []) : null;
   const changePercentText = hasData ? formatMarketChangePercent(data.changePercent) : '';
-  const tone = Number(data?.changePercent ?? 0) >= 0 ? 'is-up' : 'is-down';
+  const tone = getSignedValueToneClass(data?.changePercent);
   const marketUrl = buildMarketInfoUrl(data);
   const displayName = resolveMarketDisplayName(data);
 
@@ -5076,7 +5482,7 @@ function MarketLivePreview({
   }
 
   return (
-    <section className={`tool-drawer__market-preview ${tone}`}>
+    <section className={`tool-drawer__market-preview${tone ? ` ${tone}` : ''}`}>
       <div className="tool-drawer__market-head">
         <span>
           <strong>{hasData ? data.symbol : language === 'en' ? 'Loading' : '조회 중'}</strong>
@@ -5368,9 +5774,11 @@ function StockDetailCard({ item, language, onEdit, onClose }) {
   const buyPrice = resolveHoldingMetric(item, ['매수가', 'buyPrice', 'purchasePrice']);
   const returnRate = String(item?.detail ?? item?.return ?? '').trim() ||
     resolveHoldingMetric(item, ['수익률', 'return']);
+  const returnRateToneClass = getSignedValueToneClass(returnRate);
   const yesterdayChange = data
     ? `${formatMarketChange(data.change)} ${formatMarketChangePercent(data.changePercent)}`
     : '-';
+  const yesterdayChangeToneClass = getSignedValueToneClass(data?.changePercent);
 
   return (
     <section className="tool-drawer__holding-detail">
@@ -5403,7 +5811,7 @@ function StockDetailCard({ item, language, onEdit, onClose }) {
         </div>
         <div>
           <span>{language === 'en' ? 'Vs prev.' : '전일 대비'}</span>
-          <strong className={Number(data?.changePercent ?? 0) >= 0 ? 'is-up' : 'is-down'}>
+          <strong className={yesterdayChangeToneClass}>
             {yesterdayChange}
           </strong>
         </div>
@@ -5417,7 +5825,7 @@ function StockDetailCard({ item, language, onEdit, onClose }) {
         </div>
         <div>
           <span>{language === 'en' ? 'Return' : '수익률'}</span>
-          <strong>{returnRate || '-'}</strong>
+          <strong className={returnRateToneClass}>{returnRate || '-'}</strong>
         </div>
       </div>
 
@@ -5879,7 +6287,11 @@ function PortfolioAllocationRing({
           </text>
           <text
             className={`allocation-chart__center-value${
-              allocation.hasReturnData && allocation.totalReturn < 0 ? ' is-negative' : ''
+              allocation.hasReturnData && allocation.totalReturn > 0
+                ? ' is-positive'
+                : allocation.hasReturnData && allocation.totalReturn < 0
+                  ? ' is-negative'
+                  : ''
             }`}
             x={center}
             y="108"
@@ -6448,6 +6860,7 @@ function ToolSideDrawer({
   activePortfolioId,
   onSelectPortfolio,
   onFocusHolding,
+  onClearHoldingFocus,
   onClearPortfolio,
   onOpenPortfolioPicker,
   onCreateManualAtom,
@@ -7013,13 +7426,13 @@ function ToolSideDrawer({
           key: 'profit',
           label: language === 'en' ? 'P/L' : '누적손익',
           value: formatAnalyticsSignedValue(analyticsTotals?.totalProfitAmount, language),
-          tone: Number(analyticsTotals?.totalProfitAmount) >= 0 ? 'positive' : 'negative',
+          tone: getSignedValueToneClass(analyticsTotals?.totalProfitAmount, 'positive', 'negative'),
         },
         {
           key: 'return',
           label: language === 'en' ? 'Return' : '수익률',
           value: formatAnalyticsPercentValue(analyticsTotals?.totalReturnRate),
-          tone: Number(analyticsTotals?.totalReturnRate) >= 0 ? 'positive' : 'negative',
+          tone: getSignedValueToneClass(analyticsTotals?.totalReturnRate, 'positive', 'negative'),
         },
         {
           key: 'holdings',
@@ -7480,6 +7893,12 @@ function ToolSideDrawer({
                           className="tool-drawer__holding-main"
                           onClick={() => {
                             onInteract?.();
+                            if (isSelected) {
+                              setSelectedHolding(null);
+                              onClearHoldingFocus?.();
+                              return;
+                            }
+
                             setSelectedHolding({
                               entryId: activeAccountEntry.id,
                               itemId,
@@ -7793,6 +8212,7 @@ function ToolSideDrawer({
             onClose={() => {
               onInteract?.();
               setSelectedHolding(null);
+              onClearHoldingFocus?.();
             }}
           />
         </aside>
@@ -9235,10 +9655,12 @@ export default function App() {
   const pendingHoverInfoRef = useRef(null);
   const restoredPortfolioStateRef = useRef(null);
   const portfolioSyncTimerRef = useRef(0);
+  const portfolioAutoEnrichmentRef = useRef(new Set());
   if (restoredPortfolioStateRef.current === null) {
     restoredPortfolioStateRef.current = readStoredPortfolioState();
   }
   const restoredPortfolioState = restoredPortfolioStateRef.current;
+  const portfolioLastSavedAtRef = useRef(restoredPortfolioState.savedAt);
   const [portfolioEntries, setPortfolioEntries] = useState(() => restoredPortfolioState.entries);
   const [activePortfolioId, setActivePortfolioId] = useState(
     () => restoredPortfolioState.activePortfolioId,
@@ -9250,9 +9672,6 @@ export default function App() {
   const [toolTrayOpen, setToolTrayOpen] = useState(false);
   const [activeDrawerTool, setActiveDrawerTool] = useState(null);
   const [toolDrawerWidth, setToolDrawerWidth] = useState(TOOL_DRAWER_DEFAULT_WIDTH);
-  const [toolTriggerPosition, setToolTriggerPosition] = useState(() =>
-    readStoredPosition(STORAGE_KEYS.toolTriggerPosition),
-  );
   const [groupDockPosition, setGroupDockPosition] = useState(() =>
     readStoredPosition(STORAGE_KEYS.groupDockPosition),
   );
@@ -9266,7 +9685,6 @@ export default function App() {
   const [showScoreDock, setShowScoreDock] = useState(() => restoredPortfolioState.entries.length > 0);
   const [groupDockSpawn, setGroupDockSpawn] = useState(null);
   const [scoreDockSpawn, setScoreDockSpawn] = useState(null);
-  const [dockResetAt, setDockResetAt] = useState(0);
   const [activeGroupKey, setActiveGroupKey] = useState(null);
   const [selectedAtomId, setSelectedAtomId] = useState(null);
   const [hoverInfo, setHoverInfo] = useState(null);
@@ -9285,6 +9703,20 @@ export default function App() {
 
     return readStoredOption(STORAGE_KEYS.language, LANGUAGE_OPTIONS, 'ko');
   });
+  const [baseCurrency, setBaseCurrency] = useState(() =>
+    readStoredOption(STORAGE_KEYS.baseCurrency, BASE_CURRENCY_OPTIONS, 'KRW'),
+  );
+  const [dateBasis, setDateBasis] = useState(() =>
+    readStoredOption(STORAGE_KEYS.dateBasis, DATE_BASIS_OPTIONS, 'kst'),
+  );
+  const [autoSaveMode, setAutoSaveMode] = useState(() =>
+    readStoredOption(STORAGE_KEYS.autoSave, SETTING_TOGGLE_OPTIONS, 'on'),
+  );
+  const [dailySnapshotMode, setDailySnapshotMode] = useState(() =>
+    readStoredOption(STORAGE_KEYS.dailySnapshots, SETTING_TOGGLE_OPTIONS, 'on'),
+  );
+  const [portfolioSavedAt, setPortfolioSavedAt] = useState(() => restoredPortfolioState.savedAt);
+  const [portfolioSyncStatus, setPortfolioSyncStatus] = useState('idle');
   const [assetClassMode, setAssetClassMode] = useState(() =>
     readStoredOption(STORAGE_KEYS.assetClassMode, ASSET_CLASS_MODE_OPTIONS, 'auto'),
   );
@@ -9374,6 +9806,24 @@ export default function App() {
     setPortfolioError('');
   };
 
+  const rollForwardSavedPortfolioHistory = useCallback(() => {
+    if (dailySnapshotMode !== 'on') {
+      return;
+    }
+
+    const savedAt = portfolioLastSavedAtRef.current;
+
+    setPortfolioEntries((current) => {
+      const nextEntries = rollForwardPortfolioEntriesSince(current, savedAt, dateBasis);
+
+      if (nextEntries !== current) {
+        portfolioLastSavedAtRef.current = new Date().toISOString();
+      }
+
+      return nextEntries;
+    });
+  }, [dailySnapshotMode, dateBasis]);
+
   const clearHoveredFileTooltip = useCallback(() => {
     setHoveredFileEntryId(null);
     setHoveredFileAnchorRect(null);
@@ -9427,6 +9877,11 @@ export default function App() {
               ? {
                   ...entry,
                   items: mergePortfolioItemUpdates(entry.items, enrichedItems),
+                  timelineItems:
+                    Array.isArray(entry.timelineItems) &&
+                    entry.timelineItems.length === enrichedItems.length
+                      ? mergePortfolioItemUpdates(entry.timelineItems, enrichedItems)
+                      : entry.timelineItems,
                 }
               : entry,
           ),
@@ -9464,6 +9919,11 @@ export default function App() {
                 ? {
                     ...entry,
                     items: mergeSecurityMetadataItems(entry.items, enrichment.items),
+                    timelineItems:
+                      Array.isArray(entry.timelineItems) &&
+                      entry.timelineItems.length === enrichment.items.length
+                        ? mergeSecurityMetadataItems(entry.timelineItems, enrichment.items)
+                        : entry.timelineItems,
                   }
                 : entry,
             ),
@@ -9478,6 +9938,60 @@ export default function App() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (!portfolioEntries.length) {
+      portfolioAutoEnrichmentRef.current.clear();
+      return;
+    }
+
+    portfolioEntries.forEach((entry) => {
+      const sourceItems =
+        (Array.isArray(entry.timelineItems) && entry.timelineItems.length
+          ? entry.timelineItems
+          : entry.items) ?? [];
+
+      if (!entry?.id || !sourceItems.length) {
+        return;
+      }
+
+      const identifierKey =
+        sourceItems.map(metadataMergeKey).filter(Boolean).join('|') ||
+        `${entry.fileName ?? entry.id}:${sourceItems.length}`;
+
+      if (sourceItems.some(hasMissingLiveQuote)) {
+        const quoteKey = `${entry.id}:quote:${identifierKey}`;
+        if (!portfolioAutoEnrichmentRef.current.has(quoteKey)) {
+          portfolioAutoEnrichmentRef.current.add(quoteKey);
+          scheduleLiveQuoteEnrichment(entry.id, sourceItems);
+        }
+      }
+
+      if (sourceItems.some(hasMissingCoreMetadata)) {
+        const metadataKey = `${entry.id}:metadata:${identifierKey}`;
+        if (!portfolioAutoEnrichmentRef.current.has(metadataKey)) {
+          portfolioAutoEnrichmentRef.current.add(metadataKey);
+          const locallyEnrichedItems = sourceItems.map((item) => enrichPortfolioItem(item));
+
+          setPortfolioEntries((current) =>
+            current.map((currentEntry) =>
+              currentEntry.id === entry.id
+                ? {
+                    ...currentEntry,
+                    items: mergeSecurityMetadataItems(currentEntry.items, locallyEnrichedItems),
+                    timelineItems:
+                      Array.isArray(currentEntry.timelineItems) && currentEntry.timelineItems.length
+                        ? mergeSecurityMetadataItems(currentEntry.timelineItems, locallyEnrichedItems)
+                        : currentEntry.timelineItems,
+                  }
+                : currentEntry,
+            ),
+          );
+          scheduleSecurityMetadataEnrichment(entry.id, locallyEnrichedItems);
+        }
+      }
+    });
+  }, [portfolioEntries, scheduleLiveQuoteEnrichment, scheduleSecurityMetadataEnrichment]);
 
   const settingsDock = useFloatingHandle({
     initialPosition: (win) => {
@@ -9802,6 +10316,38 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(STORAGE_KEYS.baseCurrency, baseCurrency);
+  }, [baseCurrency]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(STORAGE_KEYS.dateBasis, dateBasis);
+  }, [dateBasis]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(STORAGE_KEYS.autoSave, autoSaveMode);
+  }, [autoSaveMode]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(STORAGE_KEYS.dailySnapshots, dailySnapshotMode);
+  }, [dailySnapshotMode]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
       return undefined;
     }
 
@@ -9885,6 +10431,44 @@ export default function App() {
       return undefined;
     }
 
+    if (dailySnapshotMode !== 'on') {
+      return undefined;
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        rollForwardSavedPortfolioHistory();
+      }
+    };
+
+    const intervalId = window.setInterval(
+      rollForwardSavedPortfolioHistory,
+      DAILY_SNAPSHOT_CHECK_INTERVAL_MS,
+    );
+
+    window.addEventListener('focus', rollForwardSavedPortfolioHistory);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', rollForwardSavedPortfolioHistory);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [dailySnapshotMode, rollForwardSavedPortfolioHistory]);
+
+  useEffect(() => {
+    if (dailySnapshotMode !== 'on') {
+      return;
+    }
+
+    rollForwardSavedPortfolioHistory();
+  }, [dailySnapshotMode, dateBasis, rollForwardSavedPortfolioHistory]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
     let cancelled = false;
 
     void listServerPortfolios()
@@ -9896,7 +10480,16 @@ export default function App() {
         const serverEntries = Array.isArray(payload?.portfolios)
           ? payload.portfolios
               .slice(0, MAX_PORTFOLIOS)
-              .map((portfolio) => createPortfolioEntryFromPayload(portfolio, portfolio?.id))
+              .map((portfolio) => {
+                const entry = createPortfolioEntryFromPayload(portfolio, portfolio?.id);
+                return dailySnapshotMode === 'on'
+                  ? rollForwardPortfolioEntry(
+                      entry,
+                      portfolio?.updatedAt ?? portfolio?.createdAt,
+                      dateBasis,
+                    )
+                  : entry;
+              })
               .filter((entry) => entry.id)
           : [];
 
@@ -9914,16 +10507,25 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [dailySnapshotMode, dateBasis]);
 
   useEffect(() => {
-    writeStoredPortfolioState(portfolioEntries, activePortfolioId);
-
     if (typeof window === 'undefined') {
       return undefined;
     }
 
     window.clearTimeout(portfolioSyncTimerRef.current);
+    let cancelled = false;
+
+    if (autoSaveMode !== 'on') {
+      setPortfolioSyncStatus('paused');
+      return undefined;
+    }
+
+    const persistedAt = writeStoredPortfolioState(portfolioEntries, activePortfolioId);
+    portfolioLastSavedAtRef.current = persistedAt;
+    setPortfolioSavedAt(persistedAt);
+
     const safeEntries = Array.isArray(portfolioEntries)
       ? portfolioEntries
           .slice(0, MAX_PORTFOLIOS)
@@ -9932,17 +10534,28 @@ export default function App() {
       : [];
 
     if (!safeEntries.length) {
+      setPortfolioSyncStatus('idle');
       return undefined;
     }
 
+    setPortfolioSyncStatus('pending');
     portfolioSyncTimerRef.current = window.setTimeout(() => {
-      void Promise.allSettled(safeEntries.map((entry) => createServerPortfolio(entry)));
+      void Promise.allSettled(safeEntries.map((entry) => createServerPortfolio(entry)))
+        .then((results) => {
+          if (cancelled) {
+            return;
+          }
+
+          const allSaved = results.every((result) => result.status === 'fulfilled');
+          setPortfolioSyncStatus(allSaved ? 'saved' : 'offline');
+        });
     }, SERVER_SYNC_DEBOUNCE_MS);
 
     return () => {
+      cancelled = true;
       window.clearTimeout(portfolioSyncTimerRef.current);
     };
-  }, [activePortfolioId, portfolioEntries]);
+  }, [activePortfolioId, autoSaveMode, portfolioEntries]);
 
   useEffect(() => {
     if (!settingsOpen) {
@@ -10897,52 +11510,6 @@ export default function App() {
   }, [clearHoveredFileTooltip, hoveredFileEntry, hoveredFileEntryId]);
   const groupOptions = groupOptionsFor(language);
   const scoreAxes = scoreAxesFor(language);
-  const handleResetDockLayout = () => {
-    noteInteraction();
-    setShowGroupDock(true);
-    setShowScoreDock(true);
-
-    if (typeof window !== 'undefined') {
-      const width = window.innerWidth;
-      const height = window.innerHeight;
-      const inset = uiInsetFor(width);
-      const triggerSize = toolTriggerSizeFor(width);
-      const triggerAnchor = toolTriggerPosition ?? {
-        x: clamp(inset, inset, width - triggerSize - inset),
-        y: clamp(inset, inset, height - triggerSize - inset),
-      };
-      const nextGroupPosition = stackDockBelow(
-        triggerAnchor.x,
-        triggerAnchor.y,
-        triggerSize,
-        groupDockSizeFor(width),
-        width,
-        height,
-      );
-      const nextHeatmapPosition = stackDockBelow(
-        nextGroupPosition.x,
-        nextGroupPosition.y,
-        groupDockSizeFor(width),
-        heatmapDockSizeFor(width),
-        width,
-        height,
-      );
-      const nextScorePosition = stackDockBelow(
-        nextHeatmapPosition.x,
-        nextHeatmapPosition.y,
-        heatmapDockSizeFor(width),
-        scoreDockSizeFor(width),
-        width,
-        height,
-      );
-
-      setGroupDockPosition(nextGroupPosition);
-      setHeatmapDockPosition(nextHeatmapPosition);
-      setScoreDockPosition(nextScorePosition);
-    }
-
-    setDockResetAt(performance.now());
-  };
   const settingsSections = [
     {
       key: 'language',
@@ -10955,82 +11522,59 @@ export default function App() {
       })),
     },
     {
-      key: 'asset-class-mode',
-      title: text.settingsSectionAssetClassMode,
-      options: [
-        {
-          key: 'auto',
-          label: text.settingsAssetClassAuto,
-          active: assetClassMode === 'auto',
-          onSelect: () => setAssetClassMode('auto'),
-        },
-        {
-          key: 'preferOriginal',
-          label: text.settingsAssetClassPreferOriginal,
-          active: assetClassMode === 'preferOriginal',
-          onSelect: () => setAssetClassMode('preferOriginal'),
-        },
-      ],
+      key: 'base-currency',
+      title: text.settingsSectionBaseCurrency,
+      options: BASE_CURRENCY_OPTIONS.map((option) => ({
+        key: option,
+        label: option === 'KRW' ? text.settingsCurrencyKrw : text.settingsCurrencyUsd,
+        active: baseCurrency === option,
+        onSelect: () => setBaseCurrency(option),
+      })),
     },
     {
-      key: 'allocation-weight-mode',
-      title: text.settingsSectionAllocationWeightMode,
-      options: [
-        {
-          key: 'auto',
-          label: text.settingsAllocationWeightAuto,
-          active: allocationWeightMode === 'auto',
-          onSelect: () => setAllocationWeightMode('auto'),
-        },
-        {
-          key: 'stock',
-          label: text.settingsAllocationWeightStock,
-          active: allocationWeightMode === 'stock',
-          onSelect: () => setAllocationWeightMode('stock'),
-        },
-        {
-          key: 'assetClass',
-          label: text.settingsAllocationWeightAssetClass,
-          active: allocationWeightMode === 'assetClass',
-          onSelect: () => setAllocationWeightMode('assetClass'),
-        },
-        {
-          key: 'account',
-          label: text.settingsAllocationWeightAccount,
-          active: allocationWeightMode === 'account',
-          onSelect: () => setAllocationWeightMode('account'),
-        },
-      ],
+      key: 'date-basis',
+      title: text.settingsSectionDateBasis,
+      options: DATE_BASIS_OPTIONS.map((option) => ({
+        key: option,
+        label: option === 'kst' ? text.settingsDateBasisKst : text.settingsDateBasisLocal,
+        active: dateBasis === option,
+        onSelect: () => setDateBasis(option),
+      })),
     },
     {
-      key: 'score-weight-preset',
-      title: text.settingsSectionScoreWeightPreset,
-      options: [
-        {
-          key: 'balanced',
-          label: text.settingsScoreWeightBalanced,
-          active: scoreWeightPreset === 'balanced',
-          onSelect: () => setScoreWeightPreset('balanced'),
-        },
-        {
-          key: 'returnFocus',
-          label: text.settingsScoreWeightReturnFocus,
-          active: scoreWeightPreset === 'returnFocus',
-          onSelect: () => setScoreWeightPreset('returnFocus'),
-        },
-        {
-          key: 'longTermReturnFocus',
-          label: text.settingsScoreWeightLongTermReturnFocus,
-          active: scoreWeightPreset === 'longTermReturnFocus',
-          onSelect: () => setScoreWeightPreset('longTermReturnFocus'),
-        },
-        {
-          key: 'stabilityFocus',
-          label: text.settingsScoreWeightStabilityFocus,
-          active: scoreWeightPreset === 'stabilityFocus',
-          onSelect: () => setScoreWeightPreset('stabilityFocus'),
-        },
-      ],
+      key: 'auto-save',
+      title: text.settingsSectionAutoSave,
+      options: SETTING_TOGGLE_OPTIONS.map((option) => ({
+        key: option,
+        label: option === 'on' ? text.settingsAutoSaveOn : text.settingsAutoSaveOff,
+        active: autoSaveMode === option,
+        onSelect: () => setAutoSaveMode(option),
+      })),
+    },
+    {
+      key: 'daily-snapshots',
+      title: text.settingsSectionDailySnapshots,
+      options: SETTING_TOGGLE_OPTIONS.map((option) => ({
+        key: option,
+        label: option === 'on' ? text.settingsDailySnapshotsOn : text.settingsDailySnapshotsOff,
+        active: dailySnapshotMode === option,
+        onSelect: () => setDailySnapshotMode(option),
+      })),
+    },
+  ];
+  const portfolioSavedAtLabel = portfolioSavedAt
+    ? formatSettingsDateTime(portfolioSavedAt, language, dateBasis)
+    : '';
+  const settingsStatusRows = [
+    {
+      key: 'last-saved',
+      label: text.settingsStatusLastSaved,
+      value: portfolioSavedAtLabel || text.settingsStatusNeverSaved,
+    },
+    {
+      key: 'server-sync',
+      label: text.settingsStatusServerSync,
+      value: settingsSyncStatusText(text, portfolioSyncStatus),
     },
   ];
   const contributionPreview = useMemo(
@@ -11280,6 +11824,7 @@ export default function App() {
             activePortfolioId={activePortfolio?.id ?? activePortfolioId}
             onSelectPortfolio={setActivePortfolioId}
             onFocusHolding={handleFocusPortfolioHolding}
+            onClearHoldingFocus={clearCenterSelection}
             onClearPortfolio={handleClearPortfolio}
             onOpenPortfolioPicker={openPortfolioPicker}
             onCreateManualAtom={handleCreateManualAtom}
@@ -11345,14 +11890,15 @@ export default function App() {
                   </section>
                 ))}
                 <section className="settings-panel__section">
-                  <p className="settings-panel__title">{text.settingsSectionLayoutReset}</p>
-                  <button
-                    type="button"
-                    className="settings-action"
-                    onClick={handleResetDockLayout}
-                  >
-                    {text.settingsResetLayoutAction}
-                  </button>
+                  <p className="settings-panel__title">{text.settingsSectionSaveStatus}</p>
+                  <div className="settings-panel__status-list">
+                    {settingsStatusRows.map((row) => (
+                      <div key={row.key} className="settings-status-row">
+                        <span>{row.label}</span>
+                        <strong>{row.value}</strong>
+                      </div>
+                    ))}
+                  </div>
                 </section>
               </div>
             ) : null}

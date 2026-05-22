@@ -42,6 +42,20 @@ function formatPercentValue(value) {
   return digitalTwinFormatters.formatPercent(Number(value ?? 0), 1);
 }
 
+function toneClassForValue(value) {
+  const numeric = Number(value);
+
+  if (numeric > 0) {
+    return 'is-up';
+  }
+
+  if (numeric < 0) {
+    return 'is-down';
+  }
+
+  return '';
+}
+
 function formatMoney(value, source) {
   const prefix = source === 'weight' || source === 'equal' ? '' : '₩';
   return `${prefix}${digitalTwinFormatters.formatWon(Number(value ?? 0))}`;
@@ -87,7 +101,7 @@ function ResultSummary({ result, twin }) {
   return (
     <div className="twin-result-card">
       <span className="twin-result-card__label">예상 포트폴리오 수익률</span>
-      <strong>{formatPercentValue(result.returnRate)}</strong>
+      <strong className={toneClassForValue(result.returnRate)}>{formatPercentValue(result.returnRate)}</strong>
     </div>
   );
 }
@@ -108,7 +122,9 @@ function TwinOverview({ twin, activeResult }) {
       </div>
       <div className="twin-overview-card">
         <span>예상 변화</span>
-        <strong>{activeResult ? formatPercentValue(expectedReturn) : '-'}</strong>
+        <strong className={activeResult ? toneClassForValue(expectedReturn) : ''}>
+          {activeResult ? formatPercentValue(expectedReturn) : '-'}
+        </strong>
       </div>
       <div className="twin-overview-card">
         <span>위험 점수</span>
@@ -304,7 +320,7 @@ export default function DigitalTwinPanel({
             <div key={projection.key} className="twin-mini-card">
               <span>{projection.label}</span>
               <strong>{formatMoney(projection.projectedValue, twin.valueSource)}</strong>
-              <em>{formatPercentValue(projection.returnRate)}</em>
+              <em className={toneClassForValue(projection.returnRate)}>{formatPercentValue(projection.returnRate)}</em>
             </div>
           ))}
           </div>

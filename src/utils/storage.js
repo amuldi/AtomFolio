@@ -60,12 +60,53 @@ export function clearStoredPosition(key) {
 
 export const ANONYMOUS_WORKSPACE_ID = 'anonymous';
 
+const PORTFOLIO_WORKSPACE_STORAGE_KEY = 'atomfolio-workspace-id';
+
+function cleanWorkspaceId(value) {
+  return String(value ?? '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_.:-]/g, '-')
+    .slice(0, 80);
+}
+
+function createWorkspaceId() {
+  const randomId =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+
+  return cleanWorkspaceId(`guest:${randomId}`);
+}
+
+export function getPortfolioWorkspaceId() {
+  if (typeof window === 'undefined') {
+    return ANONYMOUS_WORKSPACE_ID;
+  }
+
+  try {
+    const storedWorkspaceId = cleanWorkspaceId(
+      window.localStorage.getItem(PORTFOLIO_WORKSPACE_STORAGE_KEY),
+    );
+
+    if (storedWorkspaceId) {
+      return storedWorkspaceId;
+    }
+
+    const nextWorkspaceId = createWorkspaceId();
+    window.localStorage.setItem(PORTFOLIO_WORKSPACE_STORAGE_KEY, nextWorkspaceId);
+    return nextWorkspaceId;
+  } catch {
+    return ANONYMOUS_WORKSPACE_ID;
+  }
+}
+
 async function fetchJson(url, options = {}) {
+  const workspaceId = options.workspaceId ?? getPortfolioWorkspaceId();
   const response = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'x-atomfolio-workspace-id': options.workspaceId ?? ANONYMOUS_WORKSPACE_ID,
+      'x-atomfolio-workspace-id': workspaceId,
       ...(options.headers ?? {}),
     },
   });
@@ -78,15 +119,11 @@ async function fetchJson(url, options = {}) {
   return payload;
 }
 
-export function getPortfolioWorkspaceId() {
-  return ANONYMOUS_WORKSPACE_ID;
-}
-
-export async function listServerPortfolios(workspaceId = ANONYMOUS_WORKSPACE_ID) {
+export async function listServerPortfolios(workspaceId = getPortfolioWorkspaceId()) {
   return fetchJson('/api/portfolio', { workspaceId });
 }
 
-export async function createServerPortfolio(portfolio, workspaceId = ANONYMOUS_WORKSPACE_ID) {
+export async function createServerPortfolio(portfolio, workspaceId = getPortfolioWorkspaceId()) {
   return fetchJson('/api/portfolio', {
     method: 'POST',
     workspaceId,
@@ -94,11 +131,11 @@ export async function createServerPortfolio(portfolio, workspaceId = ANONYMOUS_W
   });
 }
 
-export async function getServerPortfolio(portfolioId, workspaceId = ANONYMOUS_WORKSPACE_ID) {
+export async function getServerPortfolio(portfolioId, workspaceId = getPortfolioWorkspaceId()) {
   return fetchJson(`/api/portfolio/${encodeURIComponent(portfolioId)}`, { workspaceId });
 }
 
-export async function updateServerPortfolio(portfolioId, portfolio, workspaceId = ANONYMOUS_WORKSPACE_ID) {
+export async function updateServerPortfolio(portfolioId, portfolio, workspaceId = getPortfolioWorkspaceId()) {
   return fetchJson(`/api/portfolio/${encodeURIComponent(portfolioId)}`, {
     method: 'PUT',
     workspaceId,
@@ -106,18 +143,18 @@ export async function updateServerPortfolio(portfolioId, portfolio, workspaceId 
   });
 }
 
-export async function deleteServerPortfolio(portfolioId, workspaceId = ANONYMOUS_WORKSPACE_ID) {
+export async function deleteServerPortfolio(portfolioId, workspaceId = getPortfolioWorkspaceId()) {
   return fetchJson(`/api/portfolio/${encodeURIComponent(portfolioId)}`, {
     method: 'DELETE',
     workspaceId,
   });
 }
 
-export async function listServerImportHistory(workspaceId = ANONYMOUS_WORKSPACE_ID) {
+export async function listServerImportHistory(workspaceId = getPortfolioWorkspaceId()) {
   return fetchJson('/api/portfolio/imports', { workspaceId });
 }
 
-export async function saveServerImportHistory(importRecord, workspaceId = ANONYMOUS_WORKSPACE_ID) {
+export async function saveServerImportHistory(importRecord, workspaceId = getPortfolioWorkspaceId()) {
   return fetchJson('/api/portfolio/imports', {
     method: 'POST',
     workspaceId,
