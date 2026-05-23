@@ -764,13 +764,13 @@ body::after {
 }
 
 .heatmap-panel__cell.is-negative {
-  border-color: rgba(104, 174, 255, calc(0.18 + var(--heat-dark-alpha) * 0.28));
-  background: rgba(54, 128, 255, calc(0.14 + var(--heat-dark-alpha) * 0.58));
+  border-color: rgba(255, 252, 246, calc(0.16 + var(--heat-dark-alpha) * 0.24));
+  background: rgba(255, 252, 246, calc(0.08 + var(--heat-dark-alpha) * 0.34));
 }
 
 .heatmap-panel__cell.is-positive {
-  border-color: rgba(255, 116, 104, calc(0.2 + var(--heat-alpha) * 0.28));
-  background: rgba(255, 78, 68, calc(0.16 + var(--heat-alpha) * 0.58));
+  border-color: rgba(255, 252, 246, calc(0.16 + var(--heat-alpha) * 0.24));
+  background: rgba(255, 252, 246, calc(0.08 + var(--heat-alpha) * 0.34));
 }
 
 .heatmap-panel__cell:hover {
@@ -783,8 +783,8 @@ body::after {
 }
 
 .heatmap-panel__cell.is-negative.is-active {
-  border-color: var(--loss-border);
-  box-shadow: 0 0 0 1px rgba(104, 174, 255, 0.12) inset;
+  border-color: rgba(255, 252, 246, 0.58);
+  box-shadow: 0 0 0 1px rgba(255, 252, 246, 0.18) inset;
 }
 
 .heatmap-panel__footer {
@@ -837,12 +837,12 @@ body::after {
   width: 0.53rem;
   height: 0.53rem;
   border-radius: 0.12rem;
-  border: 1px solid rgba(255, 242, 216, 0.04);
-  background: rgba(255, 78, 68, calc(0.12 + var(--legend-alpha) * 0.58));
+  border: 1px solid rgba(255, 252, 246, 0.08);
+  background: rgba(255, 252, 246, calc(0.08 + var(--legend-alpha) * 0.36));
 }
 
 .heatmap-panel__legend-cell.is-negative {
-  background: rgba(54, 128, 255, calc(0.12 + var(--legend-dark-alpha) * 0.58));
+  background: rgba(255, 252, 246, calc(0.08 + var(--legend-dark-alpha) * 0.36));
 }
 
 .heatmap-panel__empty {
@@ -2366,46 +2366,6 @@ body::after {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.32rem;
   min-width: 0;
-}
-
-.settings-panel__status-list {
-  display: grid;
-  gap: 0.34rem;
-  min-width: 0;
-}
-
-.settings-status-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.7rem;
-  min-width: 0;
-  min-height: 1.9rem;
-  padding: 0.36rem 0.5rem;
-  box-sizing: border-box;
-  border: 1px solid rgba(255, 242, 216, 0.12);
-  border-radius: 10px;
-  background: rgba(255, 248, 233, 0.035);
-  font-family: var(--ui-font);
-}
-
-.settings-status-row span {
-  min-width: 0;
-  color: rgba(255, 246, 226, 0.48);
-  font-size: 0.65rem;
-  font-weight: 700;
-  line-height: 1.2;
-  overflow-wrap: anywhere;
-}
-
-.settings-status-row strong {
-  min-width: 0;
-  color: rgba(255, 250, 238, 0.9);
-  font-size: 0.68rem;
-  font-weight: 700;
-  line-height: 1.2;
-  text-align: right;
-  overflow-wrap: anywhere;
 }
 
 .settings-option {
@@ -5994,17 +5954,6 @@ body::after {
     padding: 0.3rem 0.36rem 0.34rem;
     font-size: 0.64rem;
     line-height: 1.2;
-  }
-
-  .settings-status-row {
-    min-height: 1.56rem;
-    padding: 0.3rem 0.36rem 0.34rem;
-    gap: 0.48rem;
-  }
-
-  .settings-status-row span,
-  .settings-status-row strong {
-    font-size: 0.62rem;
   }
 
   .upload-plus-hint {

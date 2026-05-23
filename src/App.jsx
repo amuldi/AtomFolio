@@ -86,6 +86,11 @@ const ASSET_CLASS_MODE_OPTIONS = ['auto', 'preferOriginal'];
 const ALLOCATION_WEIGHT_MODE_OPTIONS = ['auto', 'stock', 'assetClass', 'account'];
 const SCORE_WEIGHT_PRESET_OPTIONS = ['balanced', 'returnFocus', 'longTermReturnFocus', 'stabilityFocus'];
 const BASE_CURRENCY_OPTIONS = ['KRW', 'USD'];
+const DEFAULT_USD_KRW_RATE = 1365;
+const DEFAULT_DISPLAY_FX_RATES = {
+  USD: { KRW: DEFAULT_USD_KRW_RATE },
+  KRW: { USD: 1 / DEFAULT_USD_KRW_RATE },
+};
 const DATE_BASIS_OPTIONS = ['kst', 'local'];
 const SETTING_TOGGLE_OPTIONS = ['on', 'off'];
 const STORAGE_KEYS = {
@@ -199,15 +204,6 @@ const UI_TEXT = {
     settingsSectionDailySnapshots: '일별 손익 누적',
     settingsDailySnapshotsOn: '켜짐',
     settingsDailySnapshotsOff: '꺼짐',
-    settingsSectionSaveStatus: '저장 상태',
-    settingsStatusLastSaved: '마지막 저장',
-    settingsStatusNeverSaved: '저장 전',
-    settingsStatusServerSync: '서버 동기화',
-    settingsSyncIdle: '대기',
-    settingsSyncPending: '저장 중',
-    settingsSyncSaved: '완료',
-    settingsSyncOffline: '실패',
-    settingsSyncPaused: '일시 중지',
     uploadAria: '투자 데이터 업로드',
     uploadHint: '투자 데이터를 업로드 해주세요',
     uploadDragHint: 'CSV 파일을 여기에 끌어다 놓으세요',
@@ -295,15 +291,6 @@ const UI_TEXT = {
     settingsSectionDailySnapshots: 'Daily P/L History',
     settingsDailySnapshotsOn: 'On',
     settingsDailySnapshotsOff: 'Off',
-    settingsSectionSaveStatus: 'Save Status',
-    settingsStatusLastSaved: 'Last saved',
-    settingsStatusNeverSaved: 'Not saved',
-    settingsStatusServerSync: 'Server sync',
-    settingsSyncIdle: 'Idle',
-    settingsSyncPending: 'Saving',
-    settingsSyncSaved: 'Saved',
-    settingsSyncOffline: 'Failed',
-    settingsSyncPaused: 'Paused',
     uploadAria: 'Upload investment data',
     uploadHint: 'Please upload your investment data',
     uploadDragHint: 'Drop CSV files here',
@@ -1801,35 +1788,6 @@ function formatDateKeyForBasis(value = new Date(), dateBasis = 'kst') {
   const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
 
   return `${byType.year}-${byType.month}-${byType.day}`;
-}
-
-function formatSettingsDateTime(value, language = 'ko', dateBasis = 'kst') {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) {
-    return '';
-  }
-
-  return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'ko-KR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-    timeZone: dateBasis === 'kst' ? 'Asia/Seoul' : undefined,
-  }).format(date);
-}
-
-function settingsSyncStatusText(text, status) {
-  switch (status) {
-    case 'pending':
-      return text.settingsSyncPending;
-    case 'saved':
-      return text.settingsSyncSaved;
-    case 'offline':
-      return text.settingsSyncOffline;
-    case 'paused':
-      return text.settingsSyncPaused;
-    case 'idle':
-    default:
-      return text.settingsSyncIdle;
-  }
 }
 
 function textFor(language) {
@@ -5443,18 +5401,113 @@ function resolveMarketDisplayName(data) {
   return String(data?.displayName ?? data?.name ?? data?.rawName ?? data?.symbol ?? '').trim();
 }
 
+function normalizeCurrencyCode(value) {
+  const code = String(value ?? '').trim().toUpperCase();
+
+  return BASE_CURRENCY_OPTIONS.includes(code) ? code : '';
+}
+
+function inferCurrencyFromText(value) {
+  const text = String(value ?? '').trim();
+
+  if (/₩|KRW|원/i.test(text)) {
+    return 'KRW';
+  }
+
+  if (/\$|USD|달러/i.test(text)) {
+    return 'USD';
+  }
+
+  return '';
+}
+
+function normalizeUsdKrwRate(value) {
+  const numeric = Number(value);
+
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : DEFAULT_USD_KRW_RATE;
+}
+
+function buildDisplayFxRates(usdKrwRate = DEFAULT_USD_KRW_RATE) {
+  const rate = normalizeUsdKrwRate(usdKrwRate);
+
+  return {
+    USD: { KRW: rate },
+    KRW: { USD: 1 / rate },
+  };
+}
+
+function convertMarketValueForBase(value, sourceCurrency, baseCurrency, fxRates = DEFAULT_DISPLAY_FX_RATES) {
+  const numeric = parseManualPriceValue(value);
+  const source = normalizeCurrencyCode(sourceCurrency);
+  const target = normalizeCurrencyCode(baseCurrency) || source;
+
+  if (!Number.isFinite(numeric)) {
+    return { value: null, currency: target || source };
+  }
+
+  if (!source || !target || source === target) {
+    return { value: numeric, currency: target || source };
+  }
+
+  const rate = fxRates?.[source]?.[target];
+
+  if (!Number.isFinite(rate)) {
+    return { value: numeric, currency: source };
+  }
+
+  return { value: numeric * rate, currency: target };
+}
+
+function formatMarketPriceForBase(value, sourceCurrency, baseCurrency, fxRates) {
+  const converted = convertMarketValueForBase(value, sourceCurrency, baseCurrency, fxRates);
+
+  return formatMarketPrice(converted.value, converted.currency);
+}
+
+function formatMarketChangeForBase(value, sourceCurrency, baseCurrency, fxRates) {
+  const converted = convertMarketValueForBase(value, sourceCurrency, baseCurrency, fxRates);
+
+  if (!Number.isFinite(converted.value)) {
+    return '-';
+  }
+
+  const sign = converted.value > 0 ? '+' : converted.value < 0 ? '-' : '';
+
+  return `${sign}${formatMarketPrice(Math.abs(converted.value), converted.currency)}`;
+}
+
+function formatMoneyMetricForBase(value, sourceCurrency, baseCurrency, fxRates) {
+  const trimmed = String(value ?? '').trim();
+
+  if (!trimmed) {
+    return '-';
+  }
+
+  const numeric = parseManualPriceValue(trimmed);
+
+  if (!Number.isFinite(numeric)) {
+    return trimmed;
+  }
+
+  return formatMarketPriceForBase(numeric, inferCurrencyFromText(trimmed) || sourceCurrency, baseCurrency, fxRates);
+}
+
 function MarketLivePreview({
   data,
   status,
   error,
   language,
+  baseCurrency = 'KRW',
+  fxRates = DEFAULT_DISPLAY_FX_RATES,
   onApplyQuote,
   showApply = true,
+  showStats = true,
 }) {
   const [hoveredPoint, setHoveredPoint] = useState(null);
   const isLoading = status === 'loading';
   const hasData = Boolean(data);
   const path = hasData ? buildMarketSparklinePath(data.points ?? []) : null;
+  const changeAmountText = hasData ? formatMarketChangeForBase(data.change, data.currency, baseCurrency, fxRates) : '';
   const changePercentText = hasData ? formatMarketChangePercent(data.changePercent) : '';
   const tone = getSignedValueToneClass(data?.changePercent);
   const marketUrl = buildMarketInfoUrl(data);
@@ -5515,11 +5568,11 @@ function MarketLivePreview({
         </small>
       </div>
 
-      {hasData ? (
+      {hasData && showStats ? (
         <div className="tool-drawer__market-stats">
-          <strong>{formatMarketPrice(data.latestPrice, data.currency)}</strong>
+          <strong>{formatMarketPriceForBase(data.latestPrice, data.currency, baseCurrency, fxRates)}</strong>
           <span>
-            {formatMarketChange(data.change)}
+            {changeAmountText}
             {changePercentText ? ` · ${changePercentText}` : ''}
           </span>
         </div>
@@ -5569,7 +5622,7 @@ function MarketLivePreview({
             style={{ left: `${(hoveredPoint.x / 320) * 100}%` }}
           >
             <em>{formatMarketPointTime(hoveredPoint.time, language)}</em>
-            <strong>{formatMarketPrice(hoveredPoint.close, data?.currency)}</strong>
+            <strong>{formatMarketPriceForBase(hoveredPoint.close, data?.currency, baseCurrency, fxRates)}</strong>
           </span>
         ) : null}
       </button>
@@ -5732,7 +5785,14 @@ function resolveHoldingMetric(item, labels) {
   return getItemFieldValue(item, labels) || '';
 }
 
-function StockDetailCard({ item, language, onEdit, onClose }) {
+function StockDetailCard({
+  item,
+  language,
+  baseCurrency = 'KRW',
+  fxRates = DEFAULT_DISPLAY_FX_RATES,
+  onEdit,
+  onClose,
+}) {
   const ticker = resolveHoldingTicker(item);
   const name = resolveHoldingName(item);
   const [data, setData] = useState(null);
@@ -5791,9 +5851,18 @@ function StockDetailCard({ item, language, onEdit, onClose }) {
   const returnRate = String(item?.detail ?? item?.return ?? '').trim() ||
     resolveHoldingMetric(item, ['수익률', 'return']);
   const returnRateToneClass = getSignedValueToneClass(returnRate);
-  const yesterdayChange = data
-    ? `${formatMarketChange(data.change)} ${formatMarketChangePercent(data.changePercent)}`
+  const sourceCurrency =
+    normalizeCurrencyCode(data?.currency) ||
+    normalizeCurrencyCode(item?.marketCurrency) ||
+    normalizeCurrencyCode(item?.currency) ||
+    normalizeCurrencyCode(resolveHoldingMetric(item, ['통화', 'currency']));
+  const currentPriceText = data
+    ? formatMarketPriceForBase(data.latestPrice, data.currency, baseCurrency, fxRates)
     : '-';
+  const yesterdayChange = data
+    ? `${formatMarketChangeForBase(data.change, data.currency, baseCurrency, fxRates)} ${formatMarketChangePercent(data.changePercent)}`
+    : '-';
+  const buyPriceText = formatMoneyMetricForBase(buyPrice, sourceCurrency, baseCurrency, fxRates);
   const yesterdayChangeToneClass = getSignedValueToneClass(data?.changePercent);
 
   return (
@@ -5823,7 +5892,7 @@ function StockDetailCard({ item, language, onEdit, onClose }) {
       <div className="tool-drawer__holding-metrics">
         <div>
           <span>{language === 'en' ? 'Live' : '현재가'}</span>
-          <strong>{data ? formatMarketPrice(data.latestPrice, data.currency) : '-'}</strong>
+          <strong>{currentPriceText}</strong>
         </div>
         <div>
           <span>{language === 'en' ? 'Vs prev.' : '전일 대비'}</span>
@@ -5837,7 +5906,7 @@ function StockDetailCard({ item, language, onEdit, onClose }) {
         </div>
         <div>
           <span>{language === 'en' ? 'Buy' : '매수가'}</span>
-          <strong>{buyPrice || '-'}</strong>
+          <strong>{buyPriceText}</strong>
         </div>
         <div>
           <span>{language === 'en' ? 'Return' : '수익률'}</span>
@@ -5850,8 +5919,11 @@ function StockDetailCard({ item, language, onEdit, onClose }) {
         status={status}
         error={error}
         language={language}
+        baseCurrency={baseCurrency}
+        fxRates={fxRates}
         onApplyQuote={() => {}}
         showApply={false}
+        showStats={false}
       />
     </section>
   );
@@ -6887,6 +6959,8 @@ function ToolSideDrawer({
   drawerWidth = TOOL_DRAWER_DEFAULT_WIDTH,
   onDrawerWidthChange,
   language,
+  baseCurrency = 'KRW',
+  fxRates = DEFAULT_DISPLAY_FX_RATES,
   layerStyle,
   onInteract,
 }) {
@@ -7762,6 +7836,8 @@ function ToolSideDrawer({
         status={manualMarketStatus}
         error={manualMarketError}
         language={language}
+        baseCurrency={baseCurrency}
+        fxRates={fxRates}
         onApplyQuote={applyMarketQuoteToDraft}
       />
     </section>
@@ -8222,6 +8298,8 @@ function ToolSideDrawer({
           <StockDetailCard
             item={activeSelectedHolding.item}
             language={language}
+            baseCurrency={baseCurrency}
+            fxRates={fxRates}
             onEdit={() =>
               beginEditHolding(activeAccountEntry, activeSelectedHolding.item, activeSelectedHolding.itemIndex)
             }
@@ -9722,6 +9800,7 @@ export default function App() {
   const [baseCurrency, setBaseCurrency] = useState(() =>
     readStoredOption(STORAGE_KEYS.baseCurrency, BASE_CURRENCY_OPTIONS, 'KRW'),
   );
+  const [usdKrwRate, setUsdKrwRate] = useState(DEFAULT_USD_KRW_RATE);
   const [dateBasis, setDateBasis] = useState(() =>
     readStoredOption(STORAGE_KEYS.dateBasis, DATE_BASIS_OPTIONS, 'kst'),
   );
@@ -9731,8 +9810,8 @@ export default function App() {
   const [dailySnapshotMode, setDailySnapshotMode] = useState(() =>
     readStoredOption(STORAGE_KEYS.dailySnapshots, SETTING_TOGGLE_OPTIONS, 'on'),
   );
-  const [portfolioSavedAt, setPortfolioSavedAt] = useState(() => restoredPortfolioState.savedAt);
-  const [portfolioSyncStatus, setPortfolioSyncStatus] = useState('idle');
+  const [, setPortfolioSavedAt] = useState(() => restoredPortfolioState.savedAt);
+  const [, setPortfolioSyncStatus] = useState('idle');
   const [assetClassMode, setAssetClassMode] = useState(() =>
     readStoredOption(STORAGE_KEYS.assetClassMode, ASSET_CLASS_MODE_OPTIONS, 'auto'),
   );
@@ -10337,6 +10416,43 @@ export default function App() {
 
     window.localStorage.setItem(STORAGE_KEYS.baseCurrency, baseCurrency);
   }, [baseCurrency]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+
+    const loadUsdKrwRate = async () => {
+      try {
+        const rateData = await fetchLiveMarketData({
+          ticker: 'USDKRW=X',
+          name: 'USD/KRW',
+          signal: controller.signal,
+        });
+        const nextRate = Number(rateData?.latestPrice);
+
+        if (!active || controller.signal.aborted || !Number.isFinite(nextRate) || nextRate <= 0) {
+          return;
+        }
+
+        setUsdKrwRate(nextRate);
+      } catch {
+        // Keep the fallback exchange rate when the live FX lookup is unavailable.
+      }
+    };
+
+    loadUsdKrwRate();
+    const intervalId = window.setInterval(loadUsdKrwRate, 15 * 60 * 1000);
+
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -11526,6 +11642,7 @@ export default function App() {
   }, [clearHoveredFileTooltip, hoveredFileEntry, hoveredFileEntryId]);
   const groupOptions = groupOptionsFor(language);
   const scoreAxes = scoreAxesFor(language);
+  const displayFxRates = useMemo(() => buildDisplayFxRates(usdKrwRate), [usdKrwRate]);
   const settingsSections = [
     {
       key: 'language',
@@ -11576,21 +11693,6 @@ export default function App() {
         active: dailySnapshotMode === option,
         onSelect: () => setDailySnapshotMode(option),
       })),
-    },
-  ];
-  const portfolioSavedAtLabel = portfolioSavedAt
-    ? formatSettingsDateTime(portfolioSavedAt, language, dateBasis)
-    : '';
-  const settingsStatusRows = [
-    {
-      key: 'last-saved',
-      label: text.settingsStatusLastSaved,
-      value: portfolioSavedAtLabel || text.settingsStatusNeverSaved,
-    },
-    {
-      key: 'server-sync',
-      label: text.settingsStatusServerSync,
-      value: settingsSyncStatusText(text, portfolioSyncStatus),
     },
   ];
   const contributionPreview = useMemo(
@@ -11851,6 +11953,8 @@ export default function App() {
             drawerWidth={toolDrawerWidth}
             onDrawerWidthChange={setToolDrawerWidth}
             language={language}
+            baseCurrency={baseCurrency}
+            fxRates={displayFxRates}
             layerStyle={floatingLayerStyleFor('tool-drawer')}
             onInteract={interactWithDrawerTool}
           />
@@ -11905,17 +12009,6 @@ export default function App() {
                     </div>
                   </section>
                 ))}
-                <section className="settings-panel__section">
-                  <p className="settings-panel__title">{text.settingsSectionSaveStatus}</p>
-                  <div className="settings-panel__status-list">
-                    {settingsStatusRows.map((row) => (
-                      <div key={row.key} className="settings-status-row">
-                        <span>{row.label}</span>
-                        <strong>{row.value}</strong>
-                      </div>
-                    ))}
-                  </div>
-                </section>
               </div>
             ) : null}
           </div>
