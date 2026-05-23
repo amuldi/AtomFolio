@@ -564,6 +564,24 @@ function isTickerLikeValue(value) {
   return /^([A-Z]{1,5}(?:\.[A-Z])?|[A-Z]{1,6}|[0-9]{4,8})$/.test(trimmed);
 }
 
+function isAlphabeticTickerLikeValue(value) {
+  const trimmed = String(value ?? '').trim();
+  if (!trimmed || KNOWN_CURRENCY_CODES.has(trimmed.toUpperCase()) || isDateLikeValue(trimmed)) {
+    return false;
+  }
+
+  return /^[A-Z]{1,10}(?:[.\-][A-Z]{1,4})?$/i.test(trimmed);
+}
+
+function isNumericSecurityCodeLikeValue(value) {
+  const trimmed = String(value ?? '').trim();
+  if (!trimmed || isDateLikeValue(trimmed)) {
+    return false;
+  }
+
+  return /^\d{6}(?:\.(?:KS|KQ))?$/i.test(trimmed);
+}
+
 function isDateLikeValue(value) {
   return Boolean(parseDateParts(value));
 }
@@ -821,6 +839,7 @@ function scoreSecurityNameColumn(headerLabel, fieldKey, values) {
     (value) => isGenericMetaValue(value),
   );
   const strategyRatio = matchRatio(values, (value) => STRATEGY_DESCRIPTOR_PATTERN.test(String(value ?? '').trim()));
+  const numericOnlyRatio = matchRatio(values, (value) => /^[+-]?\d+(?:\.\d+)?$/.test(String(value ?? '').trim()));
   let bonus = 0;
 
   if (fieldKey === 'stockName') {
@@ -828,7 +847,7 @@ function scoreSecurityNameColumn(headerLabel, fieldKey, values) {
   }
 
   if (fieldKey === 'stockCode') {
-    bonus -= 0.56;
+    bonus -= 1.6;
   }
 
   if (/(assetname|securityname|productname|자산명|상품명)/.test(normalizedHeader)) {
@@ -881,6 +900,14 @@ function scoreSecurityNameColumn(headerLabel, fieldKey, values) {
     bonus -= 0.82;
   }
 
+  if (/(ticker|symbol|stockcode|securitycode|assetcode|productcode|종목코드|티커)/.test(normalizedHeader)) {
+    bonus -= 1.1;
+  }
+
+  if (/(volume|거래량|체결량|수량|shares|quantity|price|현재가|매수가|매입가|평가금액|금액|amount|value)/.test(normalizedHeader)) {
+    bonus -= 1.35;
+  }
+
   if (/(strategy|investmentstyle|tradestyle|매수전략|투자전략|전략)/.test(normalizedHeader)) {
     bonus -= 1.04;
   }
@@ -892,6 +919,7 @@ function scoreSecurityNameColumn(headerLabel, fieldKey, values) {
     accountRatio * 1.25 -
     dateRatio * 1.1 -
     numericRatio * 0.95 -
+    numericOnlyRatio * 0.9 -
     shortNumericRatio * 1.35 -
     metaValueRatio * 1.2 +
     bonus
@@ -959,10 +987,27 @@ function normalizePortfolioFieldLabels(headerLabels, bodyRows) {
     };
   }).filter(({ values }) => values.length > 0);
 
-  const bestSecurityColumn = [...columns]
+  const bestTickerColumn = [...columns]
     .map((column) => ({
       ...column,
-      score: scoreSecurityNameColumn(column.headerLabel, column.fieldKey, column.values),
+      score: scoreTickerColumn(column.headerLabel, column.fieldKey, column.values),
+    }))
+    .sort((left, right) => right.score - left.score)
+    .find((column) => column.score >= 0.82);
+
+  if (bestTickerColumn) {
+    labels[bestTickerColumn.columnIndex] = '종목코드';
+  }
+
+  const bestSecurityColumn = [...columns]
+    .filter((column) => column.columnIndex !== bestTickerColumn?.columnIndex)
+    .map((column) => ({
+      ...column,
+      score: scoreSecurityNameColumn(
+        labels[column.columnIndex] ?? column.headerLabel,
+        resolveFieldLabelKey(labels[column.columnIndex] ?? column.headerLabel) ?? column.fieldKey,
+        column.values,
+      ),
     }))
     .sort((left, right) => right.score - left.score)
     .find((column) => column.score >= 0.5);
@@ -1465,14 +1510,50 @@ function scoreTickerColumn(headerLabel, fieldKey, values) {
   }
 
   const normalizedHeader = normalizeHeader(headerLabel);
-  let score = matchRatio(values, isTickerLikeValue);
+  const tickerRatio = matchRatio(values, isTickerLikeValue);
+  const alphaTickerRatio = matchRatio(values, isAlphabeticTickerLikeValue);
+  const numericSecurityCodeRatio = matchRatio(values, isNumericSecurityCodeLikeValue);
+  const numericOnlyRatio = matchRatio(values, (value) => /^[+-]?\d+(?:\.\d+)?$/.test(String(value ?? '').trim()));
+  const hasExplicitCodeHeader = /(ticker|symbol|stockcode|securitycode|assetcode|productcode|종목코드|티커)/.test(
+    normalizedHeader,
+  );
+  let score = tickerRatio;
 
   if (fieldKey === 'stockCode') {
     score += 0.18;
   }
 
-  if (/(ticker|symbol|stockcode|securitycode|종목코드|티커)/.test(normalizedHeader)) {
+  if (hasExplicitCodeHeader) {
     score += 0.24;
+  }
+
+  if (/(asset|security|product|instrument|holding|자산|종목|상품|보유)/.test(normalizedHeader)) {
+    score += 0.12;
+  }
+
+  if (alphaTickerRatio >= 0.55) {
+    score += 0.35;
+  }
+
+  if (numericSecurityCodeRatio >= 0.72) {
+    score += 0.2;
+  }
+
+  if (
+    /(volume|거래량|체결량|수량|shares|quantity|price|현재가|매수가|매입가|평가금액|금액|amount|value)/.test(
+      normalizedHeader,
+    )
+  ) {
+    score -= 1.12;
+  }
+
+  if (
+    numericOnlyRatio >= 0.9 &&
+    alphaTickerRatio < 0.05 &&
+    numericSecurityCodeRatio < 0.72 &&
+    !hasExplicitCodeHeader
+  ) {
+    score -= 0.8;
   }
 
   if (fieldKey === 'stockName') {

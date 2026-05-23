@@ -3592,6 +3592,20 @@ function liveQuoteLookupForItem(item) {
   return { ticker, name, key: normalizeDisplayKey(ticker || name) };
 }
 
+function normalizeMarketSymbolBase(value) {
+  return normalizeDisplayKey(String(value ?? '').replace(/\.(KS|KQ|TO|V|T|HK|SS|SZ|DU|L)$/i, ''));
+}
+
+function liveQuoteMatchesLookup(quote, lookup) {
+  const requestedTicker = normalizeMarketSymbolBase(lookup?.ticker);
+  if (!requestedTicker) {
+    return true;
+  }
+
+  const returnedSymbol = normalizeMarketSymbolBase(quote?.symbol);
+  return returnedSymbol === requestedTicker;
+}
+
 async function enrichPortfolioItemsWithLiveQuotes(items) {
   if (!Array.isArray(items) || !items.length) {
     return items;
@@ -3618,7 +3632,9 @@ async function enrichPortfolioItemsWithLiveQuotes(items) {
         ticker: lookup.ticker,
         name: lookup.name,
       });
-      quoteByKey.set(lookup.key, quote);
+      if (liveQuoteMatchesLookup(quote, lookup)) {
+        quoteByKey.set(lookup.key, quote);
+      }
     } catch {
       // Leave the uploaded value as-is when every live provider fails.
     }
