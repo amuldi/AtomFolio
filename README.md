@@ -219,7 +219,29 @@ flowchart LR
 - `server/portfolioStore.mjs`: 저장소 추상화.
 - `server/postgresPortfolioStore.mjs`: Neon/Postgres 저장소 어댑터.
 - `server/workspaceAccess.mjs`: 인증 공급자 연결 전 단계의 workspace 접근 검사.
+- `server/rateLimit.mjs`: IP 기준 슬라이딩 윈도우 레이트 리밋.
+- `server/marketDataCache.mjs`: 시세 응답 서버 캐시(TTL 3분)와 stale 폴백.
 - `db/schema.sql`: user, workspace, member, portfolio, import history, AI analysis, snapshot 테이블.
+
+### API 남용 방어
+
+외부 API 비용과 가용성을 보호하기 위해 IP 기준 분당 요청 한도를 둔다.
+초과 시 `429`와 `Retry-After` 헤더를 반환한다.
+
+| 경로 | 한도(분당) |
+| --- | --- |
+| `/api/ai/portfolio-summary` | 5 |
+| `/api/market/live` · `search` · `news` · `financials` | 각 30 |
+| `/api/securities/enrich`, `/api/portfolio/ingest` | 10 |
+
+시세(`/api/market/live`)는 서버 측 캐시(TTL 3분)를 거치며, 외부 제공자(Yahoo/Stooq)가
+모두 실패하면 마지막 성공 응답을 `stale: true` 플래그와 함께 반환한다.
+
+**Vercel 한계**: 레이트 리밋과 시세 캐시는 인메모리 상태라서 Vercel 서버리스에서는
+인스턴스별로 따로 계산된다. 인스턴스가 여러 개 뜨면 실제 허용량이 한도보다 커질 수
+있으므로 best-effort 방어로 이해해야 한다. 엄격한 전역 한도가 필요해지면 Upstash
+Redis 같은 공유 저장소로 교체한다. 로컬 Node 서버(`server/index.mjs`)는 단일
+프로세스라 한도가 정확히 적용된다.
 
 ## 데이터 흐름
 

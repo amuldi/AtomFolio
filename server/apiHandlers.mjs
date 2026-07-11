@@ -4,10 +4,7 @@ import {
   enrichSecurityItems,
   getSecurityEnrichmentCacheStats,
 } from './securityEnrichment.mjs';
-import {
-  fetchLiveMarketDataFromProviders,
-  searchMarketSymbolSuggestions,
-} from '../src/lib/liveMarketData.js';
+import { searchMarketSymbolSuggestions } from '../src/lib/liveMarketData.js';
 import { fetchCompanyFinancialsFromProviders } from '../src/lib/companyFinancials.js';
 import { fetchMarketNewsFromProviders } from '../src/lib/marketNews.js';
 import {
@@ -26,6 +23,51 @@ import {
   getOperationalEventStats,
   recordOperationalEvent,
 } from './operationalEvents.mjs';
+import { checkRateLimit } from './rateLimit.mjs';
+import {
+  getLiveMarketDataWithCache,
+  getMarketDataCacheStats,
+} from './marketDataCache.mjs';
+
+const RATE_LIMITS = {
+  'ai-portfolio-summary': { limit: 5 },
+  'market-live': { limit: 30 },
+  'market-search': { limit: 30 },
+  'market-news': { limit: 30 },
+  'market-financials': { limit: 30 },
+  'security-enrich': { limit: 10 },
+  'portfolio-ingest': { limit: 10 },
+};
+
+function enforceRateLimit(bucket, clientKey, sendJson) {
+  const config = RATE_LIMITS[bucket];
+  if (!config) {
+    return true;
+  }
+
+  const result = checkRateLimit({ bucket, clientKey, limit: config.limit });
+  if (result.ok) {
+    return true;
+  }
+
+  recordOperationalEvent({
+    level: 'warn',
+    area: 'rate-limit',
+    code: `${bucket}-rate-limited`,
+    message: `Rate limit exceeded for ${bucket}.`,
+    metadata: { retryAfterSeconds: result.retryAfterSeconds },
+  });
+  sendJson(
+    429,
+    {
+      error: 'Too many requests. Retry shortly.',
+      code: 'rate-limited',
+      retryAfterSeconds: result.retryAfterSeconds,
+    },
+    { 'Retry-After': String(result.retryAfterSeconds) },
+  );
+  return false;
+}
 
 const MAX_FILE_NAME_LENGTH = 180;
 const MAX_PORTFOLIO_ITEMS = 5000;
@@ -174,15 +216,20 @@ export async function handleHealthRequest({ method, query, sendJson }) {
         : null,
     portfolioStore: getPortfolioStoreStatus(),
     securityEnrichment: getSecurityEnrichmentCacheStats(),
+    marketDataCache: getMarketDataCacheStats(),
     operationalEvents: getOperationalEventStats({
       includeRecent: queryValue(query, 'details') === 'events',
     }),
   });
 }
 
-export async function handleMarketLiveRequest({ method, query, sendJson }) {
+export async function handleMarketLiveRequest({ method, query, clientKey, sendJson }) {
   if (method !== 'GET') {
     sendMethodNotAllowed(sendJson);
+    return;
+  }
+
+  if (!enforceRateLimit('market-live', clientKey, sendJson)) {
     return;
   }
 
@@ -195,15 +242,19 @@ export async function handleMarketLiveRequest({ method, query, sendJson }) {
       return;
     }
 
-    sendJson(200, await fetchLiveMarketDataFromProviders({ ticker, name }));
+    sendJson(200, await getLiveMarketDataWithCache({ ticker, name }));
   } catch (error) {
     sendProviderError(sendJson, error, 'Market data fetch failed.', 'market-live-failed');
   }
 }
 
-export async function handleMarketSearchRequest({ method, query, sendJson }) {
+export async function handleMarketSearchRequest({ method, query, clientKey, sendJson }) {
   if (method !== 'GET') {
     sendMethodNotAllowed(sendJson);
+    return;
+  }
+
+  if (!enforceRateLimit('market-search', clientKey, sendJson)) {
     return;
   }
 
@@ -223,9 +274,13 @@ export async function handleMarketSearchRequest({ method, query, sendJson }) {
   }
 }
 
-export async function handleMarketFinancialsRequest({ method, query, sendJson }) {
+export async function handleMarketFinancialsRequest({ method, query, clientKey, sendJson }) {
   if (method !== 'GET') {
     sendMethodNotAllowed(sendJson);
+    return;
+  }
+
+  if (!enforceRateLimit('market-financials', clientKey, sendJson)) {
     return;
   }
 
@@ -244,9 +299,13 @@ export async function handleMarketFinancialsRequest({ method, query, sendJson })
   }
 }
 
-export async function handleMarketNewsRequest({ method, query, sendJson }) {
+export async function handleMarketNewsRequest({ method, query, clientKey, sendJson }) {
   if (method !== 'GET') {
     sendMethodNotAllowed(sendJson);
+    return;
+  }
+
+  if (!enforceRateLimit('market-news', clientKey, sendJson)) {
     return;
   }
 
@@ -276,9 +335,13 @@ export async function handleMarketNewsRequest({ method, query, sendJson }) {
   }
 }
 
-export async function handleSecurityEnrichRequest({ method, readBody, sendJson }) {
+export async function handleSecurityEnrichRequest({ method, readBody, clientKey, sendJson }) {
   if (method !== 'POST') {
     sendMethodNotAllowed(sendJson);
+    return;
+  }
+
+  if (!enforceRateLimit('security-enrich', clientKey, sendJson)) {
     return;
   }
 
@@ -324,9 +387,13 @@ export async function handleSecurityEnrichRequest({ method, readBody, sendJson }
   }
 }
 
-export async function handlePortfolioIngestRequest({ method, readBody, sendJson }) {
+export async function handlePortfolioIngestRequest({ method, readBody, clientKey, sendJson }) {
   if (method !== 'POST') {
     sendMethodNotAllowed(sendJson);
+    return;
+  }
+
+  if (!enforceRateLimit('portfolio-ingest', clientKey, sendJson)) {
     return;
   }
 
@@ -554,10 +621,15 @@ export async function handleAiPortfolioSummaryRequest({
   method,
   workspaceId,
   readBody,
+  clientKey,
   sendJson,
 }) {
   if (method !== 'POST') {
     sendMethodNotAllowed(sendJson);
+    return;
+  }
+
+  if (!enforceRateLimit('ai-portfolio-summary', clientKey, sendJson)) {
     return;
   }
 

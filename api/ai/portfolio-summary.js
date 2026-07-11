@@ -1,4 +1,5 @@
 import { handleAiPortfolioSummaryRequest } from '../../server/apiHandlers.mjs';
+import { resolveClientKey } from '../../server/rateLimit.mjs';
 import {
   resolveWorkspaceRequestContext,
   sendWorkspaceAccessError,
@@ -15,10 +16,13 @@ export default async function handler(request, response) {
     return;
   }
 
+  const clientKey = resolveClientKey(request);
+
   await handleAiPortfolioSummaryRequest({
     method: request.method,
+    clientKey,
     workspaceId: workspaceContext.workspaceId,
     readBody: () => readJsonBody(request),
-    sendJson: (status, payload) => sendJson(response, status, payload),
+    sendJson: (status, payload, headers) => sendJson(response, status, payload, headers),
   });
 }

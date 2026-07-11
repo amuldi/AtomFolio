@@ -1,6 +1,9 @@
 const MAX_BODY_SIZE = 8 * 1024 * 1024;
 
-export function sendJson(response, statusCode, payload) {
+export function sendJson(response, statusCode, payload, headers = {}) {
+  for (const [name, value] of Object.entries(headers)) {
+    response.setHeader(name, value);
+  }
   response.status(statusCode).json(payload);
 }
 

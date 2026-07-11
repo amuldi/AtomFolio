@@ -23,6 +23,7 @@ import {
   resolveWorkspaceSessionContext,
   sendWorkspaceAccessError,
 } from './workspaceAccess.mjs';
+import { resolveClientKey } from './rateLimit.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,10 +47,11 @@ const CONTENT_TYPES = {
   '.ico': 'image/x-icon',
 };
 
-function sendJson(response, statusCode, payload) {
+function sendJson(response, statusCode, payload, headers = {}) {
   response.writeHead(statusCode, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
+    ...headers,
   });
   response.end(JSON.stringify(payload));
 }
@@ -119,8 +121,9 @@ async function serveStaticAsset(requestPath, response) {
 
 const server = http.createServer(async (request, response) => {
   const requestUrl = new URL(request.url ?? '/', `http://${request.headers.host ?? `${host}:${port}`}`);
-  const sendApiJson = (statusCode, payload) => sendJson(response, statusCode, payload);
+  const sendApiJson = (statusCode, payload, headers) => sendJson(response, statusCode, payload, headers);
   const readBody = () => readJsonBody(request);
+  const clientKey = resolveClientKey(request);
 
   if (requestUrl.pathname === '/api/health') {
     await handleHealthRequest({
@@ -135,6 +138,7 @@ const server = http.createServer(async (request, response) => {
     await handleMarketLiveRequest({
       method: request.method,
       query: requestUrl.searchParams,
+      clientKey,
       sendJson: sendApiJson,
     });
     return;
@@ -144,6 +148,7 @@ const server = http.createServer(async (request, response) => {
     await handleMarketSearchRequest({
       method: request.method,
       query: requestUrl.searchParams,
+      clientKey,
       sendJson: sendApiJson,
     });
     return;
@@ -153,6 +158,7 @@ const server = http.createServer(async (request, response) => {
     await handleMarketFinancialsRequest({
       method: request.method,
       query: requestUrl.searchParams,
+      clientKey,
       sendJson: sendApiJson,
     });
     return;
@@ -162,6 +168,7 @@ const server = http.createServer(async (request, response) => {
     await handleMarketNewsRequest({
       method: request.method,
       query: requestUrl.searchParams,
+      clientKey,
       sendJson: sendApiJson,
     });
     return;
@@ -171,6 +178,7 @@ const server = http.createServer(async (request, response) => {
     await handleSecurityEnrichRequest({
       method: request.method,
       readBody,
+      clientKey,
       sendJson: sendApiJson,
     });
     return;
@@ -214,6 +222,7 @@ const server = http.createServer(async (request, response) => {
       method: request.method,
       workspaceId: workspaceContext.workspaceId,
       readBody,
+      clientKey,
       sendJson: sendApiJson,
     });
     return;
@@ -223,6 +232,7 @@ const server = http.createServer(async (request, response) => {
     await handlePortfolioIngestRequest({
       method: request.method,
       readBody,
+      clientKey,
       sendJson: sendApiJson,
     });
     return;
