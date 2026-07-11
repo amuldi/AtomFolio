@@ -3,18 +3,28 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  claimPostgresGuestWorkspace,
   deletePostgresPortfolio,
+  ensurePostgresWorkspaceAccess,
   getPostgresImportRecord,
   getPostgresPortfolio,
   getPostgresStoreStatus,
   isPostgresStoreEnabled,
+  listPostgresAiAnalyses,
   listPostgresImportHistory,
   listPostgresPortfolios,
+  upsertPostgresAiAnalysis,
   upsertPostgresImportHistory,
   upsertPostgresPortfolio,
 } from './postgresPortfolioStore.mjs';
 
 export const DEFAULT_WORKSPACE_ID = 'anonymous';
+const GUEST_WORKSPACE_PREFIX = 'guest:';
+const WORKSPACE_ROLE_RANK = {
+  viewer: 1,
+  editor: 2,
+  owner: 3,
+};
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,6 +66,38 @@ function cleanWorkspaceId(workspaceId) {
   return value
     .replace(/[^a-zA-Z0-9_.:-]/g, '-')
     .slice(0, 80) || DEFAULT_WORKSPACE_ID;
+}
+
+function cleanUserId(userId) {
+  return String(userId ?? '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_.:@-]/g, '-')
+    .slice(0, 120);
+}
+
+function cleanUserText(value, maxLength = 180) {
+  return String(value ?? '').trim().slice(0, maxLength);
+}
+
+function sanitizeUserContext(user) {
+  const id = cleanUserId(user?.id);
+
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    email: cleanUserText(user?.email, 254).toLowerCase() || null,
+    displayName: cleanUserText(user?.displayName, 180) || null,
+    authProvider: cleanUserText(user?.authProvider, 80) || null,
+    authSubject: cleanUserText(user?.authSubject, 180) || id,
+  };
+}
+
+export function isGuestWorkspaceId(workspaceId) {
+  const safeWorkspaceId = cleanWorkspaceId(workspaceId);
+  return safeWorkspaceId === DEFAULT_WORKSPACE_ID || safeWorkspaceId.startsWith(GUEST_WORKSPACE_PREFIX);
 }
 
 function safeArray(value) {
@@ -100,6 +142,32 @@ function sanitizeImportRecord(input, existing = null) {
     parserDiagnostics: input?.parserDiagnostics ?? existing?.parserDiagnostics ?? null,
     agentReview: input?.agentReview ?? existing?.agentReview ?? null,
     ingestSource: String(input?.ingestSource ?? existing?.ingestSource ?? 'api').trim() || 'api',
+    createdAt: existing?.createdAt ?? timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+function sanitizeAiAnalysis(input, existing = null) {
+  const timestamp = nowIso();
+  const id = String(input?.id ?? existing?.id ?? '').trim() || makeId('analysis');
+
+  return {
+    id,
+    portfolioId: input?.portfolioId ? String(input.portfolioId) : existing?.portfolioId ?? null,
+    analysisType:
+      String(input?.analysisType ?? existing?.analysisType ?? 'portfolio-summary').trim() ||
+      'portfolio-summary',
+    inputHash: String(input?.inputHash ?? existing?.inputHash ?? '').trim(),
+    model: input?.model ? String(input.model) : existing?.model ?? null,
+    status: ['ready', 'fallback', 'failed'].includes(input?.status)
+      ? input.status
+      : existing?.status ?? 'ready',
+    inputSummary:
+      input?.inputSummary && typeof input.inputSummary === 'object'
+        ? input.inputSummary
+        : existing?.inputSummary ?? {},
+    result:
+      input?.result && typeof input.result === 'object' ? input.result : existing?.result ?? {},
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: timestamp,
   };
@@ -151,6 +219,9 @@ function ensureWorkspace(store, workspaceId) {
     store.workspaces[safeWorkspaceId] = {
       portfolios: [],
       imports: [],
+      analyses: [],
+      members: [],
+      userId: null,
       createdAt: nowIso(),
       updatedAt: nowIso(),
     };
@@ -159,6 +230,293 @@ function ensureWorkspace(store, workspaceId) {
   return {
     workspaceId: safeWorkspaceId,
     workspace: store.workspaces[safeWorkspaceId],
+  };
+}
+
+function hasRequiredRole(role, requiredRole) {
+  const actualRank = WORKSPACE_ROLE_RANK[role] ?? 0;
+  const requiredRank = WORKSPACE_ROLE_RANK[requiredRole] ?? WORKSPACE_ROLE_RANK.viewer;
+  return actualRank >= requiredRank;
+}
+
+function createAccessResult({
+  ok,
+  workspaceId,
+  userId = null,
+  role = null,
+  mode = 'authenticated',
+  statusCode = 200,
+  code = 'workspace-access-ok',
+  error = '',
+}) {
+  return {
+    ok,
+    workspaceId,
+    userId,
+    role,
+    mode,
+    statusCode,
+    code,
+    error,
+  };
+}
+
+function roleFromWorkspace(workspace, userId) {
+  if (!workspace || !userId) {
+    return null;
+  }
+
+  if (workspace.userId === userId) {
+    return 'owner';
+  }
+
+  const member = safeArray(workspace.members).find((entry) => entry?.userId === userId);
+  return member?.role ?? null;
+}
+
+function claimFallbackWorkspace(workspace, user) {
+  workspace.userId = user.id;
+  workspace.members = [
+    {
+      userId: user.id,
+      role: 'owner',
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    },
+    ...safeArray(workspace.members).filter((entry) => entry?.userId !== user.id),
+  ];
+  workspace.updatedAt = nowIso();
+}
+
+function mergeWorkspaceRecords(targetRecords, sourceRecords) {
+  const currentRecords = safeArray(targetRecords);
+  const knownIds = new Set(currentRecords.map((entry) => String(entry?.id ?? '')).filter(Boolean));
+  const copiedRecords = [];
+
+  for (const record of safeArray(sourceRecords)) {
+    const id = String(record?.id ?? '').trim();
+    if (!id || knownIds.has(id)) {
+      continue;
+    }
+
+    knownIds.add(id);
+    copiedRecords.push(record);
+  }
+
+  return {
+    records: [...copiedRecords, ...currentRecords],
+    copiedCount: copiedRecords.length,
+  };
+}
+
+export async function ensureWorkspaceAccess(workspaceId, userContext = null, { requiredRole = 'viewer' } = {}) {
+  const safeWorkspaceId = cleanWorkspaceId(workspaceId);
+  const user = sanitizeUserContext(userContext);
+
+  if (!user) {
+    if (isGuestWorkspaceId(safeWorkspaceId)) {
+      return createAccessResult({
+        ok: true,
+        workspaceId: safeWorkspaceId,
+        role: 'owner',
+        mode: 'guest',
+      });
+    }
+
+    return createAccessResult({
+      ok: false,
+      workspaceId: safeWorkspaceId,
+      mode: 'unauthenticated',
+      statusCode: 401,
+      code: 'workspace-auth-required',
+      error: 'Authentication is required for this workspace.',
+    });
+  }
+
+  if (isPostgresStoreEnabled()) {
+    const access = await ensurePostgresWorkspaceAccess(safeWorkspaceId, user);
+    const role = access.role;
+
+    if (!role) {
+      return createAccessResult({
+        ok: false,
+        workspaceId: safeWorkspaceId,
+        userId: user.id,
+        mode: 'authenticated',
+        statusCode: 403,
+        code: 'workspace-access-denied',
+        error: 'You do not have access to this workspace.',
+      });
+    }
+
+    if (!hasRequiredRole(role, requiredRole)) {
+      return createAccessResult({
+        ok: false,
+        workspaceId: safeWorkspaceId,
+        userId: user.id,
+        role,
+        mode: 'authenticated',
+        statusCode: 403,
+        code: 'workspace-role-required',
+        error: `Workspace role ${requiredRole} is required.`,
+      });
+    }
+
+    return createAccessResult({
+      ok: true,
+      workspaceId: safeWorkspaceId,
+      userId: user.id,
+      role,
+      mode: 'authenticated',
+    });
+  }
+
+  const store = await readStore();
+  const resolved = ensureWorkspace(store, safeWorkspaceId);
+  let role = roleFromWorkspace(resolved.workspace, user.id);
+  const hasOwnerOrMembers = Boolean(resolved.workspace.userId) || safeArray(resolved.workspace.members).length > 0;
+
+  if (!role && !hasOwnerOrMembers) {
+    claimFallbackWorkspace(resolved.workspace, user);
+    role = 'owner';
+    await writeStore(store);
+  }
+
+  if (!role) {
+    return createAccessResult({
+      ok: false,
+      workspaceId: safeWorkspaceId,
+      userId: user.id,
+      mode: 'authenticated',
+      statusCode: 403,
+      code: 'workspace-access-denied',
+      error: 'You do not have access to this workspace.',
+    });
+  }
+
+  if (!hasRequiredRole(role, requiredRole)) {
+    return createAccessResult({
+      ok: false,
+      workspaceId: safeWorkspaceId,
+      userId: user.id,
+      role,
+      mode: 'authenticated',
+      statusCode: 403,
+      code: 'workspace-role-required',
+      error: `Workspace role ${requiredRole} is required.`,
+    });
+  }
+
+  return createAccessResult({
+    ok: true,
+    workspaceId: safeWorkspaceId,
+    userId: user.id,
+    role,
+    mode: 'authenticated',
+  });
+}
+
+export async function claimGuestWorkspaceForUser({
+  guestWorkspaceId,
+  targetWorkspaceId,
+  user,
+  removeGuest = false,
+}) {
+  const safeGuestWorkspaceId = cleanWorkspaceId(guestWorkspaceId);
+  const safeTargetWorkspaceId = cleanWorkspaceId(targetWorkspaceId);
+  const safeUser = sanitizeUserContext(user);
+
+  if (!safeUser) {
+    return {
+      ok: false,
+      statusCode: 401,
+      code: 'workspace-auth-required',
+      error: 'Authentication is required to claim a guest workspace.',
+    };
+  }
+
+  if (!isGuestWorkspaceId(safeGuestWorkspaceId)) {
+    return {
+      ok: false,
+      statusCode: 400,
+      code: 'guest-workspace-required',
+      error: 'A guest workspace id is required.',
+    };
+  }
+
+  if (safeGuestWorkspaceId === safeTargetWorkspaceId) {
+    return {
+      ok: false,
+      statusCode: 400,
+      code: 'target-workspace-required',
+      error: 'Target workspace must be different from the guest workspace.',
+    };
+  }
+
+  const access = await ensureWorkspaceAccess(safeTargetWorkspaceId, safeUser, {
+    requiredRole: 'editor',
+  });
+
+  if (!access.ok) {
+    return access;
+  }
+
+  if (isPostgresStoreEnabled()) {
+    const payload = await claimPostgresGuestWorkspace({
+      guestWorkspaceId: safeGuestWorkspaceId,
+      targetWorkspaceId: access.workspaceId,
+      user: safeUser,
+      removeGuest,
+    });
+
+    return {
+      ok: true,
+      ...payload,
+    };
+  }
+
+  const store = await readStore();
+  const sourceWorkspace = store.workspaces?.[safeGuestWorkspaceId] ?? null;
+  const resolvedTarget = ensureWorkspace(store, access.workspaceId);
+
+  if (!resolvedTarget.workspace.userId) {
+    claimFallbackWorkspace(resolvedTarget.workspace, safeUser);
+  }
+
+  const portfolioMerge = mergeWorkspaceRecords(
+    resolvedTarget.workspace.portfolios,
+    sourceWorkspace?.portfolios,
+  );
+  const importMerge = mergeWorkspaceRecords(
+    resolvedTarget.workspace.imports,
+    sourceWorkspace?.imports,
+  );
+  const analysisMerge = mergeWorkspaceRecords(
+    resolvedTarget.workspace.analyses,
+    sourceWorkspace?.analyses,
+  );
+
+  resolvedTarget.workspace.portfolios = portfolioMerge.records;
+  resolvedTarget.workspace.imports = importMerge.records.slice(0, 100);
+  resolvedTarget.workspace.analyses = analysisMerge.records.slice(0, 200);
+  resolvedTarget.workspace.updatedAt = nowIso();
+
+  if (removeGuest && store.workspaces?.[safeGuestWorkspaceId]) {
+    delete store.workspaces[safeGuestWorkspaceId];
+  }
+
+  await writeStore(store);
+
+  return {
+    ok: true,
+    guestWorkspaceId: safeGuestWorkspaceId,
+    targetWorkspaceId: resolvedTarget.workspaceId,
+    copied: {
+      portfolios: portfolioMerge.copiedCount,
+      imports: importMerge.copiedCount,
+      analyses: analysisMerge.copiedCount,
+      snapshots: 0,
+    },
   };
 }
 
@@ -187,7 +545,11 @@ export function resolveWorkspaceId(requestOrValue) {
     typeof headers.get === 'function'
       ? headers.get('x-atomfolio-workspace-id')
       : headers['x-atomfolio-workspace-id'];
-  const queryWorkspaceId = requestOrValue?.query?.workspaceId;
+  const allowQueryWorkspaceId =
+    process.env.NODE_ENV !== 'production' ||
+    process.env.VERCEL !== '1' ||
+    process.env.ATOMFOLIO_ALLOW_QUERY_WORKSPACE_ID === 'true';
+  const queryWorkspaceId = allowQueryWorkspaceId ? requestOrValue?.query?.workspaceId : null;
 
   return cleanWorkspaceId(headerWorkspaceId ?? queryWorkspaceId);
 }
@@ -344,5 +706,73 @@ export async function saveImportHistory(workspaceId, input) {
   return {
     workspaceId: resolved.workspaceId,
     importRecord,
+  };
+}
+
+export async function listAiAnalyses(workspaceId, filters = {}) {
+  const safeWorkspaceId = cleanWorkspaceId(workspaceId);
+
+  if (isPostgresStoreEnabled()) {
+    return listPostgresAiAnalyses(safeWorkspaceId, filters);
+  }
+
+  const store = await readStore();
+  const resolved = ensureWorkspace(store, safeWorkspaceId);
+  const analyses = safeArray(resolved.workspace.analyses)
+    .filter((analysis) => {
+      if (filters.portfolioId && analysis.portfolioId !== filters.portfolioId) {
+        return false;
+      }
+      if (filters.analysisType && analysis.analysisType !== filters.analysisType) {
+        return false;
+      }
+      if (filters.inputHash && analysis.inputHash !== filters.inputHash) {
+        return false;
+      }
+      return true;
+    })
+    .slice(0, Math.min(100, Math.max(1, Number(filters.limit) || 20)));
+
+  return {
+    workspaceId: resolved.workspaceId,
+    analyses,
+  };
+}
+
+export async function saveAiAnalysis(workspaceId, input) {
+  const safeWorkspaceId = cleanWorkspaceId(workspaceId);
+  let analysis = sanitizeAiAnalysis(input);
+
+  if (isPostgresStoreEnabled()) {
+    const { analyses } = await listPostgresAiAnalyses(safeWorkspaceId, {
+      portfolioId: analysis.portfolioId,
+      analysisType: analysis.analysisType,
+      inputHash: analysis.inputHash,
+      limit: 1,
+    });
+    analysis = sanitizeAiAnalysis(input, analyses[0] ?? null);
+    return upsertPostgresAiAnalysis(safeWorkspaceId, analysis);
+  }
+
+  const store = await readStore();
+  const resolved = ensureWorkspace(store, safeWorkspaceId);
+  const existing = safeArray(resolved.workspace.analyses).find(
+    (entry) =>
+      entry.portfolioId === analysis.portfolioId &&
+      entry.analysisType === analysis.analysisType &&
+      entry.inputHash === analysis.inputHash,
+  );
+
+  analysis = sanitizeAiAnalysis(input, existing);
+  resolved.workspace.analyses = [
+    analysis,
+    ...safeArray(resolved.workspace.analyses).filter((entry) => entry.id !== analysis.id),
+  ].slice(0, 200);
+  resolved.workspace.updatedAt = nowIso();
+  await writeStore(store);
+
+  return {
+    workspaceId: resolved.workspaceId,
+    analysis,
   };
 }

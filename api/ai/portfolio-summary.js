@@ -1,6 +1,4 @@
-import {
-  handlePortfolioItemRequest,
-} from '../../server/apiHandlers.mjs';
+import { handleAiPortfolioSummaryRequest } from '../../server/apiHandlers.mjs';
 import {
   resolveWorkspaceRequestContext,
   sendWorkspaceAccessError,
@@ -9,19 +7,17 @@ import { readJsonBody, sendJson } from '../_utils/http.js';
 
 export default async function handler(request, response) {
   const workspaceContext = await resolveWorkspaceRequestContext(request, {
-    requiredRole: request.method === 'GET' ? 'viewer' : 'editor',
+    requiredRole: 'editor',
   });
-  const portfolioId = String(request.query?.id ?? '').trim();
 
   if (!workspaceContext.ok) {
     sendWorkspaceAccessError(workspaceContext, (status, payload) => sendJson(response, status, payload));
     return;
   }
 
-  await handlePortfolioItemRequest({
+  await handleAiPortfolioSummaryRequest({
     method: request.method,
     workspaceId: workspaceContext.workspaceId,
-    portfolioId,
     readBody: () => readJsonBody(request),
     sendJson: (status, payload) => sendJson(response, status, payload),
   });

@@ -1,8 +1,8 @@
-import { handleHealthRequest } from '../server/apiHandlers.mjs';
-import { sendJson } from './_utils/http.js';
+import { handleMarketFinancialsRequest } from '../../server/apiHandlers.mjs';
+import { sendJson } from '../_utils/http.js';
 
 export default async function handler(request, response) {
-  await handleHealthRequest({
+  await handleMarketFinancialsRequest({
     method: request.method,
     query: request.query,
     sendJson: (status, payload) => sendJson(response, status, payload),

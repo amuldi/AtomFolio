@@ -2,28 +2,27 @@ import http from 'node:http';
 import { createReadStream, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ingestPortfolioText } from './portfolioIngestion.mjs';
 import {
-  enrichSecurityIdentifiers,
-  enrichSecurityItems,
-  getSecurityEnrichmentCacheStats,
-} from './securityEnrichment.mjs';
+  handleHealthRequest,
+  handleAiPortfolioSummaryRequest,
+  handleMarketFinancialsRequest,
+  handleMarketLiveRequest,
+  handleMarketNewsRequest,
+  handleMarketSearchRequest,
+  handlePortfolioCollectionRequest,
+  handlePortfolioImportsRequest,
+  handlePortfolioIngestRequest,
+  handlePortfolioItemRequest,
+  handleSecurityEnrichRequest,
+  handleWorkspaceClaimGuestRequest,
+  handleWorkspaceSessionRequest,
+} from './apiHandlers.mjs';
 import {
-  fetchLiveMarketDataFromProviders,
-  searchMarketSymbolSuggestions,
-} from '../src/lib/liveMarketData.js';
-import { fetchMarketNewsFromProviders } from '../src/lib/marketNews.js';
-import {
-  createPortfolio,
-  deletePortfolio,
-  getPortfolio,
-  getPortfolioStoreStatus,
-  listImportHistory,
-  listPortfolios,
-  resolveWorkspaceId,
-  saveImportHistory,
-  updatePortfolio,
-} from './portfolioStore.mjs';
+  resolveAuthContext,
+  resolveWorkspaceRequestContext,
+  resolveWorkspaceSessionContext,
+  sendWorkspaceAccessError,
+} from './workspaceAccess.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -79,13 +78,13 @@ function readJsonBody(request) {
   });
 }
 
-function getWorkspaceIdFromUrl(request, requestUrl) {
-  return resolveWorkspaceId({
+function getWorkspaceContextFromUrl(request, requestUrl, requiredRole) {
+  return resolveWorkspaceRequestContext({
     headers: request.headers,
     query: {
       workspaceId: requestUrl.searchParams.get('workspaceId'),
     },
-  });
+  }, { requiredRole });
 }
 
 async function serveStaticAsset(requestPath, response) {
@@ -120,238 +119,178 @@ async function serveStaticAsset(requestPath, response) {
 
 const server = http.createServer(async (request, response) => {
   const requestUrl = new URL(request.url ?? '/', `http://${request.headers.host ?? `${host}:${port}`}`);
+  const sendApiJson = (statusCode, payload) => sendJson(response, statusCode, payload);
+  const readBody = () => readJsonBody(request);
 
-  if (request.method === 'GET' && requestUrl.pathname === '/api/health') {
-    sendJson(response, 200, {
-      ok: true,
-      portfolioStore: getPortfolioStoreStatus(),
-      securityEnrichment: getSecurityEnrichmentCacheStats(),
+  if (requestUrl.pathname === '/api/health') {
+    await handleHealthRequest({
+      method: request.method,
+      query: requestUrl.searchParams,
+      sendJson: sendApiJson,
     });
     return;
   }
 
-  if (request.method === 'GET' && requestUrl.pathname === '/api/market/live') {
-    try {
-      const ticker = requestUrl.searchParams.get('ticker') ?? '';
-      const name = requestUrl.searchParams.get('name') ?? '';
-
-      if (!ticker.trim() && !name.trim()) {
-        sendJson(response, 400, { error: 'Provide ticker or name.' });
-        return;
-      }
-
-      const payload = await fetchLiveMarketDataFromProviders({ ticker, name });
-      sendJson(response, 200, payload);
-      return;
-    } catch (error) {
-      sendJson(response, 502, {
-        error: error instanceof Error ? error.message : 'Market data fetch failed.',
-      });
-      return;
-    }
+  if (requestUrl.pathname === '/api/market/live') {
+    await handleMarketLiveRequest({
+      method: request.method,
+      query: requestUrl.searchParams,
+      sendJson: sendApiJson,
+    });
+    return;
   }
 
-  if (request.method === 'GET' && requestUrl.pathname === '/api/market/search') {
-    try {
-      const query = String(
-        requestUrl.searchParams.get('query') ?? requestUrl.searchParams.get('q') ?? '',
-      ).trim();
-      const limit = Math.min(12, Math.max(1, Number(requestUrl.searchParams.get('limit') ?? 10) || 10));
-
-      if (query.length < 2 && !/[가-힣]/.test(query)) {
-        sendJson(response, 200, { suggestions: [] });
-        return;
-      }
-
-      const suggestions = await searchMarketSymbolSuggestions(query, { limit });
-      sendJson(response, 200, { suggestions });
-      return;
-    } catch (error) {
-      sendJson(response, 502, {
-        error: error instanceof Error ? error.message : 'Market search failed.',
-      });
-      return;
-    }
+  if (requestUrl.pathname === '/api/market/search') {
+    await handleMarketSearchRequest({
+      method: request.method,
+      query: requestUrl.searchParams,
+      sendJson: sendApiJson,
+    });
+    return;
   }
 
-  if (request.method === 'GET' && requestUrl.pathname === '/api/market/news') {
-    try {
-      const query = String(requestUrl.searchParams.get('query') ?? '').trim().slice(0, 80);
-      const tickers = String(requestUrl.searchParams.get('tickers') ?? '')
-        .split(',')
-        .map((ticker) => ticker.trim().slice(0, 18))
-        .filter(Boolean)
-        .slice(0, 5);
-      const language = requestUrl.searchParams.get('language') === 'en' ? 'en' : 'ko';
-      const mode = requestUrl.searchParams.get('mode') === 'search' ? 'search' : 'today';
-      const refreshKey = String(
-        requestUrl.searchParams.get('_ts') ?? requestUrl.searchParams.get('refresh') ?? '',
-      ).trim().slice(0, 32);
-      const payload = await fetchMarketNewsFromProviders({ query, tickers, language, mode, refreshKey });
-
-      sendJson(response, 200, payload);
-      return;
-    } catch (error) {
-      sendJson(response, 502, {
-        error: error instanceof Error ? error.message : 'Market news fetch failed.',
-      });
-      return;
-    }
+  if (requestUrl.pathname === '/api/market/financials') {
+    await handleMarketFinancialsRequest({
+      method: request.method,
+      query: requestUrl.searchParams,
+      sendJson: sendApiJson,
+    });
+    return;
   }
 
-  if (request.method === 'POST' && requestUrl.pathname === '/api/securities/enrich') {
-    try {
-      const body = await readJsonBody(request);
-      const force = Boolean(body.force);
-
-      if (Array.isArray(body.items)) {
-        const payload = await enrichSecurityItems(body.items, { force });
-        sendJson(response, 200, payload);
-        return;
-      }
-
-      if (Array.isArray(body.identifiers)) {
-        const payload = await enrichSecurityIdentifiers(body.identifiers, { force });
-        sendJson(response, 200, payload);
-        return;
-      }
-
-      sendJson(response, 400, {
-        error: 'Provide an items array or identifiers array.',
-      });
-      return;
-    } catch (error) {
-      sendJson(response, 500, {
-        error: error instanceof Error ? error.message : 'Security enrichment failed.',
-      });
-      return;
-    }
+  if (requestUrl.pathname === '/api/market/news') {
+    await handleMarketNewsRequest({
+      method: request.method,
+      query: requestUrl.searchParams,
+      sendJson: sendApiJson,
+    });
+    return;
   }
 
-  if (request.method === 'POST' && requestUrl.pathname === '/api/portfolio/ingest') {
-    try {
-      const body = await readJsonBody(request);
-      const fileName = String(body.fileName ?? '').trim() || 'portfolio.csv';
-      const text = String(body.text ?? '');
+  if (requestUrl.pathname === '/api/securities/enrich') {
+    await handleSecurityEnrichRequest({
+      method: request.method,
+      readBody,
+      sendJson: sendApiJson,
+    });
+    return;
+  }
 
-      if (!text.trim()) {
-        sendJson(response, 400, { error: 'Upload text is empty.' });
-        return;
-      }
+  if (requestUrl.pathname === '/api/workspace/session') {
+    await handleWorkspaceSessionRequest({
+      method: request.method,
+      workspaceSession: resolveWorkspaceSessionContext({
+        headers: request.headers,
+        query: {
+          workspaceId: requestUrl.searchParams.get('workspaceId'),
+        },
+      }),
+      sendJson: sendApiJson,
+    });
+    return;
+  }
 
-      const payload = await ingestPortfolioText(fileName, text);
-      sendJson(response, 200, payload);
-      return;
-    } catch (error) {
-      sendJson(response, 500, {
-        error: error instanceof Error ? error.message : 'Portfolio ingestion failed.',
-      });
+  if (requestUrl.pathname === '/api/workspace/claim-guest') {
+    await handleWorkspaceClaimGuestRequest({
+      method: request.method,
+      authContext: resolveAuthContext({
+        headers: request.headers,
+      }),
+      readBody,
+      sendJson: sendApiJson,
+    });
+    return;
+  }
+
+  if (requestUrl.pathname === '/api/ai/portfolio-summary') {
+    const workspaceContext = await getWorkspaceContextFromUrl(request, requestUrl, 'editor');
+
+    if (!workspaceContext.ok) {
+      sendWorkspaceAccessError(workspaceContext, sendApiJson);
       return;
     }
+
+    await handleAiPortfolioSummaryRequest({
+      method: request.method,
+      workspaceId: workspaceContext.workspaceId,
+      readBody,
+      sendJson: sendApiJson,
+    });
+    return;
+  }
+
+  if (requestUrl.pathname === '/api/portfolio/ingest') {
+    await handlePortfolioIngestRequest({
+      method: request.method,
+      readBody,
+      sendJson: sendApiJson,
+    });
+    return;
   }
 
   if (requestUrl.pathname === '/api/portfolio') {
-    const workspaceId = getWorkspaceIdFromUrl(request, requestUrl);
+    const workspaceContext = await getWorkspaceContextFromUrl(
+      request,
+      requestUrl,
+      request.method === 'GET' ? 'viewer' : 'editor',
+    );
 
-    try {
-      if (request.method === 'GET') {
-        sendJson(response, 200, await listPortfolios(workspaceId));
-        return;
-      }
-
-      if (request.method === 'POST') {
-        const body = await readJsonBody(request);
-        sendJson(response, 201, await createPortfolio(workspaceId, body));
-        return;
-      }
-
-      sendJson(response, 405, { error: 'Method not allowed.' });
-      return;
-    } catch (error) {
-      sendJson(response, 500, {
-        error: error instanceof Error ? error.message : 'Portfolio API failed.',
-      });
+    if (!workspaceContext.ok) {
+      sendWorkspaceAccessError(workspaceContext, sendApiJson);
       return;
     }
+
+    await handlePortfolioCollectionRequest({
+      method: request.method,
+      workspaceId: workspaceContext.workspaceId,
+      readBody,
+      sendJson: sendApiJson,
+    });
+    return;
   }
 
   if (requestUrl.pathname === '/api/portfolio/imports') {
-    const workspaceId = getWorkspaceIdFromUrl(request, requestUrl);
+    const workspaceContext = await getWorkspaceContextFromUrl(
+      request,
+      requestUrl,
+      request.method === 'GET' ? 'viewer' : 'editor',
+    );
 
-    try {
-      if (request.method === 'GET') {
-        sendJson(response, 200, await listImportHistory(workspaceId));
-        return;
-      }
-
-      if (request.method === 'POST') {
-        const body = await readJsonBody(request);
-        sendJson(response, 201, await saveImportHistory(workspaceId, body));
-        return;
-      }
-
-      sendJson(response, 405, { error: 'Method not allowed.' });
-      return;
-    } catch (error) {
-      sendJson(response, 500, {
-        error: error instanceof Error ? error.message : 'Import history API failed.',
-      });
+    if (!workspaceContext.ok) {
+      sendWorkspaceAccessError(workspaceContext, sendApiJson);
       return;
     }
+
+    await handlePortfolioImportsRequest({
+      method: request.method,
+      workspaceId: workspaceContext.workspaceId,
+      readBody,
+      sendJson: sendApiJson,
+    });
+    return;
   }
 
   if (requestUrl.pathname.startsWith('/api/portfolio/')) {
-    const workspaceId = getWorkspaceIdFromUrl(request, requestUrl);
+    const workspaceContext = await getWorkspaceContextFromUrl(
+      request,
+      requestUrl,
+      request.method === 'GET' ? 'viewer' : 'editor',
+    );
     const portfolioId = decodeURIComponent(requestUrl.pathname.replace('/api/portfolio/', '')).trim();
 
-    if (!portfolioId) {
-      sendJson(response, 400, { error: 'Portfolio id is required.' });
+    if (!workspaceContext.ok) {
+      sendWorkspaceAccessError(workspaceContext, sendApiJson);
       return;
     }
 
-    try {
-      if (request.method === 'GET') {
-        const portfolio = await getPortfolio(workspaceId, portfolioId);
-        if (!portfolio) {
-          sendJson(response, 404, { error: 'Portfolio not found.' });
-          return;
-        }
-
-        sendJson(response, 200, { workspaceId, portfolio });
-        return;
-      }
-
-      if (request.method === 'PUT' || request.method === 'PATCH') {
-        const body = await readJsonBody(request);
-        const payload = await updatePortfolio(workspaceId, portfolioId, body);
-        if (!payload) {
-          sendJson(response, 404, { error: 'Portfolio not found.' });
-          return;
-        }
-
-        sendJson(response, 200, payload);
-        return;
-      }
-
-      if (request.method === 'DELETE') {
-        const deleted = await deletePortfolio(workspaceId, portfolioId);
-        if (!deleted) {
-          sendJson(response, 404, { error: 'Portfolio not found.' });
-          return;
-        }
-
-        sendJson(response, 200, { workspaceId, deleted: true, id: portfolioId });
-        return;
-      }
-
-      sendJson(response, 405, { error: 'Method not allowed.' });
-      return;
-    } catch (error) {
-      sendJson(response, 500, {
-        error: error instanceof Error ? error.message : 'Portfolio API failed.',
-      });
-      return;
-    }
+    await handlePortfolioItemRequest({
+      method: request.method,
+      workspaceId: workspaceContext.workspaceId,
+      portfolioId,
+      readBody,
+      sendJson: sendApiJson,
+    });
+    return;
   }
 
   if (request.method === 'GET' || request.method === 'HEAD') {
