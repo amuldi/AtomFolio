@@ -218,7 +218,8 @@ flowchart LR
 - `server/portfolioIngestion.mjs`: 서버 측 CSV ingest.
 - `server/portfolioStore.mjs`: 저장소 추상화.
 - `server/postgresPortfolioStore.mjs`: Neon/Postgres 저장소 어댑터.
-- `db/schema.sql`: workspace, portfolio, import history 테이블.
+- `server/workspaceAccess.mjs`: 인증 공급자 연결 전 단계의 workspace 접근 검사.
+- `db/schema.sql`: user, workspace, member, portfolio, import history, AI analysis, snapshot 테이블.
 
 ## 데이터 흐름
 
@@ -419,6 +420,20 @@ ATOMFOLIO_DB_AUTO_MIGRATE="true"
 
 `DATABASE_URL`이 없으면 로컬 개발에서는 JSON 파일 fallback 저장소를 사용합니다.
 
+AI 포트폴리오 요약을 사용하려면 서버 환경 변수에 아래 값을 추가합니다. 이 키는 서버에서만 사용하며, 값이 없으면 앱은 기존 지표 기반 fallback 요약을 표시합니다.
+
+```bash
+OPENAI_API_KEY="sk-..."
+```
+
+로그인 기능을 붙이기 전까지 앱은 `guest:<uuid>` workspace로 저장/복원을 유지합니다. Clerk, Auth0, Vercel OIDC, 자체 미들웨어처럼 검증된 인증 레이어를 붙인 뒤에는 서버가 주입한 사용자 헤더를 신뢰하도록 아래 값을 켤 수 있습니다.
+
+```bash
+ATOMFOLIO_TRUSTED_AUTH_HEADERS="true"
+```
+
+이 값은 인증 미들웨어가 클라이언트가 보낸 `x-atomfolio-user-*` 헤더를 제거하고, 검증된 사용자 정보만 다시 넣는 구조에서만 켭니다. 기본값은 비활성 상태이며, 프로덕션에서는 임의 사용자 헤더를 믿지 않습니다.
+
 Vercel 설정은 [vercel.json](vercel.json)에 있습니다.
 
 ```json
@@ -442,6 +457,9 @@ Vercel 설정은 [vercel.json](vercel.json)에 있습니다.
 | `GET /api/market/live` | 현재가, 변동률, 차트 데이터 조회 |
 | `GET /api/market/search` | 종목 후보 검색 |
 | `GET /api/market/news` | 시장 뉴스 조회 |
+| `POST /api/ai/portfolio-summary` | 정보 제공 목적의 사용자 입력 기반 AI 포트폴리오 요약 |
+| `GET /api/workspace/session` | 현재 요청의 로그인 감지 상태와 workspace 확인 |
+| `POST /api/workspace/claim-guest` | 로그인 사용자 workspace로 게스트 데이터 병합 |
 | `POST /api/portfolio/ingest` | CSV 텍스트를 포트폴리오로 변환 |
 | `GET /api/portfolio` | 저장된 포트폴리오 목록 |
 | `POST /api/portfolio` | 포트폴리오 저장 |
