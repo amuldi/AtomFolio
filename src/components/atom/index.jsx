@@ -18,6 +18,7 @@ export function SketchAtom({
   onPointerEnter,
   onPointerMove,
   onPointerLeave,
+  onKeyboardSelect,
 }) {
   const softOpacity = 0.1 + atom.depth * 0.19 + atom.hoverMix * 0.07;
   const shadowOpacity = 0.18 + atom.depth * 0.3 + atom.hoverMix * 0.08;
@@ -88,10 +89,23 @@ export function SketchAtom({
           cx="0"
           cy="0"
           r={atom.node * 2.85}
+          role="button"
+          tabIndex={0}
+          aria-label={atom.detail ? `${atom.label} ${atom.detail}` : atom.label}
+          aria-pressed={atom.isSelected ? 'true' : 'false'}
           onPointerDown={onPointerDown}
           onPointerEnter={onPointerEnter}
           onPointerMove={onPointerMove}
           onPointerLeave={onPointerLeave}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') {
+              return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            onKeyboardSelect?.(event);
+          }}
         />
       </g>
     </>
@@ -279,6 +293,7 @@ export function AtomSketch({
   onPointerEnter,
   onPointerMove,
   onPointerLeave,
+  onKeyboardSelect,
 }) {
   const phase = pulse * Math.PI * 2;
   const backAtoms = atoms
@@ -380,6 +395,7 @@ export function AtomSketch({
             onPointerEnter={(event) => onPointerEnter(atom.id, event)}
             onPointerMove={(event) => onPointerMove(atom.id, event)}
             onPointerLeave={() => onPointerLeave(atom.id)}
+            onKeyboardSelect={(event) => onKeyboardSelect?.(atom.id, event)}
           />
         ))}
 
@@ -496,6 +512,7 @@ export function AtomSketch({
             onPointerEnter={(event) => onPointerEnter(atom.id, event)}
             onPointerMove={(event) => onPointerMove(atom.id, event)}
             onPointerLeave={() => onPointerLeave(atom.id)}
+            onKeyboardSelect={(event) => onKeyboardSelect?.(atom.id, event)}
           />
         ))}
       </g>

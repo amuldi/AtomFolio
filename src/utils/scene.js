@@ -10,6 +10,7 @@ import {
   LOW_COUNT_LAYOUTS,
   DEFAULT_SCENE_CAMERA,
 } from '../constants/scene.js';
+import { filterPortfolioItemsForAtomScene } from './portfolioItems.js';
 
 export function closedSketchPath(points) {
   const firstMid = midpoint(points[points.length - 1], points[0]);
@@ -273,7 +274,7 @@ export function trackballVector(point) {
 }
 
 export function generateAtomLayout(items) {
-  const visibleItems = items;
+  const visibleItems = filterPortfolioItemsForAtomScene(items);
 
   if (!visibleItems.length) {
     return [];

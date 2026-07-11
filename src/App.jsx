@@ -9,7 +9,7 @@ import {
 } from './lib/portfolioIngestionCore.js';
 import { createPortfolioScorecard } from './lib/portfolioScoring.js';
 import { createPortfolioAnalyticsSummary } from './lib/portfolioAnalyticsSummary.js';
-import { enrichPortfolioItem } from './lib/securityKnowledge.js';
+import { enrichPortfolioItem, resolveExactSecurityReferenceCode } from './lib/securityKnowledge.js';
 import {
   fetchLiveMarketData,
   fetchMarketSymbolSuggestions,
@@ -19,13 +19,35 @@ import {
   formatMarketPrice,
   formatMarketTime,
 } from './lib/liveMarketData.js';
+import { fetchCompanyFinancials } from './lib/companyFinancials.js';
 import { fetchMarketNews, formatNewsTime } from './lib/marketNews.js';
+import { fetchPortfolioAiSummary } from './lib/aiPortfolioSummary.js';
 import {
   createServerPortfolio,
   deleteServerPortfolio,
+  claimGuestWorkspace,
+  fetchWorkspaceSession,
+  getPortfolioWorkspaceId,
+  isGuestPortfolioWorkspaceId,
   listServerPortfolios,
+  readStoredOption,
+  readStoredPosition,
+  setPortfolioWorkspaceId,
+  writeStoredPosition,
+  clearStoredPosition,
   saveServerImportHistory,
 } from './utils/storage.js';
+import { filterPortfolioItemsForAtomScene } from './utils/portfolioItems.js';
+import {
+  AtomSketch as AtomSketchView,
+  PortfolioPreviewAtom as PortfolioPreviewAtomView,
+} from './components/atom/index.jsx';
+import { HeatmapCard as HeatmapCardView } from './components/cards/HeatmapCard.jsx';
+import { PortfolioScoreCard as PortfolioScoreCardView } from './components/cards/PortfolioScoreCard.jsx';
+import {
+  PortfolioAllocationCard as PortfolioAllocationCardView,
+  PortfolioAllocationRing as PortfolioAllocationRingView,
+} from './components/allocation/index.jsx';
 import DigitalTwinPanel from './components/panels/DigitalTwinPanel.jsx';
 
 const VIEWBOX_SIZE = 640;
@@ -167,7 +189,7 @@ const UI_TEXT = {
       stability: '수익 안정성',
     },
     fieldLabels: {
-      stockCode: '종목코드',
+      stockCode: '종목 티커',
       stockName: '종목명',
       accountId: '포트폴리오 ID',
       accountType: '포트폴리오 유형',
@@ -204,6 +226,27 @@ const UI_TEXT = {
     settingsSectionDailySnapshots: '일별 손익 누적',
     settingsDailySnapshotsOn: '켜짐',
     settingsDailySnapshotsOff: '꺼짐',
+    settingsSectionWorkspace: '서비스 계정',
+    workspaceStatusLabel: '상태',
+    workspaceStatusGuest: '게스트',
+    workspaceStatusSignedIn: '로그인됨',
+    workspaceIdLabel: 'Workspace',
+    workspaceUserLabel: '사용자',
+    workspaceSyncLabel: '저장 동기화',
+    workspaceSyncIdle: '대기',
+    workspaceSyncPending: '저장 중',
+    workspaceSyncSaved: '저장됨',
+    workspaceSyncOffline: '서버 저장 실패',
+    workspaceSyncPaused: '자동 저장 꺼짐',
+    workspaceSyncServerMerged: '서버 저장본 반영',
+    workspaceSyncConflict: '로컬 변경 우선',
+    workspaceSyncLocalFailed: '로컬 저장 실패',
+    workspaceClaimButton: '게스트 데이터 이전',
+    workspaceClaimReady: '로그인 후 이전 가능',
+    workspaceClaimPending: '이전 중',
+    workspaceClaimDone: '이전 완료',
+    workspaceClaimEmpty: '이전할 게스트 데이터 없음',
+    workspaceClaimFailed: '이전 실패',
     uploadAria: '투자 데이터 업로드',
     uploadHint: '투자 데이터를 업로드 해주세요',
     uploadDragHint: 'CSV 파일을 여기에 끌어다 놓으세요',
@@ -291,6 +334,27 @@ const UI_TEXT = {
     settingsSectionDailySnapshots: 'Daily P/L History',
     settingsDailySnapshotsOn: 'On',
     settingsDailySnapshotsOff: 'Off',
+    settingsSectionWorkspace: 'Service Account',
+    workspaceStatusLabel: 'Status',
+    workspaceStatusGuest: 'Guest',
+    workspaceStatusSignedIn: 'Signed in',
+    workspaceIdLabel: 'Workspace',
+    workspaceUserLabel: 'User',
+    workspaceSyncLabel: 'Save Sync',
+    workspaceSyncIdle: 'Idle',
+    workspaceSyncPending: 'Saving',
+    workspaceSyncSaved: 'Saved',
+    workspaceSyncOffline: 'Server save failed',
+    workspaceSyncPaused: 'Auto save off',
+    workspaceSyncServerMerged: 'Server copy applied',
+    workspaceSyncConflict: 'Local copy kept',
+    workspaceSyncLocalFailed: 'Local save failed',
+    workspaceClaimButton: 'Move guest data',
+    workspaceClaimReady: 'Available after sign-in',
+    workspaceClaimPending: 'Moving',
+    workspaceClaimDone: 'Moved',
+    workspaceClaimEmpty: 'No guest data to move',
+    workspaceClaimFailed: 'Move failed',
     uploadAria: 'Upload investment data',
     uploadHint: 'Please upload your investment data',
     uploadDragHint: 'Drop CSV files here',
@@ -367,66 +431,6 @@ const ALLOCATION_SEGMENT_PALETTE = [
   },
 ];
 
-function readStoredOption(key, allowed, fallback) {
-  if (typeof window === 'undefined') {
-    return fallback;
-  }
-
-  const value = window.localStorage.getItem(key);
-  return allowed.includes(value) ? value : fallback;
-}
-
-function readStoredPosition(key) {
-  if (!key || typeof window === 'undefined') {
-    return null;
-  }
-
-  try {
-    const rawValue = window.localStorage.getItem(key);
-    if (!rawValue) {
-      return null;
-    }
-
-    const parsed = JSON.parse(rawValue);
-    if (!Number.isFinite(parsed?.x) || !Number.isFinite(parsed?.y)) {
-      return null;
-    }
-
-    return {
-      x: parsed.x,
-      y: parsed.y,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredPosition(key, position) {
-  if (!key || typeof window === 'undefined') {
-    return;
-  }
-
-  if (!Number.isFinite(position?.x) || !Number.isFinite(position?.y)) {
-    return;
-  }
-
-  window.localStorage.setItem(
-    key,
-    JSON.stringify({
-      x: Math.round(position.x),
-      y: Math.round(position.y),
-    }),
-  );
-}
-
-function clearStoredPosition(key) {
-  if (!key || typeof window === 'undefined') {
-    return;
-  }
-
-  window.localStorage.removeItem(key);
-}
-
 function makeDemoItem({
   label,
   detail,
@@ -449,7 +453,7 @@ function makeDemoItem({
     style,
     risk,
     fields: [
-      { label: '종목코드', value: code },
+      { label: '종목 티커', value: code },
       { label: '매수일', value: buyDate },
       { label: '매수가', value: buyPrice },
       { label: '보유수량', value: shares },
@@ -700,9 +704,10 @@ function createPortfolioEntry(fileName, items, entryId) {
 
 function createPortfolioEntryFromPayload(payload, entryId) {
   const timelineItems = Array.isArray(payload?.timelineItems) ? payload.timelineItems : [];
-  const displayItems = Array.isArray(payload?.items)
+  const rawDisplayItems = Array.isArray(payload?.items)
     ? payload.items
     : collapsePortfolioItemsForDisplayShared(timelineItems);
+  const displayItems = collapsePortfolioItemsForDisplayShared(rawDisplayItems);
 
   return {
     id:
@@ -739,6 +744,65 @@ function serializePortfolioEntryForStorage(entry) {
     createdAt: entry?.createdAt ?? null,
     updatedAt: entry?.updatedAt ?? null,
   };
+}
+
+function portfolioEntryTimestamp(entry) {
+  const parsed = Date.parse(entry?.updatedAt ?? entry?.createdAt ?? '');
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function portfolioEntriesEqual(first, second) {
+  try {
+    return (
+      JSON.stringify(serializePortfolioEntryForStorage(first)) ===
+      JSON.stringify(serializePortfolioEntryForStorage(second))
+    );
+  } catch {
+    return false;
+  }
+}
+
+function mergePortfolioEntriesWithServer(localEntries, serverEntries) {
+  const entries = Array.isArray(localEntries) ? localEntries.slice(0, MAX_PORTFOLIOS) : [];
+  const byId = new Map(entries.map((entry, index) => [entry.id, index]));
+  const summary = {
+    addedFromServer: 0,
+    updatedFromServer: 0,
+    localNewer: 0,
+  };
+
+  (Array.isArray(serverEntries) ? serverEntries : []).slice(0, MAX_PORTFOLIOS).forEach((serverEntry) => {
+    if (!serverEntry?.id) {
+      return;
+    }
+
+    const localIndex = byId.get(serverEntry.id);
+    if (!Number.isInteger(localIndex)) {
+      if (entries.length < MAX_PORTFOLIOS) {
+        byId.set(serverEntry.id, entries.length);
+        entries.push(serverEntry);
+        summary.addedFromServer += 1;
+      }
+      return;
+    }
+
+    const localEntry = entries[localIndex];
+    if (portfolioEntriesEqual(localEntry, serverEntry)) {
+      return;
+    }
+
+    const serverTime = portfolioEntryTimestamp(serverEntry);
+    const localTime = portfolioEntryTimestamp(localEntry);
+    if (serverTime >= localTime) {
+      entries[localIndex] = serverEntry;
+      summary.updatedFromServer += 1;
+      return;
+    }
+
+    summary.localNewer += 1;
+  });
+
+  return { entries, summary };
 }
 
 function dateFromDateKey(dateKey) {
@@ -1915,7 +1979,11 @@ function canHighlightGroupField(atom, groupKey) {
 function resolveFieldLabelKey(label) {
   const normalized = normalizeDisplayKey(normalizePortfolioVocabulary(label));
 
-  if (['종목코드', 'ticker', 'symbol', 'stockcode', 'securitycode'].map(normalizeDisplayKey).includes(normalized)) {
+  if (
+    ['종목 티커', '종목코드', '티커', 'ticker', 'symbol', 'stockcode', 'securitycode']
+      .map(normalizeDisplayKey)
+      .includes(normalized)
+  ) {
     return 'stockCode';
   }
 
@@ -2011,6 +2079,31 @@ const CORE_ATOM_INFO_FIELDS = [
 ];
 
 const PENDING_ATOM_INFO_VALUES = new Set(['확인중', 'checking']);
+const HIDDEN_ATOM_INFO_FIELD_KEYS = new Set(['assetClass']);
+const HIDDEN_ATOM_INFO_FIELD_LABELS = [
+  '날짜',
+  '일자',
+  'date',
+  'day',
+  '전일대비',
+  '전일 대비',
+  'previousChange',
+  'changeAmount',
+  '시세시각',
+  '시세 시각',
+  'marketUpdatedAt',
+  'quoteTime',
+  '시세출처',
+  '시세 출처',
+  'marketSource',
+  'quoteSource',
+  '자산군',
+  '자산 구분',
+  '자산구분',
+  '자산 유형',
+  'assetClass',
+  'assetType',
+].map(normalizeDisplayKey);
 
 function atomInfoFallbackValue(language = 'ko') {
   return language === 'en' ? 'Checking' : '확인 중';
@@ -2041,6 +2134,13 @@ function buildAtomInfoFields(atom, language = 'ko') {
     }
 
     const resolvedKey = resolveFieldLabelKey(trimmedLabel);
+    if (
+      HIDDEN_ATOM_INFO_FIELD_KEYS.has(resolvedKey) ||
+      HIDDEN_ATOM_INFO_FIELD_LABELS.includes(normalizeDisplayKey(trimmedLabel))
+    ) {
+      return;
+    }
+
     const dedupeKey = resolvedKey || normalizeDisplayKey(trimmedLabel);
     if (dedupeKey && seenKeys.has(dedupeKey)) {
       return;
@@ -2705,7 +2805,7 @@ function inferHeaderLabels(headerLabels, bodyRows) {
   const candidateDefinitions = [
     {
       key: 'stockCode',
-      label: '종목코드',
+      label: '종목 티커',
       minScore: 0.72,
       score: (values) => matchRatio(values, isTickerLikeValue),
     },
@@ -3476,7 +3576,11 @@ function upsertQuoteField(fields, label, value) {
   }
 
   const nextFields = Array.isArray(fields) ? [...fields] : [];
-  const index = nextFields.findIndex((field) => normalizeDisplayKey(field?.label) === normalizeDisplayKey(label));
+  const targetKey = resolveFieldLabelKey(label) || normalizeDisplayKey(label);
+  const index = nextFields.findIndex((field) => {
+    const fieldKey = resolveFieldLabelKey(field?.label) || normalizeDisplayKey(field?.label);
+    return fieldKey === targetKey;
+  });
   const nextField = { label, value: cleanValue };
 
   if (index >= 0) {
@@ -3499,7 +3603,7 @@ function applyLiveQuoteToPortfolioItem(item, quote) {
   const marketUpdatedAt = formatMarketTime(quote.updatedAt, 'ko');
   let fields = Array.isArray(item?.fields) ? [...item.fields] : [];
 
-  fields = upsertQuoteField(fields, '종목코드', symbol);
+  fields = upsertQuoteField(fields, '종목 티커', symbol);
   fields = upsertQuoteField(fields, '종목명', displayName);
   fields = upsertQuoteField(fields, '현재가', marketPrice);
   fields = upsertQuoteField(fields, '전일대비', formatMarketChange(quote.change));
@@ -3540,12 +3644,14 @@ function applyLiveQuoteToPortfolioItem(item, quote) {
 }
 
 function liveQuoteLookupForItem(item) {
-  const ticker =
+  const rawTicker =
     String(item?.ticker ?? item?.stockCode ?? item?.code ?? '').trim() ||
-    getItemFieldValue(item, ['종목코드', 'ticker', 'stockCode', 'code']);
+    getItemFieldValue(item, ['종목 티커', '종목코드', '티커', 'ticker', 'stockCode', 'code']);
   const name =
     String(item?.stockName ?? item?.name ?? item?.companyName ?? item?.label ?? '').trim() ||
     getItemFieldValue(item, ['종목명', 'stockName', 'name']);
+  const exactTicker = resolveExactSecurityReferenceCode([rawTicker, name]);
+  const ticker = exactTicker || rawTicker;
 
   return { ticker, name, key: normalizeDisplayKey(ticker || name) };
 }
@@ -3557,7 +3663,34 @@ function normalizeMarketSymbolBase(value) {
 function liveQuoteMatchesLookup(quote, lookup) {
   const requestedTicker = normalizeMarketSymbolBase(lookup?.ticker);
   if (!requestedTicker) {
-    return true;
+    const requestedName = normalizeDisplayKey(lookup?.name);
+
+    if (!requestedName) {
+      return true;
+    }
+
+    const exactTicker = normalizeMarketSymbolBase(resolveExactSecurityReferenceCode([lookup?.name]));
+    const returnedSymbol = normalizeMarketSymbolBase(quote?.symbol);
+
+    if (exactTicker) {
+      return returnedSymbol === exactTicker;
+    }
+
+    const quoteIdentifiers = [
+      quote?.symbol,
+      quote?.name,
+      quote?.displayName,
+      quote?.rawName,
+    ]
+      .map(normalizeDisplayKey)
+      .filter(Boolean);
+
+    return quoteIdentifiers.some(
+      (identifier) =>
+        identifier === requestedName ||
+        (identifier.length >= 4 && requestedName.includes(identifier)) ||
+        (requestedName.length >= 4 && identifier.includes(requestedName)),
+    );
   }
 
   const returnedSymbol = normalizeMarketSymbolBase(quote?.symbol);
@@ -3882,8 +4015,19 @@ function trackballVector(point) {
   return new THREE.Vector3(x, y, Math.sqrt(1 - lengthSquared));
 }
 
+function resolveAtomStockDisplayName(item, fallback = 'Stock') {
+  return (
+    String(item?.companyName ?? '').trim() ||
+    String(item?.name ?? '').trim() ||
+    String(item?.stockName ?? '').trim() ||
+    getItemFieldValue(item, ['종목명', 'stockName', 'name', 'companyName']) ||
+    String(item?.label ?? '').trim() ||
+    fallback
+  );
+}
+
 function generateAtomLayout(items) {
-  const visibleItems = items;
+  const visibleItems = filterPortfolioItemsForAtomScene(items);
 
   if (!visibleItems.length) {
     return [];
@@ -3898,7 +4042,7 @@ function generateAtomLayout(items) {
         direction: [0.86, 0.22, 0.46],
         node: 8.7,
         seed: 11,
-        label: visibleItems[0]?.label ?? 'Stock',
+        label: resolveAtomStockDisplayName(visibleItems[0], 'Stock'),
         detail: visibleItems[0]?.detail ?? '',
         sourceItemId: visibleItems[0]?.id ?? '',
         stockName: visibleItems[0]?.stockName ?? visibleItems[0]?.name ?? visibleItems[0]?.label ?? '',
@@ -3934,7 +4078,7 @@ function generateAtomLayout(items) {
         direction: [direction.x, direction.y, direction.z],
         node: 7.9 + noise(1800 + index * 31) * 1.6,
         seed: 11 + index * 23,
-        label: visibleItems[index]?.label ?? `Stock ${index + 1}`,
+        label: resolveAtomStockDisplayName(visibleItems[index], `Stock ${index + 1}`),
         detail: visibleItems[index]?.detail ?? '',
         sourceItemId: visibleItems[index]?.id ?? '',
         stockName: visibleItems[index]?.stockName ?? visibleItems[index]?.name ?? visibleItems[index]?.label ?? '',
@@ -3968,8 +4112,12 @@ function generateAtomLayout(items) {
       direction: [direction.x, direction.y, direction.z],
       node: 7.8 + noise(1800 + index * 31) * 1.7,
       seed: 11 + index * 23,
-      label: visibleItems[index]?.label ?? `Stock ${index + 1}`,
+      label: resolveAtomStockDisplayName(visibleItems[index], `Stock ${index + 1}`),
       detail: visibleItems[index]?.detail ?? '',
+      sourceItemId: visibleItems[index]?.id ?? '',
+      stockName: visibleItems[index]?.stockName ?? visibleItems[index]?.name ?? visibleItems[index]?.label ?? '',
+      stockCode: visibleItems[index]?.stockCode ?? visibleItems[index]?.ticker ?? visibleItems[index]?.code ?? '',
+      ticker: visibleItems[index]?.ticker ?? visibleItems[index]?.stockCode ?? visibleItems[index]?.code ?? '',
       region: visibleItems[index]?.region ?? '',
       sector: visibleItems[index]?.sector ?? '',
       style: visibleItems[index]?.style ?? '',
@@ -5284,7 +5432,7 @@ function createManualPortfolioItem(row, index) {
   const fields = [
     { label: '포트폴리오명', value: accountName },
     { label: '종목명', value: stockName },
-    { label: '종목코드', value: ticker },
+    { label: '종목 티커', value: ticker },
     { label: '날짜', value: recordedAt },
     { label: '매수가', value: buyPrice },
     { label: '보유수량', value: shares },
@@ -5492,6 +5640,107 @@ function formatMoneyMetricForBase(value, sourceCurrency, baseCurrency, fxRates) 
   return formatMarketPriceForBase(numeric, inferCurrencyFromText(trimmed) || sourceCurrency, baseCurrency, fxRates);
 }
 
+function formatFinancialMetricMeta(metric, language = 'ko') {
+  const periodEnd = metric?.periodEnd
+    ? new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'ko-KR', {
+        year: 'numeric',
+        month: 'short',
+      }).format(new Date(metric.periodEnd))
+    : '';
+  const parts = [
+    metric?.period,
+    periodEnd,
+    metric?.form,
+  ].filter(Boolean);
+
+  return parts.join(' · ');
+}
+
+function CompanyFinancialsPreview({ financials, status, error, language }) {
+  const sections = Array.isArray(financials?.sections)
+    ? financials.sections.filter((section) => section?.metrics?.length)
+    : [];
+  const sourceLinks = Array.isArray(financials?.sourceUrls) ? financials.sourceUrls.filter((source) => source?.url) : [];
+  const hasSections = sections.length > 0;
+  const title = language === 'en' ? 'Company Financials' : '기업 재무정보';
+
+  if (status === 'idle') {
+    return null;
+  }
+
+  return (
+    <div className={`tool-drawer__financials is-${status}`}>
+      <div className="tool-drawer__financials-head">
+        <strong>{title}</strong>
+        <small>
+          {status === 'loading'
+            ? language === 'en'
+              ? 'checking filings'
+              : '공시 확인 중'
+            : financials?.updatedAt
+              ? formatMarketTime(financials.updatedAt, language)
+              : ''}
+        </small>
+      </div>
+
+      {status === 'loading' ? (
+        <p className="tool-drawer__financials-message">
+          {language === 'en' ? 'Loading verified financial data.' : '확인 가능한 재무정보를 불러오는 중입니다.'}
+        </p>
+      ) : null}
+
+      {status === 'error' ? (
+        <p className="tool-drawer__financials-message">
+          {error || (language === 'en' ? 'Could not load financial data.' : '재무정보를 가져오지 못했습니다.')}
+        </p>
+      ) : null}
+
+      {status === 'empty' ? (
+        <p className="tool-drawer__financials-message">
+          {language === 'en'
+            ? 'No verifiable company financials are available for this ticker.'
+            : '이 티커에서 확인 가능한 기업 재무정보가 없습니다.'}
+        </p>
+      ) : null}
+
+      {hasSections ? (
+        <div className="tool-drawer__financials-sections">
+          {sections.slice(0, 2).map((section) => (
+            <section key={section.key} className="tool-drawer__financials-section">
+              <div className="tool-drawer__financials-section-head">
+                <strong>{section.title}</strong>
+                <small>{section.source}</small>
+              </div>
+              <dl className="tool-drawer__financials-grid">
+                {section.metrics.slice(0, 8).map((metric) => (
+                  <div key={`${section.key}-${metric.key}`} className="tool-drawer__financial-metric">
+                    <dt>{metric.label}</dt>
+                    <dd>
+                      <strong>{metric.displayValue || '-'}</strong>
+                      <span>{formatFinancialMetricMeta(metric, language)}</span>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          ))}
+        </div>
+      ) : null}
+
+      {sourceLinks.length ? (
+        <div className="tool-drawer__financials-source">
+          <span>{language === 'en' ? 'Source' : '출처'}</span>
+          {sourceLinks.slice(0, 2).map((source) => (
+            <a key={source.url} href={source.url} target="_blank" rel="noreferrer">
+              {source.label}
+            </a>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function MarketLivePreview({
   data,
   status,
@@ -5504,6 +5753,9 @@ function MarketLivePreview({
   showStats = true,
 }) {
   const [hoveredPoint, setHoveredPoint] = useState(null);
+  const [financials, setFinancials] = useState(null);
+  const [financialsStatus, setFinancialsStatus] = useState('idle');
+  const [financialsError, setFinancialsError] = useState('');
   const isLoading = status === 'loading';
   const hasData = Boolean(data);
   const path = hasData ? buildMarketSparklinePath(data.points ?? []) : null;
@@ -5529,6 +5781,52 @@ function MarketLivePreview({
     },
     [path],
   );
+
+  useEffect(() => {
+    const symbol = String(data?.symbol ?? '').trim();
+
+    if (!hasData || !symbol) {
+      setFinancials(null);
+      setFinancialsStatus('idle');
+      setFinancialsError('');
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    setFinancialsStatus('loading');
+    setFinancialsError('');
+
+    fetchCompanyFinancials({
+      ticker: symbol,
+      name: displayName,
+      signal: controller.signal,
+    })
+      .then((payload) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setFinancials(payload);
+        setFinancialsStatus(payload?.status === 'empty' || !payload?.sections?.length ? 'empty' : 'ready');
+      })
+      .catch((financialsFetchError) => {
+        if (controller.signal.aborted || financialsFetchError?.name === 'AbortError') {
+          return;
+        }
+
+        setFinancials(null);
+        setFinancialsStatus('error');
+        setFinancialsError(
+          language === 'en'
+            ? 'Could not load company financials.'
+            : '기업 재무정보를 가져오지 못했습니다.',
+        );
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [data?.symbol, displayName, hasData, language]);
 
   const handleChartOpen = useCallback(() => {
     if (!marketUrl || typeof window === 'undefined') {
@@ -5627,6 +5925,13 @@ function MarketLivePreview({
         ) : null}
       </button>
 
+      <CompanyFinancialsPreview
+        financials={financials}
+        status={financialsStatus}
+        error={financialsError}
+        language={language}
+      />
+
       <div className="tool-drawer__market-foot">
         <span>{hasData ? `${data.source} · ${data.range}/${data.interval}` : error}</span>
         {showApply ? (
@@ -5653,8 +5958,8 @@ function getItemFieldValue(item, labels) {
 
 function resolveHoldingName(item) {
   return (
-    String(item?.stockName ?? item?.name ?? item?.label ?? '').trim() ||
-    getItemFieldValue(item, ['종목명', 'stockName', 'name']) ||
+    String(item?.companyName ?? item?.name ?? item?.stockName ?? item?.label ?? '').trim() ||
+    getItemFieldValue(item, ['종목명', 'stockName', 'name', 'companyName']) ||
     resolveHoldingTicker(item) ||
     '종목'
   );
@@ -5663,7 +5968,7 @@ function resolveHoldingName(item) {
 function resolveHoldingTicker(item) {
   return (
     String(item?.ticker ?? item?.stockCode ?? item?.code ?? '').trim() ||
-    getItemFieldValue(item, ['종목코드', 'ticker', 'code', 'symbol'])
+    getItemFieldValue(item, ['종목 티커', '종목코드', '티커', 'ticker', 'code', 'symbol'])
   );
 }
 
@@ -6448,7 +6753,7 @@ function PortfolioAllocationCard({
       }}
     >
       <div className="allocation-panel__chart-wrap">
-        <PortfolioAllocationRing
+        <PortfolioAllocationRingView
           allocation={allocation}
           language={language}
           hoverInfo={hoverInfo}
@@ -6700,7 +7005,7 @@ function PortfolioAllocationWidget({
           setOpen((current) => !current);
         }}
       >
-        <PortfolioAllocationRing
+        <PortfolioAllocationRingView
           allocation={allocation}
           language={language}
           className="allocation-toggle__icon"
@@ -6710,7 +7015,7 @@ function PortfolioAllocationWidget({
       </button>
 
       {open ? (
-        <PortfolioAllocationCard
+        <PortfolioAllocationCardView
           allocation={allocation}
           language={language}
           onInteract={onInteract}
@@ -6982,6 +7287,9 @@ function ToolSideDrawer({
   const [manualSuggestionLocked, setManualSuggestionLocked] = useState(false);
   const [editingHolding, setEditingHolding] = useState(null);
   const [selectedHolding, setSelectedHolding] = useState(null);
+  const [aiSummary, setAiSummary] = useState(null);
+  const [aiSummaryStatus, setAiSummaryStatus] = useState('idle');
+  const [aiSummaryError, setAiSummaryError] = useState('');
   const manualSuggestionRef = useRef(null);
   const manualDraftRef = useRef({
     stockName: '',
@@ -7007,6 +7315,24 @@ function ToolSideDrawer({
       label: language === 'en' ? 'Overview' : '요약',
       icon: <SketchBurstIcon />,
       available: Boolean(analyticsSummary || heatmap || allocation || scorecard || groupOptions.length),
+    },
+    {
+      key: 'ai',
+      label: language === 'en' ? 'AI Summary' : 'AI 요약',
+      icon: <SketchSpiralIcon />,
+      available: Boolean(activePortfolio?.id || items.length),
+    },
+    {
+      key: 'compare',
+      label: language === 'en' ? 'Compare' : '비교',
+      icon: <SketchAccountStackIcon />,
+      available: portfolioEntries.length >= 2,
+    },
+    {
+      key: 'report',
+      label: language === 'en' ? 'Monthly Report' : '월간 리포트',
+      icon: <SketchBurstIcon />,
+      available: Boolean(analyticsSummary?.profitFlow?.length),
     },
     {
       key: 'twin',
@@ -7531,6 +7857,131 @@ function ToolSideDrawer({
         },
       ]
     : [];
+  const portfolioComparisonRows = useMemo(
+    () =>
+      portfolioEntries.map((entry) => {
+        const entryItems = entry?.items ?? [];
+        const entryTimelineItems = entry?.timelineItems?.length ? entry.timelineItems : entryItems;
+        const entrySummary = createPortfolioAnalyticsSummary(entryItems, entryTimelineItems, {
+          period: 'month',
+          topN: 3,
+          targetBucketWeights: DEFAULT_REBALANCE_TARGET_WEIGHTS,
+        });
+        const entryScorecard = createPortfolioScorecard(entryItems, language, {
+          weightPreset: scoreWeightPreset,
+        });
+        const accountSummary = summarizePortfolioEntryAccounts(entry, language);
+        const topHolding = entrySummary.concentration?.topHoldings?.[0] ?? null;
+
+        return {
+          id: entry.id,
+          fileName: entry.fileName,
+          accountText: accountSummary.accountText,
+          holdingsCount: entrySummary.totals?.holdingsCount ?? entryItems.length,
+          totalReturnRate: entrySummary.totals?.totalReturnRate,
+          totalMarketValue: entrySummary.totals?.totalMarketValue,
+          concentrationLevel: entrySummary.concentration?.concentrationLevel,
+          effectiveHoldings: entrySummary.concentration?.effectiveHoldings,
+          topHolding,
+          score: entryScorecard?.overall,
+        };
+      }),
+    [language, portfolioEntries, scoreWeightPreset],
+  );
+  const latestMonthlyReport = analyticsSummary?.profitFlow?.at(-1) ?? null;
+
+  const loadAiSummary = useCallback(
+    async ({ refresh = false } = {}) => {
+      if (!activePortfolio?.id && !items.length) {
+        setAiSummary(null);
+        setAiSummaryStatus('idle');
+        setAiSummaryError('');
+        return;
+      }
+
+      const controller = new AbortController();
+      setAiSummaryStatus('loading');
+      setAiSummaryError('');
+
+      try {
+        const payload = await fetchPortfolioAiSummary({
+          portfolioId: activePortfolio?.id,
+          portfolio: activePortfolio,
+          language,
+          refresh,
+          signal: controller.signal,
+        });
+
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setAiSummary(payload);
+        setAiSummaryStatus('ready');
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setAiSummary(null);
+        setAiSummaryStatus('error');
+        setAiSummaryError(
+          error instanceof Error
+            ? error.message
+            : language === 'en'
+              ? 'AI summary could not be loaded.'
+              : 'AI 요약을 불러오지 못했습니다.',
+        );
+      }
+
+      return () => controller.abort();
+    },
+    [activePortfolio, items.length, language],
+  );
+
+  useEffect(() => {
+    if (!open || resolvedTool?.key !== 'ai') {
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    setAiSummaryStatus('loading');
+    setAiSummaryError('');
+
+    void fetchPortfolioAiSummary({
+      portfolioId: activePortfolio?.id,
+      portfolio: activePortfolio,
+      language,
+      signal: controller.signal,
+    })
+      .then((payload) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setAiSummary(payload);
+        setAiSummaryStatus('ready');
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setAiSummary(null);
+        setAiSummaryStatus('error');
+        setAiSummaryError(
+          error instanceof Error
+            ? error.message
+            : language === 'en'
+              ? 'AI summary could not be loaded.'
+              : 'AI 요약을 불러오지 못했습니다.',
+        );
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [activePortfolio, language, open, resolvedTool?.key]);
 
   useEffect(() => {
     if (!selectedHolding) {
@@ -7724,7 +8175,7 @@ function ToolSideDrawer({
           ) : null}
         </div>
         <label className="tool-drawer__manual-field">
-          <span>{language === 'en' ? 'Ticker' : '티커/코드'}</span>
+          <span>{language === 'en' ? 'Ticker' : '종목 티커'}</span>
           <input
             type="text"
             value={manualTicker}
@@ -7843,6 +8294,246 @@ function ToolSideDrawer({
     </section>
   );
 
+  const renderAiSummaryPanel = () => {
+    const summary = aiSummary?.summary;
+    const observations = Array.isArray(summary?.keyObservations) ? summary.keyObservations : [];
+    const riskNotes = Array.isArray(summary?.riskNotes) ? summary.riskNotes : [];
+    const dataQualityNotes = Array.isArray(summary?.dataQualityNotes) ? summary.dataQualityNotes : [];
+
+    return (
+      <div className="tool-drawer__ai-panel">
+        <section className="tool-drawer__overview-card tool-drawer__overview-card--wide tool-drawer__ai-card">
+          <div className="tool-drawer__overview-card-head">
+            <p>{language === 'en' ? 'AI Portfolio Summary' : 'AI 포트폴리오 요약'}</p>
+            <button
+              type="button"
+              className="tool-drawer__small-action"
+              disabled={aiSummaryStatus === 'loading'}
+              onClick={() => {
+                onInteract?.();
+                void loadAiSummary({ refresh: true });
+              }}
+            >
+              {language === 'en' ? 'Refresh' : '새로고침'}
+            </button>
+          </div>
+
+          <p className="tool-drawer__ai-disclaimer">
+            {aiSummary?.disclaimer ??
+              (language === 'en'
+                ? 'For informational, user-input-based analysis only. This is not investment advice.'
+                : '정보 제공 목적의 사용자 입력 기반 분석이며 투자 조언이 아닙니다.')}
+          </p>
+
+          {aiSummaryStatus === 'loading' ? (
+            <p className="tool-drawer__empty">
+              {language === 'en' ? 'Preparing summary...' : '요약을 준비하고 있습니다.'}
+            </p>
+          ) : null}
+
+          {aiSummaryStatus === 'error' ? (
+            <p className="tool-drawer__empty">{aiSummaryError}</p>
+          ) : null}
+
+          {summary ? (
+            <div className="tool-drawer__ai-content">
+              <div className="tool-drawer__ai-headline">
+                <strong>{summary.headline}</strong>
+                <span>{summary.overview}</span>
+              </div>
+
+              {observations.length ? (
+                <div className="tool-drawer__ai-list">
+                  {observations.map((item, index) => (
+                    <article key={`${item.title}-${index}`} className="tool-drawer__ai-row">
+                      <span>{item.title}</span>
+                      <strong>{item.detail}</strong>
+                      {item.evidence?.length ? <em>{item.evidence.join(' · ')}</em> : null}
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className="tool-drawer__ai-columns">
+                <section>
+                  <p>{language === 'en' ? 'Risk Checks' : '위험 점검'}</p>
+                  {riskNotes.length ? (
+                    <ul>
+                      {riskNotes.slice(0, 4).map((note, index) => (
+                        <li key={`${note}-${index}`}>{note}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <span>{language === 'en' ? 'No risk notes.' : '표시할 위험 점검 항목이 없습니다.'}</span>
+                  )}
+                </section>
+                <section>
+                  <p>{language === 'en' ? 'Data Quality' : '데이터 품질'}</p>
+                  {dataQualityNotes.length ? (
+                    <ul>
+                      {dataQualityNotes.slice(0, 4).map((note, index) => (
+                        <li key={`${note}-${index}`}>{note}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <span>{language === 'en' ? 'No blocking diagnostics.' : '차단 수준의 진단은 없습니다.'}</span>
+                  )}
+                </section>
+              </div>
+
+              <small className="tool-drawer__ai-meta">
+                {aiSummary.mode === 'deterministic-fallback'
+                  ? language === 'en'
+                    ? 'Metric-based fallback'
+                    : '지표 기반 fallback'
+                  : aiSummary.mode === 'cache-hit'
+                    ? language === 'en'
+                      ? 'Cached summary'
+                      : '저장된 요약'
+                    : 'OpenAI'}
+              </small>
+            </div>
+          ) : null}
+        </section>
+      </div>
+    );
+  };
+
+  const renderComparePanel = () => (
+    <div className="tool-drawer__compare-panel">
+      <section className="tool-drawer__overview-card tool-drawer__overview-card--wide">
+        <p>{language === 'en' ? 'Portfolio Comparison' : '포트폴리오 비교'}</p>
+        <div className="tool-drawer__compare-table">
+          {portfolioComparisonRows.map((row) => {
+            const isActive = row.id === activePortfolioId;
+
+            return (
+              <button
+                key={row.id}
+                type="button"
+                className={`tool-drawer__compare-row${isActive ? ' is-active' : ''}`}
+                onClick={() => {
+                  onInteract?.();
+                  onSelectPortfolio?.(row.id);
+                }}
+              >
+                <span>
+                  <strong title={row.fileName}>{compactFileName(row.fileName, 24)}</strong>
+                  <em>{row.accountText}</em>
+                </span>
+                <span>
+                  <small>{language === 'en' ? 'Return' : '수익률'}</small>
+                  <strong className={getSignedValueToneClass(row.totalReturnRate, 'positive', 'negative')}>
+                    {formatAnalyticsPercentValue(row.totalReturnRate)}
+                  </strong>
+                </span>
+                <span>
+                  <small>{language === 'en' ? 'Score' : '점수'}</small>
+                  <strong>{Number.isFinite(row.score) ? Math.round(row.score) : '-'}</strong>
+                </span>
+                <span>
+                  <small>{language === 'en' ? 'Top' : '상위'}</small>
+                  <strong>
+                    {row.topHolding
+                      ? `${compactLabel(row.topHolding.label, 12)} · ${formatAllocationPercent(row.topHolding.weight)}`
+                      : '-'}
+                  </strong>
+                </span>
+                <span>
+                  <small>{language === 'en' ? 'Concentration' : '집중도'}</small>
+                  <strong>
+                    {concentrationLevelLabel(row.concentrationLevel, language)}
+                    {' · '}
+                    {formatAnalyticsCompactValue(row.effectiveHoldings, language)}
+                  </strong>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+
+  const renderMonthlyReportPanel = () => (
+    <div className="tool-drawer__report-panel">
+      <section className="tool-drawer__overview-card tool-drawer__overview-card--wide">
+        <p>{language === 'en' ? 'Monthly Report Draft' : '월간 리포트 초안'}</p>
+        {latestMonthlyReport ? (
+          <div className="tool-drawer__report-summary">
+            <div className="tool-drawer__analytics-grid">
+              <div className="tool-drawer__analytics-metric">
+                <span>{language === 'en' ? 'Month' : '월'}</span>
+                <strong>{latestMonthlyReport.periodKey}</strong>
+              </div>
+              <div className="tool-drawer__analytics-metric">
+                <span>{language === 'en' ? 'Return' : '수익률'}</span>
+                <strong className={getSignedValueToneClass(latestMonthlyReport.returnRate, 'positive', 'negative')}>
+                  {formatAnalyticsPercentValue(latestMonthlyReport.returnRate)}
+                </strong>
+              </div>
+              <div className="tool-drawer__analytics-metric">
+                <span>{language === 'en' ? 'Rows' : '기록'}</span>
+                <strong>{formatAnalyticsCompactValue(latestMonthlyReport.entriesCount, language)}</strong>
+              </div>
+              <div className="tool-drawer__analytics-metric">
+                <span>{language === 'en' ? 'P/L' : '손익'}</span>
+                <strong className={getSignedValueToneClass(latestMonthlyReport.profitAmount, 'positive', 'negative')}>
+                  {formatAnalyticsSignedValue(latestMonthlyReport.profitAmount, language)}
+                </strong>
+              </div>
+            </div>
+
+            <div className="tool-drawer__report-lines">
+              <p>
+                {language === 'en'
+                  ? 'This draft uses uploaded or manually entered values and existing portfolio calculations.'
+                  : '이 초안은 업로드 또는 직접 입력한 값과 기존 포트폴리오 계산을 기준으로 합니다.'}
+              </p>
+              <ul>
+                <li>
+                  {language === 'en'
+                    ? `Largest visible holding: ${
+                        analyticsTopHolding
+                          ? `${analyticsTopHolding.label} (${formatAllocationPercent(analyticsTopHolding.weight)})`
+                          : '-'
+                      }`
+                    : `가장 큰 표시 비중: ${
+                        analyticsTopHolding
+                          ? `${analyticsTopHolding.label} (${formatAllocationPercent(analyticsTopHolding.weight)})`
+                          : '-'
+                      }`}
+                </li>
+                <li>
+                  {language === 'en'
+                    ? `Concentration: ${concentrationLevelLabel(
+                        analyticsSummary?.concentration?.concentrationLevel,
+                        language,
+                      )}`
+                    : `집중도: ${concentrationLevelLabel(
+                        analyticsSummary?.concentration?.concentrationLevel,
+                        language,
+                      )}`}
+                </li>
+                <li>
+                  {language === 'en'
+                    ? 'Next check: confirm data freshness, missing prices, and large allocation gaps.'
+                    : '다음 점검: 데이터 최신성, 누락 시세, 큰 비중 차이를 확인하세요.'}
+                </li>
+              </ul>
+            </div>
+          </div>
+        ) : (
+          <p className="tool-drawer__empty">
+            {language === 'en'
+              ? 'Monthly timeline data is not available yet.'
+              : '월간 시계열 데이터가 아직 없습니다.'}
+          </p>
+        )}
+      </section>
+    </div>
+  );
+
   const renderActivePanel = () => {
     if (!resolvedTool) {
       return null;
@@ -7895,6 +8586,7 @@ function ToolSideDrawer({
                 const entryReviewStatus = resolveEntryReviewStatus(entry);
                 const entryReviewLabel = reviewStatusLabel(text, entryReviewStatus);
                 const accountSummary = summarizePortfolioEntryAccounts(entry, language);
+                const reviewPreview = buildUploadReviewPreview(entry);
                 const isActive = entry.id === activePortfolioId;
 
                 return (
@@ -7936,6 +8628,20 @@ function ToolSideDrawer({
                     >
                       ×
                     </button>
+                    {reviewPreview ? (
+                      <div className="tool-drawer__account-review">
+                        <strong>{reviewPreview.summary || entryReviewLabel}</strong>
+                        {reviewPreview.warnings.length ? (
+                          <ul>
+                            {reviewPreview.warnings.map((warning, warningIndex) => (
+                              <li key={`${warning.code ?? warning.message}-${warningIndex}`}>
+                                {warning.message}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </article>
                 );
               })}
@@ -8130,7 +8836,7 @@ function ToolSideDrawer({
           {heatmap ? (
             <section className="tool-drawer__overview-card tool-drawer__overview-card--wide">
               <p>{language === 'en' ? 'Daily P/L' : '날짜별 손익률'}</p>
-              <HeatmapCard
+              <HeatmapCardView
                 heatmap={heatmap}
                 language={language}
                 className="heatmap-panel heatmap-panel--drawer"
@@ -8182,7 +8888,7 @@ function ToolSideDrawer({
                   {scorecard ? (
                     <div className="tool-drawer__score-chart-block">
                       <span>{language === 'en' ? 'Current portfolio score' : '현재 포트폴리오 점수'}</span>
-                      <PortfolioScoreCard
+                      <PortfolioScoreCardView
                         scorecard={scorecard}
                         axes={scoreAxes}
                         language={language}
@@ -8194,7 +8900,7 @@ function ToolSideDrawer({
                   {overallScorecard ? (
                     <div className="tool-drawer__score-chart-block">
                       <span>{language === 'en' ? 'Total portfolio score' : '전체 포트폴리오 점수'}</span>
-                      <PortfolioScoreCard
+                      <PortfolioScoreCardView
                         scorecard={overallScorecard}
                         axes={scoreAxes}
                         language={language}
@@ -8209,7 +8915,7 @@ function ToolSideDrawer({
             {allocation ? (
               <section className="tool-drawer__overview-card">
                 <p>{language === 'en' ? 'Portfolio Mix' : '포트폴리오 비중'}</p>
-                <PortfolioAllocationCard
+                <PortfolioAllocationCardView
                   allocation={allocation}
                   language={language}
                   className="allocation-panel allocation-panel--drawer"
@@ -8220,6 +8926,18 @@ function ToolSideDrawer({
           </div>
         </div>
       );
+    }
+
+    if (resolvedTool.key === 'ai') {
+      return renderAiSummaryPanel();
+    }
+
+    if (resolvedTool.key === 'compare') {
+      return renderComparePanel();
+    }
+
+    if (resolvedTool.key === 'report') {
+      return renderMonthlyReportPanel();
     }
 
     if (resolvedTool.key === 'twin') {
@@ -8738,7 +9456,7 @@ function FloatingHeatmapDock({
       </button>
 
       {!iconOnly ? (
-        <HeatmapCard
+        <HeatmapCardView
           heatmap={heatmap}
           language={language}
           className={`heatmap-panel heatmap-panel--floating${expanded ? ' is-open' : ''}`}
@@ -9434,7 +10152,7 @@ function FloatingRadarDock({
         <SketchRadarIcon scorecard={scorecard} axes={axes} />
       </button>
 
-      <PortfolioScoreCard
+      <PortfolioScoreCardView
         scorecard={scorecard}
         axes={axes}
         language={language}
@@ -9756,6 +10474,7 @@ export default function App() {
   const restoredPortfolioState = restoredPortfolioStateRef.current;
   const portfolioLastSavedAtRef = useRef(restoredPortfolioState.savedAt);
   const [portfolioEntries, setPortfolioEntries] = useState(() => restoredPortfolioState.entries);
+  const portfolioEntriesRef = useRef(restoredPortfolioState.entries);
   const [activePortfolioId, setActivePortfolioId] = useState(
     () => restoredPortfolioState.activePortfolioId,
   );
@@ -9797,6 +10516,7 @@ export default function App() {
 
     return readStoredOption(STORAGE_KEYS.language, LANGUAGE_OPTIONS, 'ko');
   });
+  const text = textFor(language);
   const [baseCurrency, setBaseCurrency] = useState(() =>
     readStoredOption(STORAGE_KEYS.baseCurrency, BASE_CURRENCY_OPTIONS, 'KRW'),
   );
@@ -9811,7 +10531,7 @@ export default function App() {
     readStoredOption(STORAGE_KEYS.dailySnapshots, SETTING_TOGGLE_OPTIONS, 'on'),
   );
   const [, setPortfolioSavedAt] = useState(() => restoredPortfolioState.savedAt);
-  const [, setPortfolioSyncStatus] = useState('idle');
+  const [portfolioSyncStatus, setPortfolioSyncStatus] = useState('idle');
   const [assetClassMode, setAssetClassMode] = useState(() =>
     readStoredOption(STORAGE_KEYS.assetClassMode, ASSET_CLASS_MODE_OPTIONS, 'auto'),
   );
@@ -9821,6 +10541,12 @@ export default function App() {
   const [scoreWeightPreset, setScoreWeightPreset] = useState(() =>
     readStoredOption(STORAGE_KEYS.scoreWeightPreset, SCORE_WEIGHT_PRESET_OPTIONS, 'balanced'),
   );
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState(() => getPortfolioWorkspaceId());
+  const [workspaceSession, setWorkspaceSession] = useState(null);
+  const [workspaceClaimStatus, setWorkspaceClaimStatus] = useState('idle');
+  const [workspaceClaimError, setWorkspaceClaimError] = useState('');
+
+  portfolioEntriesRef.current = portfolioEntries;
 
   const noteInteraction = () => {
     interactionRef.current.lastInputAt = performance.now();
@@ -9890,6 +10616,74 @@ export default function App() {
     noteInteraction();
     fileInputRef.current?.click();
   };
+
+  const loadWorkspaceSession = useCallback(async () => {
+    try {
+      const workspaceId = getPortfolioWorkspaceId();
+      const session = await fetchWorkspaceSession(workspaceId);
+      setCurrentWorkspaceId(workspaceId);
+      setWorkspaceSession(session);
+    } catch {
+      setCurrentWorkspaceId(getPortfolioWorkspaceId());
+      setWorkspaceSession(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadWorkspaceSession();
+  }, [loadWorkspaceSession]);
+
+  const handleClaimGuestWorkspace = useCallback(async () => {
+    const guestWorkspaceId = getPortfolioWorkspaceId();
+
+    if (!isGuestPortfolioWorkspaceId(guestWorkspaceId)) {
+      setWorkspaceClaimStatus('done');
+      setWorkspaceClaimError('');
+      return;
+    }
+
+    setWorkspaceClaimStatus('pending');
+    setWorkspaceClaimError('');
+
+    try {
+      const payload = await claimGuestWorkspace({ guestWorkspaceId });
+      if (!payload?.ok || !payload?.targetWorkspaceId) {
+        throw new Error(payload?.error ?? text.workspaceClaimFailed);
+      }
+
+      const nextWorkspaceId = setPortfolioWorkspaceId(payload.targetWorkspaceId);
+      setCurrentWorkspaceId(nextWorkspaceId);
+
+      const safeEntries = Array.isArray(portfolioEntries)
+        ? portfolioEntries
+            .slice(0, MAX_PORTFOLIOS)
+            .map(serializePortfolioEntryForStorage)
+            .filter((entry) => entry.id)
+        : [];
+
+      if (safeEntries.length) {
+        const syncResults = await Promise.allSettled(
+          safeEntries.map((entry) => createServerPortfolio(entry, nextWorkspaceId)),
+        );
+        setPortfolioSyncStatus(
+          syncResults.every((result) => result.status === 'fulfilled') ? 'saved' : 'offline',
+        );
+      }
+
+      const copiedCount =
+        Number(payload?.copied?.portfolios ?? 0) +
+        Number(payload?.copied?.imports ?? 0) +
+        Number(payload?.copied?.analyses ?? 0) +
+        Number(payload?.copied?.snapshots ?? 0);
+      setWorkspaceClaimStatus(copiedCount > 0 || safeEntries.length ? 'done' : 'empty');
+      await loadWorkspaceSession();
+    } catch (error) {
+      setWorkspaceClaimStatus('failed');
+      setWorkspaceClaimError(
+        error instanceof Error && error.message ? error.message : text.workspaceClaimFailed,
+      );
+    }
+  }, [loadWorkspaceSession, portfolioEntries, text.workspaceClaimFailed]);
 
   const showPortfolioError = (message) => {
     setPortfolioErrorClosing(false);
@@ -9967,19 +10761,27 @@ export default function App() {
         const enrichedItems = await enrichPortfolioItemsWithLiveQuotes(seedItems);
 
         setPortfolioEntries((current) =>
-          current.map((entry) =>
-            entry.id === entryId
-              ? {
-                  ...entry,
-                  items: mergePortfolioItemUpdates(entry.items, enrichedItems),
-                  timelineItems:
-                    Array.isArray(entry.timelineItems) &&
-                    entry.timelineItems.length === enrichedItems.length
-                      ? mergePortfolioItemUpdates(entry.timelineItems, enrichedItems)
-                      : entry.timelineItems,
-                }
-              : entry,
-          ),
+          current.map((entry) => {
+            if (entry.id !== entryId) {
+              return entry;
+            }
+
+            const hasMatchingTimeline =
+              Array.isArray(entry.timelineItems) &&
+              entry.timelineItems.length === enrichedItems.length;
+            const timelineItems = hasMatchingTimeline
+              ? mergePortfolioItemUpdates(entry.timelineItems, enrichedItems)
+              : entry.timelineItems;
+            const displaySource = hasMatchingTimeline
+              ? timelineItems
+              : mergePortfolioItemUpdates(entry.items, enrichedItems);
+
+            return {
+              ...entry,
+              items: collapsePortfolioItemsForDisplayShared(displaySource),
+              timelineItems,
+            };
+          }),
         );
       } catch {
         // Keep uploaded portfolio data when live quote normalization fails.
@@ -10629,12 +11431,35 @@ export default function App() {
           return;
         }
 
-        setPortfolioEntries((current) => (current.length ? current : serverEntries));
-        setActivePortfolioId((current) => current ?? serverEntries[0]?.id ?? null);
-        setShowGroupDock(true);
-        setShowScoreDock(true);
+        const { entries: mergedEntries, summary } = mergePortfolioEntriesWithServer(
+          portfolioEntriesRef.current,
+          serverEntries,
+        );
+        const hasServerUpdates = summary.addedFromServer > 0 || summary.updatedFromServer > 0;
+
+        if (hasServerUpdates) {
+          portfolioEntriesRef.current = mergedEntries;
+          setPortfolioEntries(mergedEntries);
+          setActivePortfolioId((current) =>
+            mergedEntries.some((entry) => entry.id === current)
+              ? current
+              : mergedEntries[0]?.id ?? null,
+          );
+          setPortfolioSyncStatus('server-merged');
+          setShowGroupDock(true);
+          setShowScoreDock(true);
+          return;
+        }
+
+        if (summary.localNewer > 0) {
+          setPortfolioSyncStatus('conflict');
+        }
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) {
+          setPortfolioSyncStatus('offline');
+        }
+      });
 
     return () => {
       cancelled = true;
@@ -10655,6 +11480,7 @@ export default function App() {
     }
 
     const persistedAt = writeStoredPortfolioState(portfolioEntries, activePortfolioId);
+    const localPersistFailed = portfolioEntries.length > 0 && !persistedAt;
     portfolioLastSavedAtRef.current = persistedAt;
     setPortfolioSavedAt(persistedAt);
 
@@ -10670,7 +11496,7 @@ export default function App() {
       return undefined;
     }
 
-    setPortfolioSyncStatus('pending');
+    setPortfolioSyncStatus(localPersistFailed ? 'local-failed' : 'pending');
     portfolioSyncTimerRef.current = window.setTimeout(() => {
       void Promise.allSettled(safeEntries.map((entry) => createServerPortfolio(entry)))
         .then((results) => {
@@ -10679,7 +11505,12 @@ export default function App() {
           }
 
           const allSaved = results.every((result) => result.status === 'fulfilled');
-          setPortfolioSyncStatus(allSaved ? 'saved' : 'offline');
+          setPortfolioSyncStatus(allSaved ? (localPersistFailed ? 'local-failed' : 'saved') : 'offline');
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setPortfolioSyncStatus('offline');
+          }
         });
     }, SERVER_SYNC_DEBOUNCE_MS);
 
@@ -10984,6 +11815,19 @@ export default function App() {
       document.body.style.cursor = '';
     }
   };
+
+  const handleNodeKeyboardSelect = useCallback((atomId) => {
+    const atom = atomsRef.current.find((item) => item.id === atomId);
+
+    if (!atom) {
+      return;
+    }
+
+    noteInteraction();
+    setHoverInfo(null);
+    setActiveGroupKey(null);
+    setSelectedAtomId((current) => (current === atomId ? null : atomId));
+  }, []);
 
   const handlePointerMove = () => {
     noteInteraction();
@@ -11601,7 +12445,6 @@ export default function App() {
   const hasPortfolioItems = portfolioItems.length > 0;
   const showPortfolioChrome = hasPortfolio;
   const showToolDrawer = true;
-  const text = textFor(language);
   const hoveredFileEntry = useMemo(
     () => portfolioEntries.find((entry) => entry.id === hoveredFileEntryId) ?? null,
     [hoveredFileEntryId, portfolioEntries],
@@ -11695,6 +12538,40 @@ export default function App() {
       })),
     },
   ];
+  const currentWorkspaceIsGuest = isGuestPortfolioWorkspaceId(currentWorkspaceId);
+  const workspaceAuthenticated = Boolean(workspaceSession?.authenticated);
+  const workspaceUserLabel =
+    workspaceSession?.user?.displayName ||
+    workspaceSession?.user?.email ||
+    workspaceSession?.user?.id ||
+    '-';
+  const workspaceClaimDisabled =
+    !workspaceAuthenticated ||
+    !currentWorkspaceIsGuest ||
+    workspaceClaimStatus === 'pending';
+  const workspaceClaimStatusText =
+    workspaceClaimStatus === 'pending'
+      ? text.workspaceClaimPending
+      : workspaceClaimStatus === 'done'
+        ? text.workspaceClaimDone
+        : workspaceClaimStatus === 'empty'
+          ? text.workspaceClaimEmpty
+          : workspaceClaimStatus === 'failed'
+            ? workspaceClaimError || text.workspaceClaimFailed
+            : workspaceAuthenticated && currentWorkspaceIsGuest
+              ? text.workspaceClaimButton
+              : text.workspaceClaimReady;
+  const portfolioSyncStatusText =
+    {
+      idle: text.workspaceSyncIdle,
+      pending: text.workspaceSyncPending,
+      saved: text.workspaceSyncSaved,
+      offline: text.workspaceSyncOffline,
+      paused: text.workspaceSyncPaused,
+      'server-merged': text.workspaceSyncServerMerged,
+      conflict: text.workspaceSyncConflict,
+      'local-failed': text.workspaceSyncLocalFailed,
+    }[portfolioSyncStatus] ?? text.workspaceSyncIdle;
   const contributionPreview = useMemo(
     () => createContributionPreview(portfolioItems),
     [portfolioItems],
@@ -12009,6 +12886,49 @@ export default function App() {
                     </div>
                   </section>
                 ))}
+                <section className="settings-panel__section settings-panel__section--workspace">
+                  <p className="settings-panel__title">{text.settingsSectionWorkspace}</p>
+                  <dl className="settings-workspace">
+                    <div className="settings-workspace__row">
+                      <dt>{text.workspaceStatusLabel}</dt>
+                      <dd>{workspaceAuthenticated ? text.workspaceStatusSignedIn : text.workspaceStatusGuest}</dd>
+                    </div>
+                    <div className="settings-workspace__row">
+                      <dt>{text.workspaceIdLabel}</dt>
+                      <dd title={currentWorkspaceId}>{currentWorkspaceId}</dd>
+                    </div>
+                    <div className="settings-workspace__row">
+                      <dt>{text.workspaceSyncLabel}</dt>
+                      <dd>{portfolioSyncStatusText}</dd>
+                    </div>
+                    {workspaceAuthenticated ? (
+                      <div className="settings-workspace__row">
+                        <dt>{text.workspaceUserLabel}</dt>
+                        <dd title={workspaceUserLabel}>{workspaceUserLabel}</dd>
+                      </div>
+                    ) : null}
+                  </dl>
+                  <button
+                    type="button"
+                    className="settings-action"
+                    disabled={workspaceClaimDisabled}
+                    onClick={() => {
+                      noteInteraction();
+                      void handleClaimGuestWorkspace();
+                    }}
+                  >
+                    {workspaceClaimStatus === 'pending'
+                      ? text.workspaceClaimPending
+                      : text.workspaceClaimButton}
+                  </button>
+                  <p
+                    className={`settings-workspace__hint${
+                      workspaceClaimStatus === 'failed' ? ' is-error' : ''
+                    }`}
+                  >
+                    {workspaceClaimStatusText}
+                  </p>
+                </section>
               </div>
             ) : null}
           </div>
@@ -12036,7 +12956,7 @@ export default function App() {
           <div className="stage-reveal">
               <div className={`stage-breath${!hasPortfolioItems ? ' is-intro' : ''}`}>
               <div className="stage-camera">
-                <AtomSketch
+                <AtomSketchView
                   atoms={atoms}
                   pulse={pulse}
                   centerMotion={centerMotion}
@@ -12051,13 +12971,14 @@ export default function App() {
                   onPointerEnter={handleNodeEnter}
                   onPointerMove={handleNodeMove}
                   onPointerLeave={handleNodeLeave}
+                  onKeyboardSelect={handleNodeKeyboardSelect}
                 />
                 {portfolioEntries.length ? (
                   <div className="portfolio-preview-layer">
                     {portfolioEntries
                       .slice(0, PORTFOLIO_PREVIEW_SLOTS.length)
                       .map((entry, index) => (
-                        <PortfolioPreviewAtom
+                        <PortfolioPreviewAtomView
                           key={entry.id}
                           entry={entry}
                           slot={PORTFOLIO_PREVIEW_SLOTS[index]}

@@ -95,7 +95,11 @@ export function canHighlightGroupField(atom, groupKey) {
 export function resolveFieldLabelKey(label) {
   const normalized = normalizeDisplayKey(normalizePortfolioVocabulary(label));
 
-  if (['종목코드', 'ticker', 'symbol', 'stockcode', 'securitycode'].map(normalizeDisplayKey).includes(normalized)) {
+  if (
+    ['종목 티커', '종목코드', '티커', 'ticker', 'symbol', 'stockcode', 'securitycode']
+      .map(normalizeDisplayKey)
+      .includes(normalized)
+  ) {
     return 'stockCode';
   }
 
@@ -197,6 +201,31 @@ const CORE_ATOM_INFO_FIELDS = [
   { key: 'style', label: '투자 스타일' },
   { key: 'risk', label: '위험 등급' },
 ];
+const HIDDEN_ATOM_INFO_FIELD_KEYS = new Set(['assetClass']);
+const HIDDEN_ATOM_INFO_FIELD_LABELS = [
+  '날짜',
+  '일자',
+  'date',
+  'day',
+  '전일대비',
+  '전일 대비',
+  'previousChange',
+  'changeAmount',
+  '시세시각',
+  '시세 시각',
+  'marketUpdatedAt',
+  'quoteTime',
+  '시세출처',
+  '시세 출처',
+  'marketSource',
+  'quoteSource',
+  '자산군',
+  '자산 구분',
+  '자산구분',
+  '자산 유형',
+  'assetClass',
+  'assetType',
+].map(normalizeDisplayKey);
 
 export function atomInfoFallbackValue(language = 'ko') {
   return language === 'en' ? 'Checking' : '확인 중';
@@ -222,6 +251,13 @@ export function buildAtomInfoFields(atom, language = 'ko') {
     }
 
     const resolvedKey = resolveFieldLabelKey(trimmedLabel);
+    if (
+      HIDDEN_ATOM_INFO_FIELD_KEYS.has(resolvedKey) ||
+      HIDDEN_ATOM_INFO_FIELD_LABELS.includes(normalizeDisplayKey(trimmedLabel))
+    ) {
+      return;
+    }
+
     const dedupeKey = resolvedKey || normalizeDisplayKey(trimmedLabel);
     if (dedupeKey && seenKeys.has(dedupeKey)) {
       return;

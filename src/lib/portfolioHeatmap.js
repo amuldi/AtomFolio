@@ -185,7 +185,7 @@ function findFallbackDateEntry(fields) {
   return (fields ?? []).find((field) => {
     const label = normalizeText(field.label);
     if (
-      /(stockcode|ticker|symbol|종목코드|stockname|securityname|assetname|productname|종목명|자산명|상품명|account|계좌|return|손익|수익률|buyprice|currentprice|price|매수가|현재가|가격|shares|수량)/.test(
+      /(stockcode|ticker|symbol|종목코드|종목티커|티커|stockname|securityname|assetname|productname|종목명|자산명|상품명|account|계좌|return|손익|수익률|buyprice|currentprice|price|매수가|현재가|가격|shares|수량)/.test(
         label,
       )
     ) {
@@ -484,5 +484,15 @@ export function createPortfolioHeatmap(items, options = {}) {
     maxPositive,
     maxNegative,
     valueMode: percentCount >= absoluteCount ? 'percent' : 'absolute',
+    warnings:
+      percentCount > 0 && absoluteCount > 0
+        ? [
+            {
+              code: 'mixed-return-and-pnl-values',
+              severity: 'info',
+              message: '수익률과 절대 손익 값이 함께 감지되어 날짜별 합산 해석에 주의가 필요합니다.',
+            },
+          ]
+        : [],
   };
 }

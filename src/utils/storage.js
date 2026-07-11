@@ -59,6 +59,7 @@ export function clearStoredPosition(key) {
 }
 
 export const ANONYMOUS_WORKSPACE_ID = 'anonymous';
+export const GUEST_WORKSPACE_PREFIX = 'guest:';
 
 const PORTFOLIO_WORKSPACE_STORAGE_KEY = 'atomfolio-workspace-id';
 
@@ -98,6 +99,27 @@ export function getPortfolioWorkspaceId() {
   } catch {
     return ANONYMOUS_WORKSPACE_ID;
   }
+}
+
+export function setPortfolioWorkspaceId(workspaceId) {
+  if (typeof window === 'undefined') {
+    return ANONYMOUS_WORKSPACE_ID;
+  }
+
+  const nextWorkspaceId = cleanWorkspaceId(workspaceId) || ANONYMOUS_WORKSPACE_ID;
+
+  try {
+    window.localStorage.setItem(PORTFOLIO_WORKSPACE_STORAGE_KEY, nextWorkspaceId);
+  } catch {
+    return ANONYMOUS_WORKSPACE_ID;
+  }
+
+  return nextWorkspaceId;
+}
+
+export function isGuestPortfolioWorkspaceId(workspaceId) {
+  const safeWorkspaceId = cleanWorkspaceId(workspaceId);
+  return safeWorkspaceId === ANONYMOUS_WORKSPACE_ID || safeWorkspaceId.startsWith(GUEST_WORKSPACE_PREFIX);
 }
 
 async function fetchJson(url, options = {}) {
@@ -159,5 +181,25 @@ export async function saveServerImportHistory(importRecord, workspaceId = getPor
     method: 'POST',
     workspaceId,
     body: JSON.stringify(importRecord ?? {}),
+  });
+}
+
+export async function fetchWorkspaceSession(workspaceId = getPortfolioWorkspaceId()) {
+  return fetchJson('/api/workspace/session', { workspaceId });
+}
+
+export async function claimGuestWorkspace({
+  guestWorkspaceId = getPortfolioWorkspaceId(),
+  targetWorkspaceId = '',
+  removeGuest = false,
+} = {}) {
+  return fetchJson('/api/workspace/claim-guest', {
+    method: 'POST',
+    workspaceId: guestWorkspaceId,
+    body: JSON.stringify({
+      guestWorkspaceId,
+      targetWorkspaceId,
+      removeGuest,
+    }),
   });
 }

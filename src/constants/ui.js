@@ -89,7 +89,7 @@ export const UI_TEXT = {
       stability: '수익 안정성',
     },
     fieldLabels: {
-      stockCode: '종목코드',
+      stockCode: '종목 티커',
       stockName: '종목명',
       accountId: '포트폴리오 ID',
       accountType: '포트폴리오 유형',

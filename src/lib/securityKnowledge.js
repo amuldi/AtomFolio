@@ -232,8 +232,8 @@ const SECURITY_REFERENCE = [
   {
     label: 'AAPL',
     code: 'AAPL',
-    companyName: 'Apple',
-    aliases: ['apple'],
+    companyName: 'Apple Inc.',
+    aliases: ['apple', 'apple inc', 'apple incorporated', '애플'],
     region: '미국',
     sector: '기술',
     style: '성장주',
@@ -616,13 +616,24 @@ const SECURITY_REFERENCE = [
   },
   {
     label: 'KODEX 미국나스닥100',
-    code: '379800',
+    code: '379810',
     companyName: 'KODEX 미국나스닥100',
     aliases: ['kodex 미국나스닥100', 'kodex nasdaq100', 'kodex us nasdaq100'],
     region: '미국',
     sector: '대형 기술주',
     style: '성장주',
     risk: '고위험',
+    assetClass: '주식 ETF',
+  },
+  {
+    label: 'KODEX 미국S&P500TR',
+    code: '379800',
+    companyName: 'KODEX 미국S&P500TR',
+    aliases: ['kodex 미국s&p500', 'kodex 미국sp500', 'kodex us s&p500', 'kodex sp500'],
+    region: '미국',
+    sector: '광범위 시장',
+    style: '분산형',
+    risk: '중위험',
     assetClass: '주식 ETF',
   },
   {
@@ -726,7 +737,7 @@ function findContainsReference(normalizedIdentifiers) {
   return null;
 }
 
-function findSecurityReference(identifiers) {
+function findExactSecurityReference(identifiers) {
   const normalizedIdentifiers = identifiers.map((identifier) => normalizeSecurityKey(identifier)).filter(Boolean);
 
   for (const normalized of normalizedIdentifiers) {
@@ -739,13 +750,32 @@ function findSecurityReference(identifiers) {
       return direct;
     }
 
-    const strippedExchange = normalized.replace(/(ks|kq|to|hk|t)$/, '');
+    const strippedExchange = normalized.replace(/(ks|kq|ba|to|v|du|l|hk|ss|sz|t)$/, '');
     if (strippedExchange && SECURITY_LOOKUP.has(strippedExchange)) {
       return SECURITY_LOOKUP.get(strippedExchange);
     }
   }
 
+  return null;
+}
+
+function findSecurityReference(identifiers) {
+  const normalizedIdentifiers = identifiers.map((identifier) => normalizeSecurityKey(identifier)).filter(Boolean);
+  const exact = findExactSecurityReference(identifiers);
+
+  if (exact) {
+    return exact;
+  }
+
   return findContainsReference(normalizedIdentifiers);
+}
+
+export function resolveExactSecurityReferenceCode(identifiers) {
+  return findExactSecurityReference(Array.isArray(identifiers) ? identifiers : [identifiers])?.code ?? '';
+}
+
+export function resolveSecurityReferenceCode(identifiers) {
+  return findSecurityReference(Array.isArray(identifiers) ? identifiers : [identifiers])?.code ?? '';
 }
 
 function upsertField(fields, label, value, options = {}) {
@@ -758,6 +788,19 @@ function upsertField(fields, label, value, options = {}) {
   const nextFields = [...fields];
   const canonicalizeFieldLabel = (fieldLabel) => {
     const normalized = normalizeSecurityKey(fieldLabel);
+
+    if (
+      [
+        '종목코드',
+        '종목티커',
+        'stockcode',
+        'securitycode',
+        'ticker',
+        'symbol',
+      ].includes(normalized)
+    ) {
+      return '종목 티커';
+    }
 
     if (
       [
@@ -1162,6 +1205,7 @@ const YAHOO_FINANCE_SEARCH_CACHE = new Map();
 const LIVE_KNOWLEDGE_TIMEOUT_MS = 4200;
 const LIVE_KNOWLEDGE_CONCURRENCY = 4;
 const STABLE_ENRICHED_FIELD_LABELS = new Set([
+  '종목 티커',
   '종목코드',
   '종목명',
   '종목 설명',
@@ -1725,6 +1769,7 @@ function buildYahooLiveKnowledge(item, snapshot) {
   const description = [snapshot.sector, snapshot.industry].filter(Boolean).join(' · ');
 
   return {
+    ticker: snapshot.symbol,
     companyName: snapshot.companyName,
     description,
     exchange: snapshot.exchange,
@@ -1892,7 +1937,7 @@ function mergeLiveKnowledge(item, liveKnowledge) {
       : item.label;
   let fields = [...(item.fields ?? [])];
 
-  fields = upsertField(fields, '종목코드', item.code || item.ticker, {
+  fields = upsertField(fields, '종목 티커', liveKnowledge.ticker || item.code || item.ticker, {
     overwrite: !String(item.code ?? '').trim() && Boolean(item.ticker),
   });
   fields = upsertField(fields, '종목명', nextName, {
@@ -2078,7 +2123,7 @@ export function enrichPortfolioItem(item) {
     item.label,
     item.companyName,
   ]);
-  const baseCode = item.code || item.ticker || reference?.code || '';
+  const baseCode = reference?.code || item.ticker || item.code || '';
   const regionMeta = resolveRegion(item, reference);
   const assetClassMeta = resolveAssetClass(item, reference);
   const sectorMeta = resolveSector(item, reference, assetClassMeta.value);
@@ -2114,21 +2159,19 @@ export function enrichPortfolioItem(item) {
     ? ''
     : String(item.label ?? '').trim();
   const preferredDisplayName =
+    reference?.companyName ||
     fieldDisplayName ||
     safeItemName ||
     safeItemCompanyName ||
-    reference?.companyName ||
     reference?.label ||
     safeItemLabel ||
     baseCode;
   const companyName = preferredDisplayName || baseCode;
-  const displayLabel = shouldPreferSecurityNameLabel(item.label, metadataValues, baseCode)
-    ? compactLabel(companyName || preferredDisplayName || baseCode, 18)
-    : compactLabel(item.label || companyName || preferredDisplayName || baseCode, 18);
+  const displayLabel = compactLabel(companyName || preferredDisplayName || baseCode, 18);
   let fields = [...(item.fields ?? [])];
 
-  fields = upsertField(fields, '종목코드', baseCode);
-  fields = upsertField(fields, '종목명', companyName);
+  fields = upsertField(fields, '종목 티커', baseCode, { overwrite: true });
+  fields = upsertField(fields, '종목명', companyName, { overwrite: true });
   fields = upsertField(fields, '투자 지역', region);
   fields = upsertField(fields, '분야', sector);
   fields = upsertField(fields, '투자 스타일', style);
