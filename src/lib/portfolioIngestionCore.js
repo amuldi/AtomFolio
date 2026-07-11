@@ -1,4 +1,4 @@
-import { enrichPortfolioItem } from './securityKnowledge.js';
+import { enrichPortfolioItem, resolveExactSecurityReferenceCode } from './securityKnowledge.js';
 
 const HEADER_KEYWORDS = [
   'ticker',
@@ -114,6 +114,7 @@ const SECURITY_NAME_HINT_PATTERN =
   /(tiger|kodex|arirang|ace|kbstar|hanaro|kosef|sol|rise|plus|timefolio|spdr|ishares|vanguard|invesco|schwab|s&p|nasdaq|dow|russell|msci|kospi|kosdaq|etf|etn|fund|trust|미국|글로벌|반도체|배당|테크|성장|채권|금리|리츠|부동산)/i;
 const STRATEGY_DESCRIPTOR_PATTERN =
   /^(월적립|정액적립|적립식|분할매수|분할매도|추가매수|장기보유|장기투자|현금대기|리밸런싱|단기매매|스윙|모멘텀|dca|rebalance|hold|buy\s*and\s*hold|buyandhold|accumulate|swing)$/i;
+const SECURITY_EXCHANGE_SUFFIX_PATTERN = /\.(KS|KQ|BA|TO|V|DU|L|HK|SS|SZ|T)$/i;
 
 function compactLabel(value, max = 18) {
   if (!value) {
@@ -152,7 +153,11 @@ function normalizePortfolioVocabulary(value) {
 function resolveFieldLabelKey(label) {
   const normalized = normalizeDisplayKey(normalizePortfolioVocabulary(label));
 
-  if (['종목코드', 'ticker', 'symbol', 'stockcode', 'securitycode'].map(normalizeDisplayKey).includes(normalized)) {
+  if (
+    ['종목 티커', '종목코드', '티커', 'ticker', 'symbol', 'stockcode', 'securitycode']
+      .map(normalizeDisplayKey)
+      .includes(normalized)
+  ) {
     return 'stockCode';
   }
 
@@ -310,12 +315,18 @@ function countCharacter(value, character) {
 }
 
 function detectDelimiter(text) {
-  const sample = text.split(/\r?\n/).find((line) => line.trim()) ?? '';
   const candidates = [',', '\t', ';', '|'];
+  const sample = String(text ?? '')
+    .split(/\r?\n/)
+    .filter((line) => line.trim())
+    .slice(0, 14)
+    .join('\n');
 
-  return candidates.reduce((best, candidate) =>
-    countCharacter(sample, candidate) > countCharacter(sample, best) ? candidate : best,
-  );
+  return candidates.reduce((best, candidate) => {
+    const candidateScore = scoreDelimiterCandidate(sample, candidate);
+    const bestScore = scoreDelimiterCandidate(sample, best);
+    return candidateScore > bestScore ? candidate : best;
+  });
 }
 
 function parseSeparatedText(text, delimiter) {
@@ -368,6 +379,56 @@ function parseSeparatedText(text, delimiter) {
   }
 
   return rows;
+}
+
+function scoreDelimiterCandidate(text, delimiter) {
+  const rows = parseSeparatedText(text, delimiter);
+  const multiColumnRows = rows.filter((row) => row.length > 1);
+
+  if (!multiColumnRows.length) {
+    return 0;
+  }
+
+  const columnCounts = multiColumnRows.map((row) => row.length);
+  const countFrequencies = new Map();
+  columnCounts.forEach((count) => {
+    countFrequencies.set(count, (countFrequencies.get(count) ?? 0) + 1);
+  });
+  const mostCommonColumnCount = [...countFrequencies.entries()].sort(
+    ([countA, frequencyA], [countB, frequencyB]) => frequencyB - frequencyA || countB - countA,
+  )[0]?.[0] ?? 1;
+  const consistency =
+    columnCounts.filter((count) => count === mostCommonColumnCount).length / columnCounts.length;
+  const averageColumnCount =
+    columnCounts.reduce((sum, count) => sum + count, 0) / Math.max(1, columnCounts.length);
+  const headerScore = rows.reduce((best, row, index) => {
+    const values = row.map((cell) => String(cell ?? '').trim()).filter(Boolean);
+    if (values.length < 2) {
+      return best;
+    }
+
+    const recognizedCount = values.filter(looksLikeRecognizedHeaderCell).length;
+    const recognizedRatio = recognizedCount / values.length;
+    const rowLooksLikeHeader =
+      looksLikeHeader(row) || looksLikeExplicitHeaderRow(row) || recognizedCount >= 2;
+
+    if (!rowLooksLikeHeader) {
+      return best;
+    }
+
+    return Math.max(
+      best,
+      60 + recognizedRatio * 30 + Math.min(values.length, 12) - Math.min(index, 6),
+    );
+  }, 0);
+
+  return (
+    headerScore +
+    multiColumnRows.length * 4 +
+    consistency * 20 +
+    Math.min(averageColumnCount, 12) +
+    Math.min(countCharacter(text, delimiter), 40) * 0.1
+  );
 }
 
 function looksLikeHeader(row) {
@@ -747,7 +808,7 @@ function inferHeaderLabels(headerLabels, bodyRows) {
   const labels = [...headerLabels];
   const columnCount = Math.max(labels.length, ...bodyRows.map((row) => row.length));
   const candidateDefinitions = [
-    { key: 'stockCode', label: '종목코드', minScore: 0.72, score: (values) => matchRatio(values, isTickerLikeValue) },
+    { key: 'stockCode', label: '종목 티커', minScore: 0.72, score: (values) => matchRatio(values, isTickerLikeValue) },
     { key: 'accountType', label: '포트폴리오 유형', minScore: 0.74, score: (values) => matchRatio(values, isAccountTypeValue) },
     { key: 'buyDate', label: '날짜', minScore: 0.8, score: (values) => matchRatio(values, isDateLikeValue) },
     { key: 'buyPrice', label: '매수가', minScore: 0.76, score: (values) => matchRatio(values, isPriceLikeValue) },
@@ -900,7 +961,11 @@ function scoreSecurityNameColumn(headerLabel, fieldKey, values) {
     bonus -= 0.82;
   }
 
-  if (/(ticker|symbol|stockcode|securitycode|assetcode|productcode|종목코드|티커)/.test(normalizedHeader)) {
+  if (/(comment|memo|note|description|remark|코멘트|메모|비고|설명)/.test(normalizedHeader)) {
+    bonus -= 1.25;
+  }
+
+  if (/(ticker|symbol|stockcode|securitycode|assetcode|productcode|종목코드|종목티커|티커)/.test(normalizedHeader)) {
     bonus -= 1.1;
   }
 
@@ -996,7 +1061,7 @@ function normalizePortfolioFieldLabels(headerLabels, bodyRows) {
     .find((column) => column.score >= 0.82);
 
   if (bestTickerColumn) {
-    labels[bestTickerColumn.columnIndex] = '종목코드';
+    labels[bestTickerColumn.columnIndex] = '종목 티커';
   }
 
   const bestSecurityColumn = [...columns]
@@ -1125,8 +1190,11 @@ function formatReturnDetail(value, label = '') {
       ? -numeric
       : numeric;
 
+  const labelText = String(label ?? '').trim();
   const explicitPercent =
-    /%|pct|percent|return|yield|change|rate|수익률|수익율|등락률|변동률|손익률|손익율|평가손익률/i.test(String(label ?? '').trim());
+    /%|pct|percent|수익률\(%\)|수익율\(%\)|손익률\(%\)|손익율\(%\)|등락률\(%\)|변동률\(%\)/i.test(
+      labelText,
+    );
   const percentValue =
     explicitPercent || normalized.includes('%') || Math.abs(signedNumeric) > 1
       ? signedNumeric
@@ -1152,6 +1220,38 @@ function findPortfolioFieldValue(item, predicate) {
   }
 
   return '';
+}
+
+function stripSecurityExchangeSuffix(value) {
+  return String(value ?? '').trim().replace(SECURITY_EXCHANGE_SUFFIX_PATTERN, '');
+}
+
+function resolveCanonicalSecurityIdentityCode(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) {
+    return '';
+  }
+
+  return normalizeDisplayKey(resolveExactSecurityReferenceCode([raw, stripSecurityExchangeSuffix(raw)]));
+}
+
+function normalizeSecurityIdentityValue(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) {
+    return '';
+  }
+
+  const canonicalCode = resolveCanonicalSecurityIdentityCode(raw);
+  if (canonicalCode) {
+    return canonicalCode;
+  }
+
+  return normalizeDisplayKey(stripSecurityExchangeSuffix(raw) || raw);
+}
+
+function formatPortfolioSecurityIdentity(type, value) {
+  const normalized = normalizeSecurityIdentityValue(value);
+  return normalized ? `${type}:${normalized}` : '';
 }
 
 function extractPortfolioItemDateValue(item) {
@@ -1218,22 +1318,23 @@ function resolvePortfolioGroupingName(item) {
 function resolvePortfolioSecurityIdentity(item) {
   const directCode = String(item.code ?? item.ticker ?? '').trim();
   if (isMeaningfulSecurityIdentity(directCode)) {
-    return `code:${directCode}`;
+    return formatPortfolioSecurityIdentity('code', directCode);
   }
 
   const fieldCode = findPortfolioFieldValue(
     item,
     (label, key) =>
       key === 'stockCode' ||
-      /(종목코드|티커|ticker|symbol|securitycode|assetcode|productcode)/i.test(label),
+      /(종목코드|종목\s*티커|티커|ticker|symbol|securitycode|assetcode|productcode)/i.test(label),
   );
   if (isMeaningfulSecurityIdentity(fieldCode)) {
-    return `code:${fieldCode}`;
+    return formatPortfolioSecurityIdentity('code', fieldCode);
   }
 
   const groupingName = resolvePortfolioGroupingName(item);
   if (isMeaningfulSecurityIdentity(groupingName)) {
-    return `name:${groupingName}`;
+    const canonicalCode = resolveCanonicalSecurityIdentityCode(groupingName);
+    return canonicalCode ? `code:${canonicalCode}` : formatPortfolioSecurityIdentity('name', groupingName);
   }
 
   return '';
@@ -1322,6 +1423,7 @@ function inspectPortfolioTable(text) {
       fieldKeys: [],
       headers: [],
       hasDetectedHeader: false,
+      skippedPreambleRowCount: 0,
       indexes: {
         dateIndex: -1,
         tickerIndex: -1,
@@ -1336,7 +1438,15 @@ function inspectPortfolioTable(text) {
     };
   }
 
-  const firstRow = rows[0].map((label) => String(label ?? '').trim().replace(/^\uFEFF/, ''));
+  const detectedHeaderIndex = rows.findIndex((row) => {
+    if (row.length < 2) {
+      return false;
+    }
+
+    return looksLikeHeader(row) || looksLikePlaceholderHeaderRow(row) || looksLikeExplicitHeaderRow(row);
+  });
+  const tableRows = detectedHeaderIndex > 0 ? rows.slice(detectedHeaderIndex) : rows;
+  const firstRow = tableRows[0].map((label) => String(label ?? '').trim().replace(/^\uFEFF/, ''));
   const hasDetectedHeader =
     looksLikeHeader(firstRow) ||
     looksLikePlaceholderHeaderRow(firstRow) ||
@@ -1346,7 +1456,7 @@ function inspectPortfolioTable(text) {
     : firstRow.map((_, index) => `Column ${index + 1}`)).map((label, index) =>
     label.trim().replace(/^\uFEFF/, '') || `Column ${index + 1}`,
   );
-  const bodyRows = hasDetectedHeader ? rows.slice(1) : rows;
+  const bodyRows = hasDetectedHeader ? tableRows.slice(1) : tableRows;
   const headerLabels = normalizePortfolioFieldLabels(inferHeaderLabels(rawHeaderLabels, bodyRows), bodyRows);
   const headers = headerLabels.map(normalizeHeader);
   const fieldKeys = headerLabels.map(resolveFieldLabelKey);
@@ -1359,6 +1469,7 @@ function inspectPortfolioTable(text) {
     fieldKeys,
     headers,
     hasDetectedHeader,
+    skippedPreambleRowCount: detectedHeaderIndex > 0 ? detectedHeaderIndex : 0,
     indexes: {
       dateIndex: pickResolvedFieldIndex(fieldKeys, headers, 'buyDate', [
         'date',
@@ -1390,7 +1501,7 @@ function inspectPortfolioTable(text) {
         '조회일',
         '조회일자',
       ]),
-      tickerIndex: pickResolvedFieldIndex(fieldKeys, headers, 'stockCode', ['ticker', 'symbol', 'stockcode', 'securitycode', '종목코드']),
+      tickerIndex: pickResolvedFieldIndex(fieldKeys, headers, 'stockCode', ['ticker', 'symbol', 'stockcode', 'securitycode', '종목코드', '종목티커', '티커']),
       nameIndex: findBestSecurityNameColumnIndex(headerLabels, fieldKeys, bodyRows),
       returnIndex: pickResolvedFieldIndex(fieldKeys, headers, 'return', [
         'return',
@@ -1476,7 +1587,12 @@ function buildParsedItems(inspection) {
           }
 
           return {
-            label: fieldKey === 'stockName' && columnIndex === nameIndex ? '종목명' : header,
+            label:
+              fieldKey === 'stockName' && columnIndex === nameIndex
+                ? '종목명'
+                : fieldKey === 'stockCode' && columnIndex === tickerIndex
+                  ? '종목 티커'
+                  : header,
             value,
           };
         })
@@ -1514,7 +1630,7 @@ function scoreTickerColumn(headerLabel, fieldKey, values) {
   const alphaTickerRatio = matchRatio(values, isAlphabeticTickerLikeValue);
   const numericSecurityCodeRatio = matchRatio(values, isNumericSecurityCodeLikeValue);
   const numericOnlyRatio = matchRatio(values, (value) => /^[+-]?\d+(?:\.\d+)?$/.test(String(value ?? '').trim()));
-  const hasExplicitCodeHeader = /(ticker|symbol|stockcode|securitycode|assetcode|productcode|종목코드|티커)/.test(
+  const hasExplicitCodeHeader = /(ticker|symbol|stockcode|securitycode|assetcode|productcode|종목코드|종목티커|티커)/.test(
     normalizedHeader,
   );
   let score = tickerRatio;
@@ -1556,7 +1672,9 @@ function scoreTickerColumn(headerLabel, fieldKey, values) {
     score -= 0.8;
   }
 
-  if (fieldKey === 'stockName') {
+  if (fieldKey === 'stockName' && !hasExplicitCodeHeader) {
+    score -= 1.15;
+  } else if (fieldKey === 'stockName') {
     score -= 0.3;
   }
 
@@ -1672,6 +1790,187 @@ function buildMappedColumn(index, candidates) {
   };
 }
 
+const FIELD_ROLE_DEFINITIONS = [
+  {
+    key: 'snapshotDate',
+    pattern:
+      /snapshotdate|valuationdate|valuedate|recorddate|asofdate|date|day|기준일|평가일|조회일|날짜|일자/,
+    valueScore: (values) => matchRatio(values, isDateLikeValue),
+  },
+  {
+    key: 'buyDate',
+    pattern: /buydate|purchasedate|entrydate|acquisitiondate|매수일|매입일|취득일/,
+    valueScore: (values) => matchRatio(values, isDateLikeValue),
+  },
+  {
+    key: 'securityName',
+    pattern: /stockname|securityname|assetname|productname|companyname|종목명|상품명|자산명/,
+    valueScore: (values) => matchRatio(values, isLikelySecurityName),
+  },
+  {
+    key: 'securityCode',
+    pattern: /ticker|symbol|stockcode|securitycode|종목코드|티커|코드/,
+    valueScore: (values) => matchRatio(values, isTickerLikeValue),
+  },
+  {
+    key: 'quantity',
+    pattern: /shares|quantity|holding|units|보유수량|잔고수량|수량/,
+    valueScore: (values) => matchRatio(values, isShareLikeValue),
+  },
+  {
+    key: 'buyPrice',
+    pattern: /buyprice|purchaseprice|entryprice|averageprice|costbasis|매수가|매입가|취득가|평균단가/,
+    valueScore: (values) => matchRatio(values, isPriceLikeValue),
+  },
+  {
+    key: 'currentPrice',
+    pattern: /currentprice|marketprice|lastprice|현재가|평가가|기준가/,
+    valueScore: (values) => matchRatio(values, isPriceLikeValue),
+  },
+  {
+    key: 'marketValue',
+    pattern: /marketvalue|currentvalue|evaluationamount|valuation|평가금액|평가액|현재가치|보유금액/,
+    valueScore: (values) => matchRatio(values, isNumericLikeValue),
+  },
+  {
+    key: 'returnRate',
+    pattern: /returnrate|profitrate|returnpct|yield|수익률|수익율|손익률|손익율|평가손익률/,
+    valueScore: (values) => matchRatio(values, isNumericLikeValue),
+  },
+  {
+    key: 'dailyReturnRate',
+    pattern: /dailyreturn|dailypnlrate|dayreturn|일별수익률|일일수익률|일간수익률|일수익률/,
+    valueScore: (values) => matchRatio(values, isNumericLikeValue),
+  },
+  {
+    key: 'cumulativeReturnRate',
+    pattern: /cumulativereturn|totalreturn|accumulatedreturn|누적수익률|총수익률/,
+    valueScore: (values) => matchRatio(values, isNumericLikeValue),
+  },
+  {
+    key: 'realizedPnl',
+    pattern: /realizedpnl|realizedprofit|realizedgain|실현손익|실현수익|확정손익/,
+    valueScore: (values) => matchRatio(values, isNumericLikeValue),
+  },
+  {
+    key: 'unrealizedPnl',
+    pattern: /unrealizedpnl|valuationpnl|evaluationpnl|평가손익|미실현손익/,
+    valueScore: (values) => matchRatio(values, isNumericLikeValue),
+  },
+  {
+    key: 'currency',
+    pattern: /currency|통화|화폐/,
+    valueScore: (values) => matchRatio(values, (value) => KNOWN_CURRENCY_CODES.has(String(value).trim().toUpperCase())),
+  },
+  {
+    key: 'fxRate',
+    pattern: /fxrate|exchangerate|환율/,
+    valueScore: (values) => matchRatio(values, isNumericLikeValue),
+  },
+];
+
+function buildFieldRoleDiagnostics(columns) {
+  const roles = {};
+  const byColumn = {};
+
+  for (const column of columns) {
+    const normalizedHeader = normalizeHeader(column.headerLabel);
+    const candidates = FIELD_ROLE_DEFINITIONS.map((definition) => {
+      const headerScore = definition.pattern.test(normalizedHeader) ? 0.68 : 0;
+      const valueScore = definition.valueScore(column.values) * 0.42;
+      const fieldKeyScore =
+        definition.key === column.fieldKey ||
+        (definition.key === 'securityName' && column.fieldKey === 'stockName') ||
+        (definition.key === 'securityCode' && column.fieldKey === 'stockCode') ||
+        (definition.key === 'snapshotDate' && column.fieldKey === 'buyDate') ||
+        (definition.key === 'returnRate' && column.fieldKey === 'return')
+          ? 0.18
+          : 0;
+
+      return {
+        role: definition.key,
+        score: headerScore + valueScore + fieldKeyScore,
+      };
+    }).sort((left, right) => right.score - left.score);
+    const best = candidates[0];
+
+    if (!best || best.score < 0.38) {
+      continue;
+    }
+
+    const descriptor = {
+      index: column.columnIndex,
+      label: column.headerLabel,
+      fieldKey: column.fieldKey || null,
+      confidence: Number(clamp(best.score, 0, 1).toFixed(3)),
+      sampleValues: column.sampleValues,
+    };
+
+    if (!roles[best.role] || descriptor.confidence > roles[best.role].confidence) {
+      roles[best.role] = descriptor;
+    }
+
+    byColumn[column.columnIndex] = {
+      ...descriptor,
+      role: best.role,
+      alternatives: candidates
+        .filter((candidate) => candidate.score >= 0.38 && candidate.role !== best.role)
+        .slice(0, 2)
+        .map((candidate) => ({
+          role: candidate.role,
+          confidence: Number(clamp(candidate.score, 0, 1).toFixed(3)),
+        })),
+    };
+  }
+
+  return {
+    roles,
+    byColumn,
+  };
+}
+
+function buildSnapshotQualityDiagnostics(inspection, roleDiagnostics) {
+  const { bodyRows, indexes } = inspection;
+  const firstValidIndex = (...values) =>
+    values.find((value) => Number.isInteger(value) && value >= 0) ?? -1;
+  const dateIndex = firstValidIndex(
+    roleDiagnostics.roles.snapshotDate?.index,
+    roleDiagnostics.roles.buyDate?.index,
+    indexes.dateIndex,
+  );
+  const securityIndex = firstValidIndex(
+    roleDiagnostics.roles.securityCode?.index,
+    roleDiagnostics.roles.securityName?.index,
+    indexes.tickerIndex,
+    indexes.nameIndex,
+  );
+  const dateKeys = bodyRows
+    .map((row) => (dateIndex >= 0 ? formatAtomDateLabel(row[dateIndex]) : ''))
+    .filter(Boolean);
+  const securityKeys = bodyRows
+    .map((row) => (securityIndex >= 0 ? normalizeSecurityIdentityValue(row[securityIndex]) : ''))
+    .filter(Boolean);
+  const rowsByDate = {};
+  const rowsBySecurity = {};
+
+  dateKeys.forEach((key) => {
+    rowsByDate[key] = (rowsByDate[key] ?? 0) + 1;
+  });
+  securityKeys.forEach((key) => {
+    rowsBySecurity[key] = (rowsBySecurity[key] ?? 0) + 1;
+  });
+
+  const sortedDates = [...new Set(dateKeys)].sort();
+
+  return {
+    dateDistinctCount: new Set(dateKeys).size,
+    securityDistinctCount: new Set(securityKeys).size,
+    latestSnapshotDate: sortedDates.at(-1) ?? null,
+    rowsByDate: Object.fromEntries(Object.entries(rowsByDate).slice(0, 12)),
+    rowsBySecurity: Object.fromEntries(Object.entries(rowsBySecurity).slice(0, 12)),
+  };
+}
+
 function buildParserWarnings(inspection, items, candidates) {
   const warnings = [];
   const { bodyRows, headerLabels, hasDetectedHeader, indexes, fieldKeys, headers } = inspection;
@@ -1690,7 +1989,7 @@ function buildParserWarnings(inspection, items, candidates) {
     warnings.push({
       code: 'missing-security-column',
       severity: 'error',
-      message: '종목명 또는 종목코드 열을 확실하게 찾지 못했습니다.',
+      message: '종목명 또는 종목 티커 열을 확실하게 찾지 못했습니다.',
       source: 'parser',
     });
   }
@@ -1770,8 +2069,19 @@ function buildParserWarnings(inspection, items, candidates) {
 }
 
 function buildPortfolioParseDiagnostics(inspection, items) {
-  const { delimiter, rows, bodyRows, headerLabels, fieldKeys, hasDetectedHeader, indexes } = inspection;
+  const {
+    delimiter,
+    rows,
+    bodyRows,
+    headerLabels,
+    fieldKeys,
+    hasDetectedHeader,
+    skippedPreambleRowCount,
+    indexes,
+  } = inspection;
   const columns = buildColumnDescriptors(headerLabels, fieldKeys, bodyRows);
+  const fieldRoles = buildFieldRoleDiagnostics(columns);
+  const snapshotQuality = buildSnapshotQualityDiagnostics(inspection, fieldRoles);
   const candidates = {
     stockName: rankColumnCandidates(columns, scoreSecurityNameColumn),
     stockCode: rankColumnCandidates(columns, scoreTickerColumn),
@@ -1792,6 +2102,7 @@ function buildPortfolioParseDiagnostics(inspection, items) {
     summary: `${bodyRows.length}개 행에서 ${items.length}개 종목을 만들었습니다.`,
     delimiter,
     hasDetectedHeader,
+    skippedPreambleRowCount,
     rowCount: rows.length,
     bodyRowCount: bodyRows.length,
     parsedItemCount: items.length,
@@ -1810,6 +2121,8 @@ function buildPortfolioParseDiagnostics(inspection, items) {
         candidates.accountType,
       ),
     },
+    fieldRoles,
+    snapshotQuality,
     candidates,
     warnings,
   };

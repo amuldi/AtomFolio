@@ -16,7 +16,7 @@ export async function runSchemaMapperAgent(parserDiagnostics) {
       createAgentWarning({
         code: 'missing-security-identity',
         severity: 'error',
-        message: '종목명 또는 종목코드 매핑을 확정하지 못했습니다.',
+        message: '종목명 또는 종목 티커 매핑을 확정하지 못했습니다.',
         source: 'schema-mapper',
       }),
     );

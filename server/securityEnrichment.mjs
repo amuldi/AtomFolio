@@ -6,6 +6,7 @@ import {
 const SECURITY_ENRICHMENT_CACHE = new Map();
 const SECURITY_ENRICHMENT_TTL_MS = 1000 * 60 * 60 * 12;
 const STABLE_ENRICHMENT_FIELD_LABELS = new Set([
+  '종목 티커',
   '종목코드',
   '종목명',
   '종목 설명',
