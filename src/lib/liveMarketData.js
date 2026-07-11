@@ -3,11 +3,51 @@ const YAHOO_SEARCH_URL = 'https://query1.finance.yahoo.com/v1/finance/search';
 const STOOQ_QUOTE_URL = 'https://stooq.com/q/l/';
 const NAVER_STOCK_BASIC_BASE = 'https://m.stock.naver.com/api/stock';
 const DEFAULT_SEARCH_LIMIT = 10;
+const MARKET_FETCH_TIMEOUT_MS = 8000;
+const LIVE_MARKET_CACHE_TTL_MS = 1000 * 60;
+const liveMarketDataCache = new Map();
 const MARKET_WINDOWS = [
   { range: '1d', interval: '5m' },
   { range: '5d', interval: '15m' },
   { range: '1mo', interval: '1d' },
 ];
+
+function withTimeout(signal, timeoutMs = MARKET_FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const abort = () => controller.abort();
+
+  if (signal?.aborted) {
+    controller.abort();
+  } else {
+    signal?.addEventListener?.('abort', abort, { once: true });
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      clearTimeout(timeoutId);
+      signal?.removeEventListener?.('abort', abort);
+    },
+  };
+}
+
+async function fetchWithTimeout(url, options = {}) {
+  const timeout = withTimeout(options.signal);
+
+  try {
+    return await fetch(url.toString(), {
+      ...options,
+      signal: timeout.signal,
+    });
+  } finally {
+    timeout.cleanup();
+  }
+}
+
+function cloneSerializable(value) {
+  return JSON.parse(JSON.stringify(value));
+}
 const LOCAL_SECURITY_UNIVERSE = [
   {
     symbol: '005930.KS',
@@ -473,7 +513,7 @@ const LOCAL_SECURITY_UNIVERSE = [
     name: '애플',
     rawName: 'Apple Inc.',
     exchangeName: 'Nasdaq',
-    aliases: ['apple', '아이폰'],
+    aliases: ['apple', 'apple inc', '애플', '아이폰'],
   },
   {
     symbol: 'MSFT',
@@ -850,11 +890,16 @@ function scoreLocalSuggestion(entry, query) {
 }
 
 function localSecurityToSuggestion(entry, localRank = 0, searchScore = 0) {
+  const symbol = normalizeSymbol(entry.symbol);
+  const officialName = isKoreanListedSymbol(symbol)
+    ? entry.name
+    : entry.rawName || entry.name;
+
   return {
-    symbol: normalizeSymbol(entry.symbol),
+    symbol,
     name: entry.name,
     rawName: entry.rawName || entry.name,
-    displayName: entry.name,
+    displayName: cleanOfficialMarketName(officialName, symbol),
     exchangeName: cleanExchangeName(entry.exchangeName || '한국', entry.symbol),
     quoteType: entry.quoteType || 'EQUITY',
     typeDisp: cleanQuoteTypeLabel(entry.typeDisp || entry.quoteType || 'equity', entry.symbol),
@@ -925,6 +970,12 @@ export function cleanMarketDisplayName(name, symbol = '') {
     return mappedName;
   }
 
+  return cleanOfficialMarketName(name, symbol);
+}
+
+export function cleanOfficialMarketName(name, symbol = '') {
+  const normalizedSymbol = normalizeSymbol(symbol);
+
   let cleaned = String(name ?? '').replace(/\s+/g, ' ').trim();
 
   if (!cleaned) {
@@ -952,6 +1003,14 @@ export function cleanMarketDisplayName(name, symbol = '') {
     .trim();
 
   return cleaned || normalizedSymbol;
+}
+
+function resolveOfficialQuoteName(candidate, quote, fallbackName = '') {
+  const symbol = quote?.symbol || candidate?.symbol || '';
+  return cleanOfficialMarketName(
+    quote?.rawName || quote?.name || candidate?.rawName || candidate?.name || fallbackName || symbol,
+    symbol,
+  );
 }
 
 function buildSymbolCandidates(ticker) {
@@ -1021,7 +1080,7 @@ function toNaverStockCode(symbol) {
 }
 
 async function fetchJsonResource(url, signal, headers = {}) {
-  const response = await fetch(url.toString(), {
+  const response = await fetchWithTimeout(url.toString(), {
     signal,
     cache: 'no-store',
     headers: {
@@ -1074,9 +1133,9 @@ function quoteToSuggestion(quote) {
 
   return {
     symbol,
-    name: cleanMarketDisplayName(rawName, symbol),
+    name: cleanOfficialMarketName(rawName, symbol),
     rawName,
-    displayName: cleanMarketDisplayName(rawName, symbol),
+    displayName: cleanOfficialMarketName(rawName, symbol),
     exchangeName: cleanExchangeName(quote?.exchDisp ?? quote?.exchange ?? '', symbol),
     quoteType: String(quote?.quoteType ?? '').trim(),
     typeDisp: cleanQuoteTypeLabel(quote?.typeDisp ?? quote?.quoteType ?? '', symbol),
@@ -1141,7 +1200,7 @@ async function fetchYahooSearchSuggestions(query, signal, limit = DEFAULT_SEARCH
   url.searchParams.set('newsCount', '0');
   url.searchParams.set('enableFuzzyQuery', 'true');
 
-  const response = await fetch(url.toString(), { signal, cache: 'no-store' });
+  const response = await fetchWithTimeout(url.toString(), { signal, cache: 'no-store' });
 
   if (!response.ok) {
     throw new Error('symbol-search-failed');
@@ -1193,7 +1252,7 @@ async function fetchYahooChart(symbol, windowConfig, signal) {
   url.searchParams.set('events', 'div,splits');
   url.searchParams.set('corsDomain', 'finance.yahoo.com');
 
-  const response = await fetch(url.toString(), { signal, cache: 'no-store' });
+  const response = await fetchWithTimeout(url.toString(), { signal, cache: 'no-store' });
 
   if (!response.ok) {
     throw new Error(`quote-fetch-failed:${response.status}`);
@@ -1236,7 +1295,7 @@ async function fetchYahooChart(symbol, windowConfig, signal) {
   const rawName = meta.longName || meta.shortName || meta.symbol || symbol;
   const normalizedResultSymbol = normalizeSymbol(meta.symbol || symbol);
   const localMetadata = LOCAL_SYMBOL_METADATA[normalizedResultSymbol] ?? {};
-  const displayName = cleanMarketDisplayName(rawName, meta.symbol || symbol);
+  const displayName = cleanOfficialMarketName(rawName, meta.symbol || symbol);
 
   return {
     symbol: meta.symbol || symbol,
@@ -1344,9 +1403,9 @@ function normalizeMiraeQuotePayload(payload, symbol, name = '') {
 
   return {
     symbol: normalizedSymbol,
-    name: cleanMarketDisplayName(rawName, normalizedSymbol),
+    name: cleanOfficialMarketName(rawName, normalizedSymbol),
     rawName,
-    displayName: cleanMarketDisplayName(rawName, normalizedSymbol),
+    displayName: cleanOfficialMarketName(rawName, normalizedSymbol),
     exchangeName: cleanExchangeName(localMetadata.exchangeName || data?.exchangeName || 'Mirae Asset', normalizedSymbol),
     quoteType: localMetadata.quoteType || '',
     typeDisp: cleanQuoteTypeLabel(localMetadata.typeDisp || '', normalizedSymbol),
@@ -1444,9 +1503,9 @@ async function fetchNaverStockQuote(symbol, name, signal) {
 
   return {
     symbol: normalizedSymbol,
-    name: cleanMarketDisplayName(rawName, normalizedSymbol),
+    name: cleanOfficialMarketName(rawName, normalizedSymbol),
     rawName,
-    displayName: cleanMarketDisplayName(rawName, normalizedSymbol),
+    displayName: cleanOfficialMarketName(rawName, normalizedSymbol),
     exchangeName: cleanExchangeName(
       payload?.stockExchangeName || payload?.stockExchangeType?.nameKor || localMetadata.exchangeName || '한국',
       normalizedSymbol,
@@ -1482,7 +1541,7 @@ async function fetchStooqQuote(symbol, signal) {
   url.searchParams.set('h', '');
   url.searchParams.set('e', 'csv');
 
-  const response = await fetch(url.toString(), { signal, cache: 'no-store' });
+  const response = await fetchWithTimeout(url.toString(), { signal, cache: 'no-store' });
 
   if (!response.ok) {
     throw new Error(`stooq-fetch-failed:${response.status}`);
@@ -1556,6 +1615,22 @@ async function fetchStooqQuote(symbol, signal) {
 }
 
 export async function fetchLiveMarketDataFromProviders({ ticker, name, signal } = {}) {
+  const cacheKey = [
+    normalizeSymbol(ticker),
+    normalizeSearchText(name),
+  ].filter(Boolean).join('|');
+  const cached = cacheKey ? liveMarketDataCache.get(cacheKey) : null;
+
+  if (cached && Date.now() - cached.cachedAt < LIVE_MARKET_CACHE_TTL_MS) {
+    return cloneSerializable({
+      ...cached.payload,
+      cache: {
+        source: 'memory',
+        cachedAt: cached.cachedAt,
+      },
+    });
+  }
+
   const tickerCandidates = buildSymbolCandidates(ticker).map((symbol) => ({ symbol }));
   const searchQuery = String(name ?? '').trim();
   const canSearchByName = searchQuery.length >= 2 || /[가-힣]/.test(searchQuery);
@@ -1579,9 +1654,9 @@ export async function fetchLiveMarketDataFromProviders({ ticker, name, signal } 
     if (toNaverStockCode(candidate.symbol)) {
       try {
         const quote = await fetchNaverStockQuote(candidate.symbol, candidate.name || searchQuery, signal);
-        const displayName = cleanMarketDisplayName(candidate.name || quote.name, quote.symbol);
+        const displayName = resolveOfficialQuoteName(candidate, quote, searchQuery);
 
-        return {
+        const payload = {
           ...quote,
           name: displayName,
           displayName,
@@ -1591,15 +1666,21 @@ export async function fetchLiveMarketDataFromProviders({ ticker, name, signal } 
           sector: candidate.sector || quote.sector || '',
           assetClass: candidate.assetClass || quote.assetClass || '',
         };
+
+        if (cacheKey) {
+          liveMarketDataCache.set(cacheKey, { cachedAt: Date.now(), payload });
+        }
+
+        return payload;
       } catch (error) {
         lastError = error;
       }
 
       try {
         const quote = await fetchMiraeAssetQuote(candidate.symbol, candidate.name || searchQuery, signal);
-        const displayName = cleanMarketDisplayName(candidate.name || quote.name, quote.symbol);
+        const displayName = resolveOfficialQuoteName(candidate, quote, searchQuery);
 
-        return {
+        const payload = {
           ...quote,
           name: displayName,
           displayName,
@@ -1609,6 +1690,12 @@ export async function fetchLiveMarketDataFromProviders({ ticker, name, signal } 
           sector: candidate.sector || quote.sector || '',
           assetClass: candidate.assetClass || quote.assetClass || '',
         };
+
+        if (cacheKey) {
+          liveMarketDataCache.set(cacheKey, { cachedAt: Date.now(), payload });
+        }
+
+        return payload;
       } catch (error) {
         lastError = error;
       }
@@ -1617,9 +1704,9 @@ export async function fetchLiveMarketDataFromProviders({ ticker, name, signal } 
     for (const windowConfig of MARKET_WINDOWS) {
       try {
         const quote = await fetchYahooChart(candidate.symbol, windowConfig, signal);
-        const displayName = cleanMarketDisplayName(candidate.name || quote.name, quote.symbol);
+        const displayName = resolveOfficialQuoteName(candidate, quote, searchQuery);
 
-        return {
+        const payload = {
           ...quote,
           name: displayName,
           displayName,
@@ -1629,6 +1716,12 @@ export async function fetchLiveMarketDataFromProviders({ ticker, name, signal } 
           sector: candidate.sector || quote.sector || '',
           assetClass: candidate.assetClass || quote.assetClass || '',
         };
+
+        if (cacheKey) {
+          liveMarketDataCache.set(cacheKey, { cachedAt: Date.now(), payload });
+        }
+
+        return payload;
       } catch (error) {
         lastError = error;
       }
@@ -1637,7 +1730,13 @@ export async function fetchLiveMarketDataFromProviders({ ticker, name, signal } 
 
   for (const symbol of unique([...candidates.map((candidate) => candidate.symbol), ticker])) {
     try {
-      return await fetchStooqQuote(symbol, signal);
+      const payload = await fetchStooqQuote(symbol, signal);
+
+      if (cacheKey) {
+        liveMarketDataCache.set(cacheKey, { cachedAt: Date.now(), payload });
+      }
+
+      return payload;
     } catch (error) {
       lastError = error;
     }
@@ -1660,7 +1759,7 @@ export async function fetchLiveMarketData({ ticker, name, signal } = {}) {
     }
 
     try {
-      const response = await fetch(url.toString(), { signal, cache: 'no-store' });
+      const response = await fetchWithTimeout(url.toString(), { signal, cache: 'no-store' });
 
       if (response.ok) {
         return await response.json();
@@ -1688,7 +1787,7 @@ export async function fetchMarketSymbolSuggestions({ query, signal, limit } = {}
     }
 
     try {
-      const response = await fetch(url.toString(), { signal, cache: 'no-store' });
+      const response = await fetchWithTimeout(url.toString(), { signal, cache: 'no-store' });
 
       if (response.ok) {
         const payload = await response.json();

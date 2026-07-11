@@ -193,6 +193,19 @@ async function fetchText(url, { signal, encoding = 'utf-8' } = {}) {
   }
 }
 
+async function fetchWithTimeout(url, options = {}) {
+  const timeout = withTimeout(options.signal);
+
+  try {
+    return await fetch(url.toString(), {
+      ...options,
+      signal: timeout.signal,
+    });
+  } finally {
+    timeout.cleanup();
+  }
+}
+
 function uniqueNewsItems(items, limit = 12) {
   const seen = new Set();
   const result = [];
@@ -540,7 +553,7 @@ export async function fetchMarketNews({ query, tickers, language, mode, refreshK
       url.searchParams.set('refresh', '1');
     }
 
-    const response = await fetch(url.toString(), { signal, cache: 'no-store' });
+    const response = await fetchWithTimeout(url.toString(), { signal, cache: 'no-store' });
 
     if (response.ok) {
       return await response.json();
