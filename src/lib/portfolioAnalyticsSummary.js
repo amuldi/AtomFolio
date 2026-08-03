@@ -6,10 +6,6 @@ function normalizeText(value) {
     .replace(/[\s_.\-/%()[\]]+/g, '');
 }
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
-
 function parseNumber(value) {
   const raw = String(value ?? '').trim().replace(/[−–—]/g, '-');
   if (!raw) {
@@ -87,7 +83,8 @@ function parseDateValue(value) {
   const match =
     localMatch ??
     (/^\d{8}$/.test(compact)
-      ? [, compact.slice(0, 4), compact.slice(4, 6), compact.slice(6, 8)]
+      ? // eslint-disable-next-line no-sparse-arrays -- mimics a regex match array (index 0 is the unused full match)
+        [, compact.slice(0, 4), compact.slice(4, 6), compact.slice(6, 8)]
       : raw.replace(/[./]/g, '-').match(/^(\d{4})-(\d{1,2})-(\d{1,2})/));
 
   if (match) {

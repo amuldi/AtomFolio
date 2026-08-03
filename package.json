@@ -12,6 +12,8 @@
     "dev:server": "node server/index.mjs",
     "db:migrate": "node scripts/migrate-db.mjs",
     "test": "node --test",
+    "lint": "eslint .",
+    "format": "prettier --write",
     "build": "vite build",
     "preview": "node server/index.mjs --static"
   },
@@ -22,7 +24,14 @@
     "three": "^0.168.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@vitejs/plugin-react": "^4.3.1",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.9.0",
+    "prettier": "^3.9.6",
     "vite": "^5.4.8"
   }
 }

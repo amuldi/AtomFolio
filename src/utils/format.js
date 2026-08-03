@@ -68,7 +68,7 @@ export function normalizeDisplayKey(value) {
   return String(value ?? '')
     .trim()
     .toLowerCase()
-    .replace(/^﻿/, '')
+    .replace(/^\ufeff/, '')
     .replace(/[\s_.\-/%()[\]]+/g, '');
 }
 

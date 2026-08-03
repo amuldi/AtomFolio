@@ -2560,14 +2560,14 @@ function formatAtomDateLabel(value) {
 
   const normalized = trimmed.replace(/\s+/, ' ');
   const isoDateTimeMatch = normalized.match(
-    /^(\d{4})[-/\.](\d{1,2})[-/\.](\d{1,2})(?:[T\s]\d{1,2}:\d{2}(?::\d{2})?)?/,
+    /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[T\s]\d{1,2}:\d{2}(?::\d{2})?)?/,
   );
   if (isoDateTimeMatch) {
     const [, year, month, day] = isoDateTimeMatch;
     return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
   }
 
-  const isoDateMatch = trimmed.match(/^(\d{4})[-/\.](\d{1,2})[-/\.](\d{1,2})/);
+  const isoDateMatch = trimmed.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
   if (isoDateMatch) {
     const [, year, month, day] = isoDateMatch;
     return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
@@ -2579,7 +2579,7 @@ function formatAtomDateLabel(value) {
     return `${year}-${month}-${day}`;
   }
 
-  const shortDateMatch = trimmed.match(/^(\d{1,2})[-/\.](\d{1,2})[-/\.](\d{2,4})(?:[T\s]\d{1,2}:\d{2}(?::\d{2})?)?/);
+  const shortDateMatch = trimmed.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})(?:[T\s]\d{1,2}:\d{2}(?::\d{2})?)?/);
   if (shortDateMatch) {
     const [, month, day, year] = shortDateMatch;
     const fullYear = year.length === 2 ? `20${year}` : year;
@@ -2621,8 +2621,8 @@ function isDateLikeValue(value) {
   }
 
   if (
-    /^\d{4}[-/\.]\d{1,2}[-/\.]\d{1,2}(?:[T\s]\d{1,2}:\d{2}(?::\d{2})?)?$/.test(trimmed) ||
-    /^\d{1,2}[-/\.]\d{1,2}[-/\.]\d{2,4}(?:[T\s]\d{1,2}:\d{2}(?::\d{2})?)?$/.test(trimmed)
+    /^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}(?:[T\s]\d{1,2}:\d{2}(?::\d{2})?)?$/.test(trimmed) ||
+    /^\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}(?:[T\s]\d{1,2}:\d{2}(?::\d{2})?)?$/.test(trimmed)
   ) {
     const date = new Date(trimmed.replace(/\./g, '-').replace(/^(\d{4}-\d{1,2}-\d{1,2})\s+/, '$1T'));
     return Number.isFinite(date.getTime());
@@ -7486,7 +7486,7 @@ function ToolSideDrawer({
             !current.trim() || current === '주식' ? nextData.assetClass : current,
           );
         }
-      } catch (error) {
+      } catch {
         if (controller.signal.aborted) {
           return;
         }

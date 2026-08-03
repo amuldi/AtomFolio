@@ -576,14 +576,14 @@ function parseDateParts(value, options = {}) {
   }
 
   const isoDateTimeMatch = normalized.match(
-    /^(\d{4})[-/\.](\d{1,2})[-/\.](\d{1,2})(?:[T\s]+(?:오전|오후|AM|PM)?\s*\d{1,2}:\d{2}(?::\d{2})?)?/i,
+    /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[T\s]+(?:오전|오후|AM|PM)?\s*\d{1,2}:\d{2}(?::\d{2})?)?/i,
   );
   if (isoDateTimeMatch) {
     return createStrictDateParts(isoDateTimeMatch[1], isoDateTimeMatch[2], isoDateTimeMatch[3]);
   }
 
   const shortDateMatch = normalized.match(
-    /^(\d{1,2})[-/\.](\d{1,2})[-/\.](\d{2,4})(?:[T\s]+(?:오전|오후|AM|PM)?\s*\d{1,2}:\d{2}(?::\d{2})?)?/i,
+    /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})(?:[T\s]+(?:오전|오후|AM|PM)?\s*\d{1,2}:\d{2}(?::\d{2})?)?/i,
   );
   if (shortDateMatch) {
     const [, first, second, rawYear] = shortDateMatch;
@@ -631,7 +631,7 @@ function isAlphabeticTickerLikeValue(value) {
     return false;
   }
 
-  return /^[A-Z]{1,10}(?:[.\-][A-Z]{1,4})?$/i.test(trimmed);
+  return /^[A-Z]{1,10}(?:[.-][A-Z]{1,4})?$/i.test(trimmed);
 }
 
 function isNumericSecurityCodeLikeValue(value) {
@@ -1543,7 +1543,6 @@ function inspectPortfolioTable(text) {
 function buildParsedItems(inspection) {
   const { bodyRows, headerLabels, fieldKeys, headers, indexes } = inspection;
   const {
-    dateIndex,
     tickerIndex,
     nameIndex,
     returnIndex,

@@ -4,7 +4,6 @@ import { compactLabel } from '../../utils/format.js';
 import {
   buildBondPath,
   buildLoopPath,
-  buildBlotPath,
   generateAtomLayout,
   CENTER_BLOTS,
   CENTER_SPIN_LOOPS,
