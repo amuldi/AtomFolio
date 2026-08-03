@@ -5,7 +5,7 @@ import { readJsonBody, sendJson } from '../_utils/http.js';
 export default async function handler(request, response) {
   await handleWorkspaceClaimGuestRequest({
     method: request.method,
-    authContext: resolveAuthContext(request),
+    authContext: await resolveAuthContext(request),
     readBody: () => readJsonBody(request),
     sendJson: (status, payload) => sendJson(response, status, payload),
   });

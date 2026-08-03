@@ -5,7 +5,7 @@ import { sendJson } from '../_utils/http.js';
 export default async function handler(request, response) {
   await handleWorkspaceSessionRequest({
     method: request.method,
-    workspaceSession: resolveWorkspaceSessionContext(request),
+    workspaceSession: await resolveWorkspaceSessionContext(request),
     sendJson: (status, payload) => sendJson(response, status, payload),
   });
 }

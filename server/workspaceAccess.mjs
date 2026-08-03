@@ -1,9 +1,12 @@
+import { verifyToken } from '@clerk/backend';
+
 import {
   ensureWorkspaceAccess,
   resolveWorkspaceId,
 } from './portfolioStore.mjs';
 
 const TRUSTED_AUTH_HEADER_FLAG = 'ATOMFOLIO_TRUSTED_AUTH_HEADERS';
+const BEARER_TOKEN_PATTERN = /^Bearer\s+(.+)$/i;
 
 function getHeader(headers, name) {
   const lowerName = name.toLowerCase();
@@ -24,6 +27,14 @@ function cleanHeaderText(value, maxLength = 180) {
 }
 
 function shouldTrustAuthHeaders() {
+  // Header spoofing is only ever safe on a machine we control end-to-end. Vercel's production
+  // runtime is reachable from the public internet, so this is force-disabled there regardless of
+  // how the flag is set (a stray ATOMFOLIO_TRUSTED_AUTH_HEADERS=true in a prod env must not open
+  // the door to impersonating any user).
+  if (process.env.VERCEL === '1') {
+    return false;
+  }
+
   const flag = String(process.env[TRUSTED_AUTH_HEADER_FLAG] ?? '').trim().toLowerCase();
 
   if (flag === 'true' || flag === '1' || flag === 'yes') {
@@ -34,7 +45,43 @@ function shouldTrustAuthHeaders() {
     return false;
   }
 
-  return process.env.NODE_ENV !== 'production' && process.env.VERCEL !== '1';
+  return process.env.NODE_ENV !== 'production';
+}
+
+function getBearerToken(headers) {
+  const rawHeader = getHeader(headers, 'authorization') || getHeader(headers, 'Authorization');
+  const match = BEARER_TOKEN_PATTERN.exec(String(rawHeader ?? '').trim());
+  return match ? match[1].trim() : '';
+}
+
+// Clerk session tokens only guarantee `sub` (the user id) by default. Email/display name are
+// only present if the Clerk dashboard's session token template is customized to include them;
+// treat them as optional enrichment rather than something the backend can rely on.
+async function verifyClerkSessionToken(token) {
+  const secretKey = process.env.CLERK_SECRET_KEY;
+
+  if (!token || !secretKey) {
+    return null;
+  }
+
+  try {
+    const claims = await verifyToken(token, { secretKey });
+    const userId = cleanHeaderText(claims?.sub, 180);
+
+    if (!userId) {
+      return null;
+    }
+
+    return {
+      id: userId,
+      email: cleanHeaderText(claims?.email ?? claims?.email_address, 254) || '',
+      displayName: cleanHeaderText(claims?.name ?? claims?.full_name, 180) || '',
+      authProvider: 'clerk',
+      authSubject: userId,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function shouldAllowQueryWorkspaceId() {
@@ -55,7 +102,18 @@ function hasExplicitWorkspaceId(requestOrValue) {
   return Boolean(headerWorkspaceId || queryWorkspaceId);
 }
 
-export function resolveAuthContext(requestOrValue) {
+export async function resolveAuthContext(requestOrValue, { verifyBearerToken = verifyClerkSessionToken } = {}) {
+  const headers = requestOrValue?.headers ?? {};
+  const bearerToken = getBearerToken(headers);
+
+  if (bearerToken) {
+    const user = await verifyBearerToken(bearerToken);
+
+    if (user) {
+      return { trusted: true, user };
+    }
+  }
+
   if (!shouldTrustAuthHeaders()) {
     return {
       trusted: false,
@@ -63,7 +121,6 @@ export function resolveAuthContext(requestOrValue) {
     };
   }
 
-  const headers = requestOrValue?.headers ?? {};
   const userId = cleanHeaderText(getHeader(headers, 'x-atomfolio-user-id'), 120);
 
   if (!userId) {
@@ -86,7 +143,7 @@ export function resolveAuthContext(requestOrValue) {
 }
 
 export async function resolveWorkspaceRequestContext(requestOrValue, { requiredRole = 'viewer' } = {}) {
-  const authContext = resolveAuthContext(requestOrValue);
+  const authContext = await resolveAuthContext(requestOrValue);
   const workspaceId =
     authContext.user && !hasExplicitWorkspaceId(requestOrValue)
       ? `user:${authContext.user.id}`
@@ -99,8 +156,8 @@ export async function resolveWorkspaceRequestContext(requestOrValue, { requiredR
   };
 }
 
-export function resolveWorkspaceSessionContext(requestOrValue) {
-  const authContext = resolveAuthContext(requestOrValue);
+export async function resolveWorkspaceSessionContext(requestOrValue) {
+  const authContext = await resolveAuthContext(requestOrValue);
   const workspaceId =
     authContext.user && !hasExplicitWorkspaceId(requestOrValue)
       ? `user:${authContext.user.id}`

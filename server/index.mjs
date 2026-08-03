@@ -187,7 +187,7 @@ const server = http.createServer(async (request, response) => {
   if (requestUrl.pathname === '/api/workspace/session') {
     await handleWorkspaceSessionRequest({
       method: request.method,
-      workspaceSession: resolveWorkspaceSessionContext({
+      workspaceSession: await resolveWorkspaceSessionContext({
         headers: request.headers,
         query: {
           workspaceId: requestUrl.searchParams.get('workspaceId'),
@@ -201,7 +201,7 @@ const server = http.createServer(async (request, response) => {
   if (requestUrl.pathname === '/api/workspace/claim-guest') {
     await handleWorkspaceClaimGuestRequest({
       method: request.method,
-      authContext: resolveAuthContext({
+      authContext: await resolveAuthContext({
         headers: request.headers,
       }),
       readBody,

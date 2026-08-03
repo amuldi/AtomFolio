@@ -118,7 +118,7 @@ test('a different authenticated user cannot access another owner workspace', asy
   assert.equal(secondContext.code, 'workspace-access-denied');
 });
 
-test('production ignores auth headers unless trusted headers are explicitly enabled', async () => {
+test('production ignores trusted auth headers even when the flag is explicitly enabled', async () => {
   process.env.NODE_ENV = 'production';
   process.env.VERCEL = '1';
   delete process.env.ATOMFOLIO_TRUSTED_AUTH_HEADERS;
@@ -133,17 +133,63 @@ test('production ignores auth headers unless trusted headers are explicitly enab
   assert.equal(ignoredContext.ok, false);
   assert.equal(ignoredContext.statusCode, 401);
 
+  // Even an explicit opt-in must not work on Vercel: a stray env var should never let
+  // header-spoofed requests impersonate a user in production.
   process.env.ATOMFOLIO_TRUSTED_AUTH_HEADERS = 'true';
 
-  const trustedContext = await workspaceAccess.resolveWorkspaceRequestContext({
+  const stillIgnoredContext = await workspaceAccess.resolveWorkspaceRequestContext({
     headers: {
       'x-atomfolio-workspace-id': 'prod-team',
-      'x-atomfolio-user-id': 'verified-user',
+      'x-atomfolio-user-id': 'spoofed-user-2',
     },
   });
 
-  assert.equal(trustedContext.ok, true);
-  assert.equal(trustedContext.userId, 'verified-user');
+  assert.equal(stillIgnoredContext.ok, false);
+  assert.equal(stillIgnoredContext.statusCode, 401);
+});
+
+test('a verified bearer token authenticates a request even in production', async () => {
+  process.env.NODE_ENV = 'production';
+  process.env.VERCEL = '1';
+  delete process.env.ATOMFOLIO_TRUSTED_AUTH_HEADERS;
+
+  const authContext = await workspaceAccess.resolveAuthContext(
+    {
+      headers: {
+        authorization: 'Bearer valid-test-token',
+      },
+    },
+    {
+      verifyBearerToken: async (token) => {
+        assert.equal(token, 'valid-test-token');
+        return { id: 'clerk-user-1', email: '', displayName: '', authProvider: 'clerk', authSubject: 'clerk-user-1' };
+      },
+    },
+  );
+
+  assert.equal(authContext.trusted, true);
+  assert.equal(authContext.user.id, 'clerk-user-1');
+  assert.equal(authContext.user.authProvider, 'clerk');
+});
+
+test('an invalid bearer token falls back to unauthenticated in production', async () => {
+  process.env.NODE_ENV = 'production';
+  process.env.VERCEL = '1';
+  delete process.env.ATOMFOLIO_TRUSTED_AUTH_HEADERS;
+
+  const authContext = await workspaceAccess.resolveAuthContext(
+    {
+      headers: {
+        authorization: 'Bearer garbage-token',
+      },
+    },
+    {
+      verifyBearerToken: async () => null,
+    },
+  );
+
+  assert.equal(authContext.trusted, false);
+  assert.equal(authContext.user, null);
 });
 
 test('claimGuestWorkspaceForUser copies guest records into a user workspace once', async () => {
