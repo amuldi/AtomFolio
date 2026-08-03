@@ -1,3 +1,5 @@
+import { getClerkAuthorizationHeader } from '../lib/clerkAuthBridge.js';
+
 export function readStoredOption(key, allowed, fallback) {
   if (typeof window === 'undefined') {
     return fallback;
@@ -124,11 +126,13 @@ export function isGuestPortfolioWorkspaceId(workspaceId) {
 
 async function fetchJson(url, options = {}) {
   const workspaceId = options.workspaceId ?? getPortfolioWorkspaceId();
+  const authorizationHeader = await getClerkAuthorizationHeader();
   const response = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
       'x-atomfolio-workspace-id': workspaceId,
+      ...(authorizationHeader ? { Authorization: authorizationHeader } : {}),
       ...(options.headers ?? {}),
     },
   });

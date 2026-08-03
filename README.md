@@ -218,7 +218,7 @@ flowchart LR
 - `server/portfolioIngestion.mjs`: 서버 측 CSV ingest.
 - `server/portfolioStore.mjs`: 저장소 추상화.
 - `server/postgresPortfolioStore.mjs`: Neon/Postgres 저장소 어댑터.
-- `server/workspaceAccess.mjs`: 인증 공급자 연결 전 단계의 workspace 접근 검사.
+- `server/workspaceAccess.mjs`: Clerk 세션 토큰 검증과 workspace 접근 검사.
 - `server/rateLimit.mjs`: IP 기준 슬라이딩 윈도우 레이트 리밋.
 - `server/marketDataCache.mjs`: 시세 응답 서버 캐시(TTL 3분)와 stale 폴백.
 - `db/schema.sql`: user, workspace, member, portfolio, import history, AI analysis, snapshot 테이블.
@@ -242,6 +242,40 @@ flowchart LR
 있으므로 best-effort 방어로 이해해야 한다. 엄격한 전역 한도가 필요해지면 Upstash
 Redis 같은 공유 저장소로 교체한다. 로컬 Node 서버(`server/index.mjs`)는 단일
 프로세스라 한도가 정확히 적용된다.
+
+### 인증
+
+[Clerk](https://clerk.com)로 로그인을 처리한다. 커스텀 이메일/비밀번호 UI
+(`src/components/auth/AuthPanel.jsx`)가 Clerk의 headless `useSignIn`/`useSignUp`
+훅으로 로그인·회원가입·이메일 인증 코드 흐름을 직접 그린다.
+
+**토큰 흐름**
+
+1. 클라이언트가 로그인하면 Clerk 세션이 브라우저에 생성된다.
+2. `src/lib/clerkAuthBridge.js`가 Clerk의 `getToken()`을 등록해두고,
+   `src/utils/storage.js`의 모든 API 호출이 이 함수로 세션 토큰을 받아
+   `Authorization: Bearer <JWT>` 헤더를 붙인다.
+3. 서버의 `resolveAuthContext`(`server/workspaceAccess.mjs`)가 `@clerk/backend`의
+   `verifyToken`으로 서명을 검증한다. 검증에 성공한 `sub` 클레임이 그대로
+   workspace 소유자 `userId`가 된다.
+4. Clerk 세션 토큰은 기본적으로 `sub`(사용자 ID)만 보장한다. 이메일/이름을
+   워크스페이스 화면에 노출하려면 Clerk 대시보드에서 세션 토큰 커스터마이징으로
+   `email`/`name` 클레임을 추가해야 한다. 없어도 인증·권한 검사에는 영향이 없다.
+
+**게스트 승격**: 로그인 전 `src/utils/storage.js`가 `crypto.randomUUID()`로 게스트
+workspace ID(`guest:<uuid>`)를 만들어 localStorage에 저장한다. 로그인에 성공하면
+`AuthPanel`의 `onAuthenticated` 콜백이 기존 `/api/workspace/claim-guest` 흐름
+(`handleClaimGuestWorkspace`)을 그대로 호출해 게스트 데이터를 로그인 사용자의
+workspace로 옮긴다. 이 흐름 자체는 Clerk 도입 전과 동일하다.
+
+**로컬 개발 전용 우회로**: `ATOMFOLIO_TRUSTED_AUTH_HEADERS=true`를 설정하면 Clerk
+없이 `x-atomfolio-user-*` 헤더를 신뢰해 로그인 흐름을 흉내 낼 수 있다. `VERCEL=1`
+환경에서는 이 플래그 값과 무관하게 항상 비활성화되므로, 프로덕션에서는 헤더
+스푸핑으로 다른 사용자를 사칭할 수 없다.
+
+**환경 변수**: `CLERK_SECRET_KEY`(서버), `VITE_CLERK_PUBLISHABLE_KEY`(클라이언트).
+`VITE_CLERK_PUBLISHABLE_KEY`가 없으면 `src/main.jsx`가 `<ClerkProvider>`로 감싸지
+않고, `AuthPanel`도 렌더링하지 않는다 — 게스트 전용 모드로 그대로 동작한다.
 
 ## 데이터 흐름
 
@@ -448,13 +482,22 @@ AI 포트폴리오 요약을 사용하려면 서버 환경 변수에 아래 값�
 OPENAI_API_KEY="sk-..."
 ```
 
-로그인 기능을 붙이기 전까지 앱은 `guest:<uuid>` workspace로 저장/복원을 유지합니다. Clerk, Auth0, Vercel OIDC, 자체 미들웨어처럼 검증된 인증 레이어를 붙인 뒤에는 서버가 주입한 사용자 헤더를 신뢰하도록 아래 값을 켤 수 있습니다.
+로그인은 Clerk로 처리합니다. 아래 값을 설정하지 않으면 앱은 `guest:<uuid>`
+workspace로 저장/복원만 하는 게스트 전용 모드로 동작합니다 (자세한 흐름은
+[인증](#인증) 절 참고).
+
+```bash
+CLERK_SECRET_KEY="sk_test_..."
+VITE_CLERK_PUBLISHABLE_KEY="pk_test_..."
+```
+
+로컬 개발에서 Clerk 없이 인증을 흉내 내려면 아래 값을 켤 수 있습니다. 클라이언트가
+보낸 `x-atomfolio-user-*` 헤더를 그대로 신뢰하므로, 신뢰할 수 있는 로컬 환경에서만
+켭니다. `VERCEL=1`인 프로덕션에서는 이 값이 무엇이든 항상 비활성화됩니다.
 
 ```bash
 ATOMFOLIO_TRUSTED_AUTH_HEADERS="true"
 ```
-
-이 값은 인증 미들웨어가 클라이언트가 보낸 `x-atomfolio-user-*` 헤더를 제거하고, 검증된 사용자 정보만 다시 넣는 구조에서만 켭니다. 기본값은 비활성 상태이며, 프로덕션에서는 임의 사용자 헤더를 믿지 않습니다.
 
 Vercel 설정은 [vercel.json](vercel.json)에 있습니다.
 

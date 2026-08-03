@@ -49,6 +49,9 @@ import {
   PortfolioAllocationRing as PortfolioAllocationRingView,
 } from './components/allocation/index.jsx';
 import DigitalTwinPanel from './components/panels/DigitalTwinPanel.jsx';
+import { AuthPanel } from './components/auth/AuthPanel.jsx';
+
+const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? '';
 
 const VIEWBOX_SIZE = 640;
 const VIEWBOX_HALF = VIEWBOX_SIZE / 2;
@@ -247,6 +250,18 @@ const UI_TEXT = {
     workspaceClaimDone: '이전 완료',
     workspaceClaimEmpty: '이전할 게스트 데이터 없음',
     workspaceClaimFailed: '이전 실패',
+    authEmailPlaceholder: '이메일',
+    authPasswordPlaceholder: '비밀번호',
+    authVerifyCodePlaceholder: '인증 코드',
+    authVerifyHint: '이메일로 받은 인증 코드를 입력하세요',
+    authSignInButton: '로그인',
+    authSignUpButton: '회원가입',
+    authVerifyButton: '인증 확인',
+    authSignOut: '로그아웃',
+    authPending: '처리 중',
+    authSwitchToSignUp: '계정이 없으신가요? 회원가입',
+    authSwitchToSignIn: '이미 계정이 있으신가요? 로그인',
+    authGenericError: '요청을 처리하지 못했습니다. 다시 시도해주세요.',
     uploadAria: '투자 데이터 업로드',
     uploadHint: '투자 데이터를 업로드 해주세요',
     uploadDragHint: 'CSV 파일을 여기에 끌어다 놓으세요',
@@ -355,6 +370,18 @@ const UI_TEXT = {
     workspaceClaimDone: 'Moved',
     workspaceClaimEmpty: 'No guest data to move',
     workspaceClaimFailed: 'Move failed',
+    authEmailPlaceholder: 'Email',
+    authPasswordPlaceholder: 'Password',
+    authVerifyCodePlaceholder: 'Verification code',
+    authVerifyHint: 'Enter the verification code sent to your email',
+    authSignInButton: 'Sign in',
+    authSignUpButton: 'Sign up',
+    authVerifyButton: 'Verify',
+    authSignOut: 'Sign out',
+    authPending: 'Working',
+    authSwitchToSignUp: "Don't have an account? Sign up",
+    authSwitchToSignIn: 'Already have an account? Sign in',
+    authGenericError: 'Something went wrong. Please try again.',
     uploadAria: 'Upload investment data',
     uploadHint: 'Please upload your investment data',
     uploadDragHint: 'Drop CSV files here',
@@ -10685,6 +10712,10 @@ export default function App() {
     }
   }, [loadWorkspaceSession, portfolioEntries, text.workspaceClaimFailed]);
 
+  const handleAuthPanelSuccess = useCallback(() => {
+    void handleClaimGuestWorkspace().then(() => loadWorkspaceSession());
+  }, [handleClaimGuestWorkspace, loadWorkspaceSession]);
+
   const showPortfolioError = (message) => {
     setPortfolioErrorClosing(false);
     setPortfolioError(message);
@@ -12908,6 +12939,9 @@ export default function App() {
                       </div>
                     ) : null}
                   </dl>
+                  {CLERK_PUBLISHABLE_KEY ? (
+                    <AuthPanel text={text} onAuthenticated={handleAuthPanelSuccess} />
+                  ) : null}
                   <button
                     type="button"
                     className="settings-action"
