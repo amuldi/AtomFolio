@@ -29,7 +29,9 @@ const WORKSPACE_ROLE_RANK = {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
-const localDataPath = path.join(projectRoot, 'data', 'portfolio-store.json');
+const localDataPath = process.env.ATOMFOLIO_LOCAL_DATA_PATH
+  ? path.resolve(process.env.ATOMFOLIO_LOCAL_DATA_PATH)
+  : path.join(projectRoot, 'data', 'portfolio-store.json');
 const requestedStoreDriver = String(process.env.ATOMFOLIO_STORE_DRIVER ?? '').trim().toLowerCase();
 const useFileStore =
   requestedStoreDriver === 'file' ||
@@ -208,6 +210,39 @@ async function writeStore(store) {
   await writeFile(localDataPath, `${JSON.stringify(store, null, 2)}\n`, 'utf8');
 }
 
+// Serializes every local-store read-modify-write cycle so concurrent requests can't read the
+// same on-disk snapshot, mutate independently, and have the last writer silently drop the other's
+// change. Postgres writes don't need this: each statement is its own atomic upsert.
+let writeQueueTail = Promise.resolve();
+
+function withLocalStoreTransaction(mutator) {
+  const runTransaction = async () => {
+    const store = await readStore();
+    const { result, dirty } = await mutator(store);
+
+    if (dirty) {
+      await writeStore(store);
+    }
+
+    return result;
+  };
+
+  const scheduled = writeQueueTail.then(runTransaction, runTransaction);
+  writeQueueTail = scheduled.then(
+    () => undefined,
+    () => undefined,
+  );
+
+  return scheduled;
+}
+
+function withLocalStoreWrite(mutator) {
+  return withLocalStoreTransaction(async (store) => ({
+    result: await mutator(store),
+    dirty: true,
+  }));
+}
+
 function ensureWorkspace(store, workspaceId) {
   const safeWorkspaceId = cleanWorkspaceId(workspaceId);
 
@@ -371,16 +406,19 @@ export async function ensureWorkspaceAccess(workspaceId, userContext = null, { r
     });
   }
 
-  const store = await readStore();
-  const resolved = ensureWorkspace(store, safeWorkspaceId);
-  let role = roleFromWorkspace(resolved.workspace, user.id);
-  const hasOwnerOrMembers = Boolean(resolved.workspace.userId) || safeArray(resolved.workspace.members).length > 0;
+  const role = await withLocalStoreTransaction((store) => {
+    const resolved = ensureWorkspace(store, safeWorkspaceId);
+    const existingRole = roleFromWorkspace(resolved.workspace, user.id);
+    const hasOwnerOrMembers =
+      Boolean(resolved.workspace.userId) || safeArray(resolved.workspace.members).length > 0;
 
-  if (!role && !hasOwnerOrMembers) {
-    claimFallbackWorkspace(resolved.workspace, user);
-    role = 'owner';
-    await writeStore(store);
-  }
+    if (!existingRole && !hasOwnerOrMembers) {
+      claimFallbackWorkspace(resolved.workspace, user);
+      return { result: 'owner', dirty: true };
+    }
+
+    return { result: existingRole, dirty: false };
+  });
 
   if (!role) {
     return createAccessResult({
@@ -475,48 +513,52 @@ export async function claimGuestWorkspaceForUser({
     };
   }
 
-  const store = await readStore();
-  const sourceWorkspace = store.workspaces?.[safeGuestWorkspaceId] ?? null;
-  const resolvedTarget = ensureWorkspace(store, access.workspaceId);
+  const claimResult = await withLocalStoreWrite((store) => {
+    const sourceWorkspace = store.workspaces?.[safeGuestWorkspaceId] ?? null;
+    const resolvedTarget = ensureWorkspace(store, access.workspaceId);
 
-  if (!resolvedTarget.workspace.userId) {
-    claimFallbackWorkspace(resolvedTarget.workspace, safeUser);
-  }
+    if (!resolvedTarget.workspace.userId) {
+      claimFallbackWorkspace(resolvedTarget.workspace, safeUser);
+    }
 
-  const portfolioMerge = mergeWorkspaceRecords(
-    resolvedTarget.workspace.portfolios,
-    sourceWorkspace?.portfolios,
-  );
-  const importMerge = mergeWorkspaceRecords(
-    resolvedTarget.workspace.imports,
-    sourceWorkspace?.imports,
-  );
-  const analysisMerge = mergeWorkspaceRecords(
-    resolvedTarget.workspace.analyses,
-    sourceWorkspace?.analyses,
-  );
+    const portfolioMerge = mergeWorkspaceRecords(
+      resolvedTarget.workspace.portfolios,
+      sourceWorkspace?.portfolios,
+    );
+    const importMerge = mergeWorkspaceRecords(
+      resolvedTarget.workspace.imports,
+      sourceWorkspace?.imports,
+    );
+    const analysisMerge = mergeWorkspaceRecords(
+      resolvedTarget.workspace.analyses,
+      sourceWorkspace?.analyses,
+    );
 
-  resolvedTarget.workspace.portfolios = portfolioMerge.records;
-  resolvedTarget.workspace.imports = importMerge.records.slice(0, 100);
-  resolvedTarget.workspace.analyses = analysisMerge.records.slice(0, 200);
-  resolvedTarget.workspace.updatedAt = nowIso();
+    resolvedTarget.workspace.portfolios = portfolioMerge.records;
+    resolvedTarget.workspace.imports = importMerge.records.slice(0, 100);
+    resolvedTarget.workspace.analyses = analysisMerge.records.slice(0, 200);
+    resolvedTarget.workspace.updatedAt = nowIso();
 
-  if (removeGuest && store.workspaces?.[safeGuestWorkspaceId]) {
-    delete store.workspaces[safeGuestWorkspaceId];
-  }
+    if (removeGuest && store.workspaces?.[safeGuestWorkspaceId]) {
+      delete store.workspaces[safeGuestWorkspaceId];
+    }
 
-  await writeStore(store);
+    return {
+      targetWorkspaceId: resolvedTarget.workspaceId,
+      copied: {
+        portfolios: portfolioMerge.copiedCount,
+        imports: importMerge.copiedCount,
+        analyses: analysisMerge.copiedCount,
+        snapshots: 0,
+      },
+    };
+  });
 
   return {
     ok: true,
     guestWorkspaceId: safeGuestWorkspaceId,
-    targetWorkspaceId: resolvedTarget.workspaceId,
-    copied: {
-      portfolios: portfolioMerge.copiedCount,
-      imports: importMerge.copiedCount,
-      analyses: analysisMerge.copiedCount,
-      snapshots: 0,
-    },
+    targetWorkspaceId: claimResult.targetWorkspaceId,
+    copied: claimResult.copied,
   };
 }
 
@@ -587,20 +629,20 @@ export async function createPortfolio(workspaceId, input) {
     return upsertPostgresPortfolio(safeWorkspaceId, portfolio);
   }
 
-  const store = await readStore();
-  const resolved = ensureWorkspace(store, safeWorkspaceId);
+  return withLocalStoreWrite((store) => {
+    const resolved = ensureWorkspace(store, safeWorkspaceId);
 
-  resolved.workspace.portfolios = [
-    portfolio,
-    ...safeArray(resolved.workspace.portfolios).filter((entry) => entry.id !== portfolio.id),
-  ];
-  resolved.workspace.updatedAt = nowIso();
-  await writeStore(store);
+    resolved.workspace.portfolios = [
+      portfolio,
+      ...safeArray(resolved.workspace.portfolios).filter((entry) => entry.id !== portfolio.id),
+    ];
+    resolved.workspace.updatedAt = nowIso();
 
-  return {
-    workspaceId: resolved.workspaceId,
-    portfolio,
-  };
+    return {
+      workspaceId: resolved.workspaceId,
+      portfolio,
+    };
+  });
 }
 
 export async function updatePortfolio(workspaceId, portfolioId, input) {
@@ -618,26 +660,29 @@ export async function updatePortfolio(workspaceId, portfolioId, input) {
     return upsertPostgresPortfolio(safeWorkspaceId, nextPortfolio);
   }
 
-  const store = await readStore();
-  const resolved = ensureWorkspace(store, safeWorkspaceId);
-  const currentPortfolios = safeArray(resolved.workspace.portfolios);
-  const existing = currentPortfolios.find((entry) => entry.id === portfolioIdString);
+  return withLocalStoreTransaction((store) => {
+    const resolved = ensureWorkspace(store, safeWorkspaceId);
+    const currentPortfolios = safeArray(resolved.workspace.portfolios);
+    const existing = currentPortfolios.find((entry) => entry.id === portfolioIdString);
 
-  if (!existing) {
-    return null;
-  }
+    if (!existing) {
+      return { result: null, dirty: false };
+    }
 
-  const nextPortfolio = sanitizePortfolio({ ...input, id: portfolioIdString }, existing);
-  resolved.workspace.portfolios = currentPortfolios.map((entry) =>
-    entry.id === portfolioIdString ? nextPortfolio : entry,
-  );
-  resolved.workspace.updatedAt = nowIso();
-  await writeStore(store);
+    const nextPortfolio = sanitizePortfolio({ ...input, id: portfolioIdString }, existing);
+    resolved.workspace.portfolios = currentPortfolios.map((entry) =>
+      entry.id === portfolioIdString ? nextPortfolio : entry,
+    );
+    resolved.workspace.updatedAt = nowIso();
 
-  return {
-    workspaceId: resolved.workspaceId,
-    portfolio: nextPortfolio,
-  };
+    return {
+      result: {
+        workspaceId: resolved.workspaceId,
+        portfolio: nextPortfolio,
+      },
+      dirty: true,
+    };
+  });
 }
 
 export async function deletePortfolio(workspaceId, portfolioId) {
@@ -648,21 +693,22 @@ export async function deletePortfolio(workspaceId, portfolioId) {
     return deletePostgresPortfolio(safeWorkspaceId, portfolioIdString);
   }
 
-  const store = await readStore();
-  const resolved = ensureWorkspace(store, safeWorkspaceId);
-  const beforeCount = safeArray(resolved.workspace.portfolios).length;
+  return withLocalStoreTransaction((store) => {
+    const resolved = ensureWorkspace(store, safeWorkspaceId);
+    const beforeCount = safeArray(resolved.workspace.portfolios).length;
+    const remainingPortfolios = safeArray(resolved.workspace.portfolios).filter(
+      (entry) => entry.id !== portfolioIdString,
+    );
 
-  resolved.workspace.portfolios = safeArray(resolved.workspace.portfolios).filter(
-    (entry) => entry.id !== portfolioIdString,
-  );
+    if (remainingPortfolios.length === beforeCount) {
+      return { result: false, dirty: false };
+    }
 
-  if (resolved.workspace.portfolios.length === beforeCount) {
-    return false;
-  }
+    resolved.workspace.portfolios = remainingPortfolios;
+    resolved.workspace.updatedAt = nowIso();
 
-  resolved.workspace.updatedAt = nowIso();
-  await writeStore(store);
-  return true;
+    return { result: true, dirty: true };
+  });
 }
 
 export async function listImportHistory(workspaceId) {
@@ -693,20 +739,20 @@ export async function saveImportHistory(workspaceId, input) {
     return upsertPostgresImportHistory(safeWorkspaceId, importRecord);
   }
 
-  const store = await readStore();
-  const resolved = ensureWorkspace(store, safeWorkspaceId);
+  return withLocalStoreWrite((store) => {
+    const resolved = ensureWorkspace(store, safeWorkspaceId);
 
-  resolved.workspace.imports = [
-    importRecord,
-    ...safeArray(resolved.workspace.imports).filter((entry) => entry.id !== importRecord.id),
-  ].slice(0, 100);
-  resolved.workspace.updatedAt = nowIso();
-  await writeStore(store);
+    resolved.workspace.imports = [
+      importRecord,
+      ...safeArray(resolved.workspace.imports).filter((entry) => entry.id !== importRecord.id),
+    ].slice(0, 100);
+    resolved.workspace.updatedAt = nowIso();
 
-  return {
-    workspaceId: resolved.workspaceId,
-    importRecord,
-  };
+    return {
+      workspaceId: resolved.workspaceId,
+      importRecord,
+    };
+  });
 }
 
 export async function listAiAnalyses(workspaceId, filters = {}) {
@@ -754,25 +800,25 @@ export async function saveAiAnalysis(workspaceId, input) {
     return upsertPostgresAiAnalysis(safeWorkspaceId, analysis);
   }
 
-  const store = await readStore();
-  const resolved = ensureWorkspace(store, safeWorkspaceId);
-  const existing = safeArray(resolved.workspace.analyses).find(
-    (entry) =>
-      entry.portfolioId === analysis.portfolioId &&
-      entry.analysisType === analysis.analysisType &&
-      entry.inputHash === analysis.inputHash,
-  );
+  return withLocalStoreWrite((store) => {
+    const resolved = ensureWorkspace(store, safeWorkspaceId);
+    const existing = safeArray(resolved.workspace.analyses).find(
+      (entry) =>
+        entry.portfolioId === analysis.portfolioId &&
+        entry.analysisType === analysis.analysisType &&
+        entry.inputHash === analysis.inputHash,
+    );
 
-  analysis = sanitizeAiAnalysis(input, existing);
-  resolved.workspace.analyses = [
-    analysis,
-    ...safeArray(resolved.workspace.analyses).filter((entry) => entry.id !== analysis.id),
-  ].slice(0, 200);
-  resolved.workspace.updatedAt = nowIso();
-  await writeStore(store);
+    analysis = sanitizeAiAnalysis(input, existing);
+    resolved.workspace.analyses = [
+      analysis,
+      ...safeArray(resolved.workspace.analyses).filter((entry) => entry.id !== analysis.id),
+    ].slice(0, 200);
+    resolved.workspace.updatedAt = nowIso();
 
-  return {
-    workspaceId: resolved.workspaceId,
-    analysis,
-  };
+    return {
+      workspaceId: resolved.workspaceId,
+      analysis,
+    };
+  });
 }
