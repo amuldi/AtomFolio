@@ -53,6 +53,7 @@ import { PortfolioScoreCard as PortfolioScoreCardView } from './components/cards
 import { PortfolioAllocationCard as PortfolioAllocationCardView } from './components/allocation/index.jsx';
 import DigitalTwinPanel from './components/panels/DigitalTwinPanel.jsx';
 import { AuthPanel } from './components/auth/AuthPanel.jsx';
+import { AtomDetailPanel } from './components/panels/AtomDetailPanel.jsx';
 import { AtomCanvas } from './scene/index.js';
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? '';
@@ -241,6 +242,7 @@ const UI_TEXT = {
     scoreToolAria: '스파이더 차트 열기',
     clearUploadAria: '업로드 파일 지우기',
     clearCenterAria: '선택 강조 해제',
+    atomDetailCloseAria: '종목 상세 닫기',
     heatmapAria: '수익 캘린더 히트맵 열기',
     contributionAria: '깃허브 잔디밭 아이콘',
     heatmapChartAria: '포트폴리오 수익 캘린더 히트맵',
@@ -361,6 +363,7 @@ const UI_TEXT = {
     scoreToolAria: 'Open radar chart',
     clearUploadAria: 'Clear uploaded file',
     clearCenterAria: 'Clear highlighted portfolio selection',
+    atomDetailCloseAria: 'Close security detail',
     heatmapAria: 'Open profit calendar heatmap',
     contributionAria: 'GitHub contribution icon',
     heatmapChartAria: 'Portfolio profit calendar heatmap',
@@ -7719,6 +7722,22 @@ export default function App() {
     ],
   );
   const hoveredAtom = atoms.find((atom) => atom.id === hoverInfo?.atomId) ?? null;
+  const selectedAtomData = atoms.find((atom) => atom.id === selectedAtomId) ?? null;
+  const selectedAtomInfoFields = buildAtomInfoFields(selectedAtomData, language);
+  const selectedAtomReturnRaw = selectedAtomData?.detail ?? '';
+  const selectedAtomReturnToneClass = getSignedValueToneClass(
+    selectedAtomReturnRaw,
+    'is-positive',
+    'is-negative',
+  );
+  const selectedAtomDisplayFields = (
+    selectedAtomReturnRaw
+      ? selectedAtomInfoFields.filter((field) => resolveFieldLabelKey(field.label) !== 'return')
+      : selectedAtomInfoFields
+  ).map((field) => ({
+    label: formatFieldLabel(field.label, language),
+    value: translateDisplayValue(field.value, language),
+  }));
 
   return (
     <main
@@ -7995,6 +8014,19 @@ export default function App() {
       </div>
 
       <HoverCard atom={hoveredAtom} position={hoverInfo} language={language} />
+      {selectedAtomData ? (
+        <AtomDetailPanel
+          atom={selectedAtomData}
+          fields={selectedAtomDisplayFields}
+          returnValue={selectedAtomReturnRaw}
+          returnToneClass={selectedAtomReturnToneClass}
+          text={text}
+          onClose={() => {
+            noteInteraction();
+            setSelectedAtomId(null);
+          }}
+        />
+      ) : null}
     </main>
   );
 }

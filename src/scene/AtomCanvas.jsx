@@ -56,19 +56,19 @@ export function AtomCanvas({
     const parent = canvas.parentElement ?? canvas;
     const width = parent.clientWidth || 1;
     const height = parent.clientHeight || 1;
-    const { renderer, scene, camera } = createSceneRenderer(canvas, width, height);
+    const { renderer, scene, camera, composer } = createSceneRenderer(canvas, width, height);
     const labelRenderer = createLabelRenderer(width, height);
     labelLayer.appendChild(labelRenderer.domElement);
 
     const rig = new THREE.Group();
     scene.add(rig);
     rigRef.current = rig;
-    sceneObjectsRef.current = { scene, camera, renderer, labelRenderer };
+    sceneObjectsRef.current = { scene, camera, renderer, composer, labelRenderer };
 
     const handleResize = () => {
       const nextWidth = parent.clientWidth || 1;
       const nextHeight = parent.clientHeight || 1;
-      resizeSceneRenderer(renderer, camera, nextWidth, nextHeight);
+      resizeSceneRenderer(renderer, camera, composer, nextWidth, nextHeight);
       resizeLabelRenderer(labelRenderer, nextWidth, nextHeight);
     };
     window.addEventListener('resize', handleResize);
@@ -85,7 +85,7 @@ export function AtomCanvas({
       }
 
       billboardHitMeshes(hitMeshesRef.current, camera);
-      renderer.render(scene, camera);
+      composer.render();
       labelRenderer.render(scene, camera);
     };
     animate();
@@ -93,6 +93,7 @@ export function AtomCanvas({
     return () => {
       cancelAnimationFrame(frameRef.current);
       window.removeEventListener('resize', handleResize);
+      composer.dispose();
       renderer.dispose();
       labelLayer.removeChild(labelRenderer.domElement);
     };
