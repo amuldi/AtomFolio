@@ -88,7 +88,7 @@ export function buildAllocationArcPath({
   return openSketchPath(points);
 }
 
-export function buildLoopPath(radius, seed) {
+export function buildLoopPoints(radius, seed) {
   const points = [];
 
   for (let index = 0; index < 10; index += 1) {
@@ -100,10 +100,14 @@ export function buildLoopPath(radius, seed) {
     });
   }
 
-  return closedSketchPath(points);
+  return points;
 }
 
-export function buildBlotPath(radius, seed) {
+export function buildLoopPath(radius, seed) {
+  return closedSketchPath(buildLoopPoints(radius, seed));
+}
+
+export function buildBlotPoints(radius, seed) {
   const points = [];
 
   for (let index = 0; index < 12; index += 1) {
@@ -115,7 +119,11 @@ export function buildBlotPath(radius, seed) {
     });
   }
 
-  return closedSketchPath(points);
+  return points;
+}
+
+export function buildBlotPath(radius, seed) {
+  return closedSketchPath(buildBlotPoints(radius, seed));
 }
 
 export function buildBondPath(atom, variant, phase) {

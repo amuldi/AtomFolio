@@ -6416,6 +6416,15 @@ body::after {
   display: block;
 }
 
+.atom-webgl-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 1;
+}
+
 .aura-line {
   fill: none;
   stroke: rgba(248, 235, 212, 0.11);

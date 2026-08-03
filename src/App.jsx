@@ -53,8 +53,14 @@ import { PortfolioScoreCard as PortfolioScoreCardView } from './components/cards
 import { PortfolioAllocationCard as PortfolioAllocationCardView } from './components/allocation/index.jsx';
 import DigitalTwinPanel from './components/panels/DigitalTwinPanel.jsx';
 import { AuthPanel } from './components/auth/AuthPanel.jsx';
+import { AtomCanvas } from './scene/index.js';
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? '';
+// Stage A dev-only preview of the WebGL scene migration (see plan at
+// .claude/plans/binary-leaping-wind.md). Off by default; append ?webglScene=1 to compare against
+// the SVG scene. Removed once Stage B lands and the WebGL path becomes the real renderer.
+const ENABLE_WEBGL_SCENE_PREVIEW =
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('webglScene') === '1';
 
 const VIEWBOX_SIZE = 640;
 const VIEWBOX_HALF = VIEWBOX_SIZE / 2;
@@ -7926,6 +7932,14 @@ export default function App() {
           <div className="stage-reveal">
               <div className={`stage-breath${!hasPortfolioItems ? ' is-intro' : ''}`}>
               <div className="stage-camera">
+                {ENABLE_WEBGL_SCENE_PREVIEW ? (
+                  <AtomCanvas
+                    atoms={atomsRef.current}
+                    rotationRef={rotationRef}
+                    motionPreferenceRef={motionPreferenceRef}
+                    bondLength={BOND_LENGTH}
+                  />
+                ) : null}
                 <AtomSketchView
                   atoms={atoms}
                   pulse={pulse}
