@@ -6425,6 +6425,70 @@ body::after {
   z-index: 1;
 }
 
+.atom-webgl-label-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.atom-webgl-labels {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.atom-webgl-label {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transform: translate(-50%, 12px);
+  pointer-events: none;
+  white-space: nowrap;
+  transition: opacity 160ms ease;
+}
+
+.atom-webgl-label__name {
+  font-family: var(--ui-font);
+  font-size: 0.68rem;
+  font-weight: 650;
+  color: rgba(249, 239, 218, 0.82);
+  letter-spacing: 0.02em;
+}
+
+.atom-webgl-label__detail {
+  font-family: var(--ui-font);
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: rgba(249, 239, 218, 0.5);
+}
+
+.atom-webgl-label.is-selected .atom-webgl-label__name {
+  color: rgba(249, 239, 218, 1);
+}
+
+.atom-webgl-label.is-dimmed {
+  opacity: 0.28;
+}
+
+.atom-webgl-focus-target {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  background: none;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
 .aura-line {
   fill: none;
   stroke: rgba(248, 235, 212, 0.11);

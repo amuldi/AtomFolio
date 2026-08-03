@@ -7934,10 +7934,16 @@ export default function App() {
               <div className="stage-camera">
                 {ENABLE_WEBGL_SCENE_PREVIEW ? (
                   <AtomCanvas
-                    atoms={atomsRef.current}
+                    atoms={atoms}
                     rotationRef={rotationRef}
                     motionPreferenceRef={motionPreferenceRef}
                     bondLength={BOND_LENGTH}
+                    onAtomPointerDown={handleNodePointerDown}
+                    onAtomPointerEnter={handleNodeEnter}
+                    onAtomPointerMove={handleNodeMove}
+                    onAtomPointerLeave={handleNodeLeave}
+                    onKeyboardSelect={handleNodeKeyboardSelect}
+                    onCenterClick={hasPortfolioItems ? clearCenterSelection : triggerIntroCenterBurst}
                   />
                 ) : null}
                 <AtomSketchView
