@@ -37,7 +37,13 @@ import {
   clearStoredPosition,
   saveServerImportHistory,
 } from './utils/storage.js';
-import { filterPortfolioItemsForAtomScene } from './utils/portfolioItems.js';
+import {
+  createAtomState,
+  createSceneCameraRig,
+  generateAtomLayout,
+  projectPoint,
+  trackballVector,
+} from './utils/scene.js';
 import {
   AtomSketch as AtomSketchView,
   PortfolioPreviewAtom as PortfolioPreviewAtomView,
@@ -52,48 +58,9 @@ const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? '';
 
 const VIEWBOX_SIZE = 640;
 const VIEWBOX_HALF = VIEWBOX_SIZE / 2;
-const MIN_ATOMS = 1;
 const MAX_PORTFOLIOS = 20;
 const BOND_LENGTH = 214;
-const CAMERA_DISTANCE = 470;
-const CAMERA_NEAR_CLIP = 136;
-const TRACKBALL_RADIUS = 208;
-const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 const AUTO_ROTATE_SPEED = 0.018;
-const DEFAULT_SCENE_CAMERA = {
-  panX: 0,
-  panY: 0,
-  dolly: 0,
-  zoom: 1,
-  roll: 0,
-  driftX: 0,
-  driftY: 0,
-  focus: 0,
-};
-const LOW_COUNT_LAYOUTS = {
-  2: [
-    [0.82, 0.12, 0.56],
-    [-0.74, -0.24, -0.63],
-  ],
-  3: [
-    [0.86, 0.08, 0.5],
-    [-0.42, 0.82, -0.38],
-    [-0.48, -0.8, -0.36],
-  ],
-  4: [
-    [1, 1, 1],
-    [1, -1, -1],
-    [-1, 1, -1],
-    [-1, -1, 1],
-  ],
-  5: [
-    [0, 1, 0.46],
-    [0.92, 0.1, -0.34],
-    [-0.58, 0.72, -0.38],
-    [-0.72, -0.58, -0.36],
-    [0.62, -0.76, 0.1],
-  ],
-};
 const GROUP_OPTION_KEYS = ['region', 'sector', 'style', 'risk'];
 const SCORE_AXIS_KEYS = [
   'profitability',
@@ -2468,119 +2435,6 @@ function mergePortfolioItemUpdates(baseItems, updatedItems) {
   return baseItems.map((item, index) => updatedItems[index] ?? item);
 }
 
-function midpoint(a, b) {
-  return {
-    x: (a.x + b.x) * 0.5,
-    y: (a.y + b.y) * 0.5,
-  };
-}
-
-function closedSketchPath(points) {
-  const firstMid = midpoint(points[points.length - 1], points[0]);
-  let path = `M ${format(firstMid.x)} ${format(firstMid.y)}`;
-
-  for (let index = 0; index < points.length; index += 1) {
-    const next = points[(index + 1) % points.length];
-    const currentMid = midpoint(points[index], next);
-    path += ` Q ${format(points[index].x)} ${format(points[index].y)} ${format(
-      currentMid.x,
-    )} ${format(currentMid.y)}`;
-  }
-
-  return path;
-}
-
-function buildLoopPath(radius, seed) {
-  const points = [];
-
-  for (let index = 0; index < 10; index += 1) {
-    const angle = (index / 10) * Math.PI * 2;
-    const ring = radius + jitter(seed + index * 1.19, radius * 0.22);
-    points.push({
-      x: Math.cos(angle) * ring + jitter(seed + index * 2.17, 0.92),
-      y: Math.sin(angle) * ring + jitter(seed + index * 3.03, 0.92),
-    });
-  }
-
-  return closedSketchPath(points);
-}
-
-function createAtomState(config) {
-  return {
-    ...config,
-    baseDirection: new THREE.Vector3(...config.direction).normalize(),
-    hovered: false,
-    hoverMix: 0,
-    dragging: false,
-    dragMix: 0,
-    nodeTilt: jitter(config.seed + 401, 16),
-    labelTilt: jitter(config.seed + 509, 8),
-    labelOffset: 20 + noise(config.seed + 557) * 14,
-    nodePaths: [
-      buildLoopPath(config.node, config.seed + 201),
-      buildLoopPath(config.node * 0.84, config.seed + 301),
-    ],
-  };
-}
-
-function createSceneCameraRig() {
-  return {
-    current: {
-      panX: 0,
-      panY: 0,
-      dolly: 0,
-      zoom: 1,
-      roll: 0,
-      driftX: 0,
-      driftY: 0,
-      focus: 0,
-    },
-    target: {
-      panX: 0,
-      panY: 0,
-      dolly: 0,
-      zoom: 1,
-      roll: 0,
-      driftX: 0,
-      driftY: 0,
-      focus: 0,
-    },
-  };
-}
-
-function projectPoint(position, camera = DEFAULT_SCENE_CAMERA) {
-  const translatedX = position.x + (camera.panX ?? 0);
-  const translatedY = position.y + (camera.panY ?? 0);
-  const translatedZ = position.z + (camera.dolly ?? 0);
-  const roll = ((camera.roll ?? 0) * Math.PI) / 180;
-  const rollCos = Math.cos(roll);
-  const rollSin = Math.sin(roll);
-  const rolledX = translatedX * rollCos - translatedY * rollSin;
-  const rolledY = translatedX * rollSin + translatedY * rollCos;
-  const perspective = CAMERA_DISTANCE / Math.max(CAMERA_NEAR_CLIP, CAMERA_DISTANCE - translatedZ);
-  const zoom = camera.zoom ?? 1;
-
-  return {
-    x: rolledX * perspective * zoom + (camera.driftX ?? 0),
-    y: rolledY * perspective * zoom + (camera.driftY ?? 0),
-    scale: perspective * zoom,
-    depth: clamp((translatedZ / BOND_LENGTH + 1) * 0.5, 0, 1),
-  };
-}
-
-function trackballVector(point) {
-  const x = clamp(point.x / TRACKBALL_RADIUS, -1, 1);
-  const y = clamp(point.y / TRACKBALL_RADIUS, -1, 1);
-  const lengthSquared = x * x + y * y;
-
-  if (lengthSquared > 1) {
-    const scale = 1 / Math.sqrt(lengthSquared);
-    return new THREE.Vector3(x * scale, y * scale, 0);
-  }
-
-  return new THREE.Vector3(x, y, Math.sqrt(1 - lengthSquared));
-}
-
 function resolveAtomStockDisplayName(item, fallback = 'Stock') {
   return (
     String(item?.companyName ?? '').trim() ||
@@ -2590,110 +2444,6 @@ function resolveAtomStockDisplayName(item, fallback = 'Stock') {
     String(item?.label ?? '').trim() ||
     fallback
   );
-}
-
-function generateAtomLayout(items) {
-  const visibleItems = filterPortfolioItemsForAtomScene(items);
-
-  if (!visibleItems.length) {
-    return [];
-  }
-
-  const total = Math.max(visibleItems.length, MIN_ATOMS);
-
-  if (total === 1) {
-    return [
-      {
-        id: 'a1',
-        direction: [0.86, 0.22, 0.46],
-        node: 8.7,
-        seed: 11,
-        label: resolveAtomStockDisplayName(visibleItems[0], 'Stock'),
-        detail: visibleItems[0]?.detail ?? '',
-        sourceItemId: visibleItems[0]?.id ?? '',
-        stockName: visibleItems[0]?.stockName ?? visibleItems[0]?.name ?? visibleItems[0]?.label ?? '',
-        stockCode: visibleItems[0]?.stockCode ?? visibleItems[0]?.ticker ?? visibleItems[0]?.code ?? '',
-        ticker: visibleItems[0]?.ticker ?? visibleItems[0]?.stockCode ?? visibleItems[0]?.code ?? '',
-        region: visibleItems[0]?.region ?? '',
-        sector: visibleItems[0]?.sector ?? '',
-        style: visibleItems[0]?.style ?? '',
-        risk: visibleItems[0]?.risk ?? '',
-        assetClass: visibleItems[0]?.assetClass ?? '',
-        metadataSource: visibleItems[0]?.metadataSource ?? 'raw',
-        metadataSourceByField: visibleItems[0]?.metadataSourceByField ?? {},
-        fields: visibleItems[0]?.fields ?? [],
-      },
-    ];
-  }
-
-  if (LOW_COUNT_LAYOUTS[total]) {
-    return Array.from({ length: total }, (_, index) => {
-      const preset = LOW_COUNT_LAYOUTS[total][index] ?? [0, 0, 1];
-      const direction = new THREE.Vector3(...preset)
-        .add(
-          new THREE.Vector3(
-            jitter(1500 + index * 19, 0.08),
-            jitter(1600 + index * 23, 0.08),
-            jitter(1700 + index * 29, 0.08),
-          ),
-        )
-        .normalize();
-
-      return {
-        id: `a${index + 1}`,
-        direction: [direction.x, direction.y, direction.z],
-        node: 7.9 + noise(1800 + index * 31) * 1.6,
-        seed: 11 + index * 23,
-        label: resolveAtomStockDisplayName(visibleItems[index], `Stock ${index + 1}`),
-        detail: visibleItems[index]?.detail ?? '',
-        sourceItemId: visibleItems[index]?.id ?? '',
-        stockName: visibleItems[index]?.stockName ?? visibleItems[index]?.name ?? visibleItems[index]?.label ?? '',
-        stockCode: visibleItems[index]?.stockCode ?? visibleItems[index]?.ticker ?? visibleItems[index]?.code ?? '',
-        ticker: visibleItems[index]?.ticker ?? visibleItems[index]?.stockCode ?? visibleItems[index]?.code ?? '',
-        region: visibleItems[index]?.region ?? '',
-        sector: visibleItems[index]?.sector ?? '',
-        style: visibleItems[index]?.style ?? '',
-        risk: visibleItems[index]?.risk ?? '',
-        assetClass: visibleItems[index]?.assetClass ?? '',
-        metadataSource: visibleItems[index]?.metadataSource ?? 'raw',
-        metadataSourceByField: visibleItems[index]?.metadataSourceByField ?? {},
-        fields: visibleItems[index]?.fields ?? [],
-      };
-    });
-  }
-
-  return Array.from({ length: total }, (_, index) => {
-    const ratio = total === 1 ? 0.5 : index / (total - 1);
-    const y = 1 - ratio * 2;
-    const radius = Math.sqrt(Math.max(0, 1 - y * y));
-    const theta = index * GOLDEN_ANGLE + jitter(1400 + index * 17, 0.24);
-    const direction = new THREE.Vector3(
-      Math.cos(theta) * radius + jitter(1500 + index * 19, 0.14),
-      y + jitter(1600 + index * 23, 0.14),
-      Math.sin(theta) * radius + jitter(1700 + index * 29, 0.14),
-    ).normalize();
-
-    return {
-      id: `a${index + 1}`,
-      direction: [direction.x, direction.y, direction.z],
-      node: 7.8 + noise(1800 + index * 31) * 1.7,
-      seed: 11 + index * 23,
-      label: resolveAtomStockDisplayName(visibleItems[index], `Stock ${index + 1}`),
-      detail: visibleItems[index]?.detail ?? '',
-      sourceItemId: visibleItems[index]?.id ?? '',
-      stockName: visibleItems[index]?.stockName ?? visibleItems[index]?.name ?? visibleItems[index]?.label ?? '',
-      stockCode: visibleItems[index]?.stockCode ?? visibleItems[index]?.ticker ?? visibleItems[index]?.code ?? '',
-      ticker: visibleItems[index]?.ticker ?? visibleItems[index]?.stockCode ?? visibleItems[index]?.code ?? '',
-      region: visibleItems[index]?.region ?? '',
-      sector: visibleItems[index]?.sector ?? '',
-      style: visibleItems[index]?.style ?? '',
-      risk: visibleItems[index]?.risk ?? '',
-      assetClass: visibleItems[index]?.assetClass ?? '',
-      metadataSource: visibleItems[index]?.metadataSource ?? 'raw',
-      metadataSourceByField: visibleItems[index]?.metadataSourceByField ?? {},
-      fields: visibleItems[index]?.fields ?? [],
-    };
-  });
 }
 
 const PORTFOLIO_PREVIEW_SLOTS = [
@@ -5763,7 +5513,9 @@ export default function App() {
   const svgRef = useRef(null);
   const fileInputRef = useRef(null);
   const settingsRef = useRef(null);
-  const atomsRef = useRef(generateAtomLayout([]).map(createAtomState));
+  const atomsRef = useRef(
+    generateAtomLayout([], { resolveLabel: resolveAtomStockDisplayName }).map(createAtomState),
+  );
   const cameraRef = useRef(createSceneCameraRig());
   const rotationRef = useRef({
     current: new THREE.Quaternion(),
@@ -6843,7 +6595,9 @@ export default function App() {
   );
 
   useEffect(() => {
-    atomsRef.current = generateAtomLayout(portfolioItems).map(createAtomState);
+    atomsRef.current = generateAtomLayout(portfolioItems, {
+      resolveLabel: resolveAtomStockDisplayName,
+    }).map(createAtomState);
     dragRef.current.atomId = null;
     dragRef.current.moved = false;
     rotationRef.current.spinVelocity = 0;

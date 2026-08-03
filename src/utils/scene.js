@@ -273,7 +273,32 @@ export function trackballVector(point) {
   return new THREE.Vector3(x, y, Math.sqrt(1 - lengthSquared));
 }
 
-export function generateAtomLayout(items) {
+function defaultResolveAtomLabel(item, fallback) {
+  return item?.label ?? fallback;
+}
+
+function buildAtomLayoutFields(item, fallbackLabel, resolveLabel) {
+  return {
+    label: resolveLabel(item, fallbackLabel),
+    detail: item?.detail ?? '',
+    sourceItemId: item?.id ?? '',
+    stockName: item?.stockName ?? item?.name ?? item?.label ?? '',
+    stockCode: item?.stockCode ?? item?.ticker ?? item?.code ?? '',
+    ticker: item?.ticker ?? item?.stockCode ?? item?.code ?? '',
+    region: item?.region ?? '',
+    sector: item?.sector ?? '',
+    style: item?.style ?? '',
+    risk: item?.risk ?? '',
+    assetClass: item?.assetClass ?? '',
+    metadataSource: item?.metadataSource ?? 'raw',
+    metadataSourceByField: item?.metadataSourceByField ?? {},
+    fields: item?.fields ?? [],
+  };
+}
+
+export function generateAtomLayout(items, options = {}) {
+  const resolveLabel =
+    typeof options.resolveLabel === 'function' ? options.resolveLabel : defaultResolveAtomLabel;
   const visibleItems = filterPortfolioItemsForAtomScene(items);
 
   if (!visibleItems.length) {
@@ -289,16 +314,7 @@ export function generateAtomLayout(items) {
         direction: [0.86, 0.22, 0.46],
         node: 8.7,
         seed: 11,
-        label: visibleItems[0]?.label ?? 'Stock',
-        detail: visibleItems[0]?.detail ?? '',
-        region: visibleItems[0]?.region ?? '',
-        sector: visibleItems[0]?.sector ?? '',
-        style: visibleItems[0]?.style ?? '',
-        risk: visibleItems[0]?.risk ?? '',
-        assetClass: visibleItems[0]?.assetClass ?? '',
-        metadataSource: visibleItems[0]?.metadataSource ?? 'raw',
-        metadataSourceByField: visibleItems[0]?.metadataSourceByField ?? {},
-        fields: visibleItems[0]?.fields ?? [],
+        ...buildAtomLayoutFields(visibleItems[0], 'Stock', resolveLabel),
       },
     ];
   }
@@ -321,16 +337,7 @@ export function generateAtomLayout(items) {
         direction: [direction.x, direction.y, direction.z],
         node: 7.9 + noise(1800 + index * 31) * 1.6,
         seed: 11 + index * 23,
-        label: visibleItems[index]?.label ?? `Stock ${index + 1}`,
-        detail: visibleItems[index]?.detail ?? '',
-        region: visibleItems[index]?.region ?? '',
-        sector: visibleItems[index]?.sector ?? '',
-        style: visibleItems[index]?.style ?? '',
-        risk: visibleItems[index]?.risk ?? '',
-        assetClass: visibleItems[index]?.assetClass ?? '',
-        metadataSource: visibleItems[index]?.metadataSource ?? 'raw',
-        metadataSourceByField: visibleItems[index]?.metadataSourceByField ?? {},
-        fields: visibleItems[index]?.fields ?? [],
+        ...buildAtomLayoutFields(visibleItems[index], `Stock ${index + 1}`, resolveLabel),
       };
     });
   }
@@ -351,16 +358,7 @@ export function generateAtomLayout(items) {
       direction: [direction.x, direction.y, direction.z],
       node: 7.8 + noise(1800 + index * 31) * 1.7,
       seed: 11 + index * 23,
-      label: visibleItems[index]?.label ?? `Stock ${index + 1}`,
-      detail: visibleItems[index]?.detail ?? '',
-      region: visibleItems[index]?.region ?? '',
-      sector: visibleItems[index]?.sector ?? '',
-      style: visibleItems[index]?.style ?? '',
-      risk: visibleItems[index]?.risk ?? '',
-      assetClass: visibleItems[index]?.assetClass ?? '',
-      metadataSource: visibleItems[index]?.metadataSource ?? 'raw',
-      metadataSourceByField: visibleItems[index]?.metadataSourceByField ?? {},
-      fields: visibleItems[index]?.fields ?? [],
+      ...buildAtomLayoutFields(visibleItems[index], `Stock ${index + 1}`, resolveLabel),
     };
   });
 }
