@@ -11,7 +11,7 @@ pydeps/
 !.env.example
 
 # Local scratch or unrelated datasets
-data/
+/data/
 
 # Local-only captures and internal notes
 IMG_0906.HEIC.png
