@@ -1,0 +1,232 @@
+{
+  "totals": {
+    "holdingsCount": 3,
+    "evaluatedPositionsCount": 3,
+    "totalMarketValue": 1846560,
+    "totalBuyAmount": 1701600,
+    "totalProfitAmount": 144960,
+    "totalReturnRate": 8.51904090267983,
+    "valueSource": "marketValue"
+  },
+  "positions": [
+    {
+      "id": "005930",
+      "label": "삼성전자",
+      "code": "005930",
+      "buyAmount": 700000,
+      "marketValue": 760000,
+      "profitAmount": 60000,
+      "returnRate": 8.571428571428571,
+      "weight": 0.4115761199202842,
+      "weightPercent": 41.15761199202842,
+      "assetClass": "주식",
+      "region": "한국",
+      "sector": "반도체",
+      "bucket": "stock"
+    },
+    {
+      "id": "SCHD",
+      "label": "SCHD",
+      "code": "SCHD",
+      "buyAmount": 1600,
+      "marketValue": 1560,
+      "profitAmount": -40,
+      "returnRate": -2.5,
+      "weight": 0.0008448141408890044,
+      "weightPercent": 0.08448141408890043,
+      "assetClass": "ETF",
+      "region": "미국",
+      "sector": "배당",
+      "bucket": "dividend"
+    },
+    {
+      "id": "360750",
+      "label": "TIGER 미국S&P500",
+      "code": "360750",
+      "buyAmount": 1000000,
+      "marketValue": 1085000,
+      "profitAmount": 85000,
+      "returnRate": 8.5,
+      "weight": 0.5875790659388268,
+      "weightPercent": 58.75790659388268,
+      "assetClass": "ETF",
+      "region": "미국",
+      "sector": "광범위 시장",
+      "bucket": "stock"
+    }
+  ],
+  "profitFlow": [
+    {
+      "periodKey": "2026-01",
+      "startDate": "2026-01-02",
+      "endDate": "2026-01-02",
+      "profitAmount": 10000,
+      "returnRate": null,
+      "marketValue": null,
+      "buyAmount": null,
+      "entriesCount": 2
+    },
+    {
+      "periodKey": "2026-02",
+      "startDate": "2026-02-05",
+      "endDate": "2026-02-05",
+      "profitAmount": 40000,
+      "returnRate": null,
+      "marketValue": null,
+      "buyAmount": null,
+      "entriesCount": 1
+    }
+  ],
+  "concentration": {
+    "topHoldings": [
+      {
+        "id": "360750",
+        "label": "TIGER 미국S&P500",
+        "code": "360750",
+        "weight": 0.5875790659388268,
+        "weightPercent": 58.75790659388268,
+        "value": 1085000,
+        "returnRate": 8.5
+      },
+      {
+        "id": "005930",
+        "label": "삼성전자",
+        "code": "005930",
+        "weight": 0.4115761199202842,
+        "weightPercent": 41.15761199202842,
+        "value": 760000,
+        "returnRate": 8.571428571428571
+      },
+      {
+        "id": "SCHD",
+        "label": "SCHD",
+        "code": "SCHD",
+        "weight": 0.0008448141408890044,
+        "weightPercent": 0.08448141408890043,
+        "value": 1560,
+        "returnRate": -2.5
+      }
+    ],
+    "topWeight": 0.5875790659388268,
+    "topWeightPercent": 58.75790659388268,
+    "topNWeight": 1,
+    "topNWeightPercent": 100,
+    "hhi": 0.514644774929113,
+    "hhiPercent": 51.4644774929113,
+    "effectiveHoldings": 1.9430878320638536,
+    "concentrationLevel": "high"
+  },
+  "assetClassWeights": [
+    {
+      "label": "ETF",
+      "weight": 0.5884238800797158,
+      "weightPercent": 58.84238800797158,
+      "value": 1086560,
+      "count": 2,
+      "profitAmount": 84960,
+      "returnRate": 8.484207038727728
+    },
+    {
+      "label": "주식",
+      "weight": 0.4115761199202842,
+      "weightPercent": 41.15761199202842,
+      "value": 760000,
+      "count": 1,
+      "profitAmount": 60000,
+      "returnRate": 8.571428571428571
+    }
+  ],
+  "regionWeights": [
+    {
+      "label": "미국",
+      "weight": 0.5884238800797158,
+      "weightPercent": 58.84238800797158,
+      "value": 1086560,
+      "count": 2,
+      "profitAmount": 84960,
+      "returnRate": 8.484207038727728
+    },
+    {
+      "label": "한국",
+      "weight": 0.4115761199202842,
+      "weightPercent": 41.15761199202842,
+      "value": 760000,
+      "count": 1,
+      "profitAmount": 60000,
+      "returnRate": 8.571428571428571
+    }
+  ],
+  "rebalanceGaps": {
+    "assetClass": [
+      {
+        "label": "ETF",
+        "currentWeight": 0.5884238800797158,
+        "currentWeightPercent": 58.84238800797158,
+        "targetWeight": 0.5,
+        "targetWeightPercent": 50,
+        "gapWeight": -0.0884238800797158,
+        "gapWeightPercent": -8.84238800797158,
+        "tradeValue": -163280
+      },
+      {
+        "label": "주식",
+        "currentWeight": 0.4115761199202842,
+        "currentWeightPercent": 41.15761199202842,
+        "targetWeight": 0.5,
+        "targetWeightPercent": 50,
+        "gapWeight": 0.0884238800797158,
+        "gapWeightPercent": 8.84238800797158,
+        "tradeValue": 163280
+      }
+    ],
+    "region": [
+      {
+        "label": "미국",
+        "currentWeight": 0.5884238800797158,
+        "currentWeightPercent": 58.84238800797158,
+        "targetWeight": 0.5,
+        "targetWeightPercent": 50,
+        "gapWeight": -0.0884238800797158,
+        "gapWeightPercent": -8.84238800797158,
+        "tradeValue": -163280
+      },
+      {
+        "label": "한국",
+        "currentWeight": 0.4115761199202842,
+        "currentWeightPercent": 41.15761199202842,
+        "targetWeight": 0.5,
+        "targetWeightPercent": 50,
+        "gapWeight": 0.0884238800797158,
+        "gapWeightPercent": 8.84238800797158,
+        "tradeValue": 163280
+      }
+    ],
+    "bucket": [
+      {
+        "label": "stock",
+        "currentWeight": 0.999155185859111,
+        "currentWeightPercent": 99.9155185859111,
+        "targetWeight": 0.5,
+        "targetWeightPercent": 50,
+        "gapWeight": -0.499155185859111,
+        "gapWeightPercent": -49.9155185859111,
+        "tradeValue": -921720
+      },
+      {
+        "label": "dividend",
+        "currentWeight": 0.0008448141408890044,
+        "currentWeightPercent": 0.08448141408890043,
+        "targetWeight": 0.5,
+        "targetWeightPercent": 50,
+        "gapWeight": 0.499155185859111,
+        "gapWeightPercent": 49.9155185859111,
+        "tradeValue": 921720
+      }
+    ]
+  },
+  "metadata": {
+    "period": "month",
+    "topN": 3,
+    "timelineCount": 3
+  }
+}

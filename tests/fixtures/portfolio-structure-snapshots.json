@@ -1,0 +1,848 @@
+{
+  "samples/portfolio/portfolio_test0.csv": {
+    "delimiter": ",",
+    "hasDetectedHeader": true,
+    "skippedPreambleRowCount": 0,
+    "rowCount": 6,
+    "bodyRowCount": 5,
+    "parsedItemCount": 5,
+    "reviewStatus": "ok",
+    "headerLabels": [
+      "포트폴리오 유형",
+      "비중(%)",
+      "종목명",
+      "자산비중(%)",
+      "예상수익률(%)",
+      "매수전략",
+      "코멘트"
+    ],
+    "mappedColumns": {
+      "stockName": {
+        "index": 2,
+        "label": "종목명",
+        "fieldKey": "stockName",
+        "confidence": 1,
+        "sampleValues": [
+          "TIGER 미국S&P500",
+          "KODEX 미국나스닥100",
+          "QQQM"
+        ]
+      },
+      "stockCode": null,
+      "buyDate": null,
+      "return": {
+        "index": 4,
+        "label": "예상수익률(%)",
+        "fieldKey": null,
+        "confidence": 1,
+        "sampleValues": [
+          "8.5",
+          "10.2",
+          "12.0"
+        ]
+      },
+      "accountId": null,
+      "accountType": {
+        "index": 0,
+        "label": "포트폴리오 유형",
+        "fieldKey": "accountType",
+        "confidence": 0.81,
+        "sampleValues": [
+          "ISA",
+          "연금저축",
+          "종합계좌"
+        ]
+      }
+    },
+    "fieldRoleNames": [
+      "quantity",
+      "returnRate",
+      "securityName"
+    ],
+    "warningCodes": [
+      "missing-date-column"
+    ]
+  },
+  "samples/portfolio/portfolio_test1.csv": {
+    "delimiter": ",",
+    "hasDetectedHeader": true,
+    "skippedPreambleRowCount": 0,
+    "rowCount": 1351,
+    "bodyRowCount": 1350,
+    "parsedItemCount": 1350,
+    "reviewStatus": "ok",
+    "headerLabels": [
+      "날짜",
+      "포트폴리오 유형",
+      "종목명",
+      "일일수익률(%)",
+      "평가금액",
+      "누적수익률(%)"
+    ],
+    "mappedColumns": {
+      "stockName": {
+        "index": 2,
+        "label": "종목명",
+        "fieldKey": "stockName",
+        "confidence": 1,
+        "sampleValues": [
+          "TIGER 미국S&P500",
+          "TIGER 미국S&P500",
+          "TIGER 미국S&P500"
+        ]
+      },
+      "stockCode": null,
+      "buyDate": {
+        "index": 0,
+        "label": "날짜",
+        "fieldKey": "buyDate",
+        "confidence": 1,
+        "sampleValues": [
+          "2026-01-01",
+          "2026-01-02",
+          "2026-01-03"
+        ]
+      },
+      "return": {
+        "index": 3,
+        "label": "일일수익률(%)",
+        "fieldKey": "return",
+        "confidence": 1,
+        "sampleValues": [
+          "1.814",
+          "0.45",
+          "1.029"
+        ]
+      },
+      "accountId": null,
+      "accountType": {
+        "index": 1,
+        "label": "포트폴리오 유형",
+        "fieldKey": "accountType",
+        "confidence": 1,
+        "sampleValues": [
+          "ISA",
+          "ISA",
+          "ISA"
+        ]
+      }
+    },
+    "fieldRoleNames": [
+      "marketValue",
+      "returnRate",
+      "securityName",
+      "snapshotDate"
+    ],
+    "warningCodes": []
+  },
+  "samples/portfolio/portfolio_test2.csv": {
+    "delimiter": ",",
+    "hasDetectedHeader": true,
+    "skippedPreambleRowCount": 0,
+    "rowCount": 1081,
+    "bodyRowCount": 1080,
+    "parsedItemCount": 1080,
+    "reviewStatus": "ok",
+    "headerLabels": [
+      "날짜",
+      "포트폴리오 유형",
+      "종목명",
+      "일일수익률(%)",
+      "평가금액",
+      "누적수익률(%)"
+    ],
+    "mappedColumns": {
+      "stockName": {
+        "index": 2,
+        "label": "종목명",
+        "fieldKey": "stockName",
+        "confidence": 1,
+        "sampleValues": [
+          "TIGER 미국배당다우존스",
+          "TIGER 미국배당다우존스",
+          "TIGER 미국배당다우존스"
+        ]
+      },
+      "stockCode": null,
+      "buyDate": {
+        "index": 0,
+        "label": "날짜",
+        "fieldKey": "buyDate",
+        "confidence": 1,
+        "sampleValues": [
+          "2026-01-01",
+          "2026-01-02",
+          "2026-01-03"
+        ]
+      },
+      "return": {
+        "index": 3,
+        "label": "일일수익률(%)",
+        "fieldKey": "return",
+        "confidence": 1,
+        "sampleValues": [
+          "-0.41",
+          "0.442",
+          "0.409"
+        ]
+      },
+      "accountId": null,
+      "accountType": {
+        "index": 1,
+        "label": "포트폴리오 유형",
+        "fieldKey": "accountType",
+        "confidence": 1,
+        "sampleValues": [
+          "ISA",
+          "ISA",
+          "ISA"
+        ]
+      }
+    },
+    "fieldRoleNames": [
+      "marketValue",
+      "returnRate",
+      "securityName",
+      "snapshotDate"
+    ],
+    "warningCodes": []
+  },
+  "samples/portfolio/portfolio_test3.csv": {
+    "delimiter": ",",
+    "hasDetectedHeader": true,
+    "skippedPreambleRowCount": 0,
+    "rowCount": 1531,
+    "bodyRowCount": 1530,
+    "parsedItemCount": 1530,
+    "reviewStatus": "ok",
+    "headerLabels": [
+      "날짜",
+      "포트폴리오 유형",
+      "종목명",
+      "일일수익률(%)",
+      "평가금액",
+      "누적수익률(%)"
+    ],
+    "mappedColumns": {
+      "stockName": {
+        "index": 2,
+        "label": "종목명",
+        "fieldKey": "stockName",
+        "confidence": 1,
+        "sampleValues": [
+          "TIGER 미국테크TOP10",
+          "TIGER 미국테크TOP10",
+          "TIGER 미국테크TOP10"
+        ]
+      },
+      "stockCode": null,
+      "buyDate": {
+        "index": 0,
+        "label": "날짜",
+        "fieldKey": "buyDate",
+        "confidence": 1,
+        "sampleValues": [
+          "2026-01-01",
+          "2026-01-02",
+          "2026-01-03"
+        ]
+      },
+      "return": {
+        "index": 3,
+        "label": "일일수익률(%)",
+        "fieldKey": "return",
+        "confidence": 1,
+        "sampleValues": [
+          "-3.297",
+          "0.408",
+          "-1.678"
+        ]
+      },
+      "accountId": null,
+      "accountType": {
+        "index": 1,
+        "label": "포트폴리오 유형",
+        "fieldKey": "accountType",
+        "confidence": 1,
+        "sampleValues": [
+          "ISA",
+          "ISA",
+          "ISA"
+        ]
+      }
+    },
+    "fieldRoleNames": [
+      "marketValue",
+      "returnRate",
+      "securityName",
+      "snapshotDate"
+    ],
+    "warningCodes": []
+  },
+  "samples/portfolio/portfolio_test4.csv": {
+    "delimiter": ",",
+    "hasDetectedHeader": true,
+    "skippedPreambleRowCount": 0,
+    "rowCount": 1981,
+    "bodyRowCount": 1980,
+    "parsedItemCount": 1980,
+    "reviewStatus": "ok",
+    "headerLabels": [
+      "날짜",
+      "포트폴리오 유형",
+      "종목명",
+      "일일수익률(%)",
+      "평가금액",
+      "누적수익률(%)"
+    ],
+    "mappedColumns": {
+      "stockName": {
+        "index": 2,
+        "label": "종목명",
+        "fieldKey": "stockName",
+        "confidence": 1,
+        "sampleValues": [
+          "PLUS 고배당주",
+          "PLUS 고배당주",
+          "PLUS 고배당주"
+        ]
+      },
+      "stockCode": null,
+      "buyDate": {
+        "index": 0,
+        "label": "날짜",
+        "fieldKey": "buyDate",
+        "confidence": 1,
+        "sampleValues": [
+          "2026-01-01",
+          "2026-01-02",
+          "2026-01-03"
+        ]
+      },
+      "return": {
+        "index": 3,
+        "label": "일일수익률(%)",
+        "fieldKey": "return",
+        "confidence": 1,
+        "sampleValues": [
+          "-1.298",
+          "1.486",
+          "0.995"
+        ]
+      },
+      "accountId": null,
+      "accountType": {
+        "index": 1,
+        "label": "포트폴리오 유형",
+        "fieldKey": "accountType",
+        "confidence": 1,
+        "sampleValues": [
+          "ISA",
+          "ISA",
+          "ISA"
+        ]
+      }
+    },
+    "fieldRoleNames": [
+      "marketValue",
+      "returnRate",
+      "securityName",
+      "snapshotDate"
+    ],
+    "warningCodes": []
+  },
+  "samples/portfolio/portfolio_test5.csv": {
+    "delimiter": ",",
+    "hasDetectedHeader": true,
+    "skippedPreambleRowCount": 0,
+    "rowCount": 16,
+    "bodyRowCount": 15,
+    "parsedItemCount": 15,
+    "reviewStatus": "ok",
+    "headerLabels": [
+      "포트폴리오 유형",
+      "비중(%)",
+      "종목명",
+      "자산비중(%)",
+      "예상수익률(%)",
+      "매수전략",
+      "코멘트"
+    ],
+    "mappedColumns": {
+      "stockName": {
+        "index": 2,
+        "label": "종목명",
+        "fieldKey": "stockName",
+        "confidence": 1,
+        "sampleValues": [
+          "TIGER 미국S&P500",
+          "KODEX 미국나스닥100",
+          "QQQM"
+        ]
+      },
+      "stockCode": null,
+      "buyDate": null,
+      "return": {
+        "index": 4,
+        "label": "예상수익률(%)",
+        "fieldKey": null,
+        "confidence": 1,
+        "sampleValues": [
+          "8.5",
+          "10.2",
+          "12.0"
+        ]
+      },
+      "accountId": null,
+      "accountType": {
+        "index": 0,
+        "label": "포트폴리오 유형",
+        "fieldKey": "accountType",
+        "confidence": 1,
+        "sampleValues": [
+          "ISA",
+          "연금저축",
+          "종합계좌"
+        ]
+      }
+    },
+    "fieldRoleNames": [
+      "quantity",
+      "returnRate",
+      "securityName"
+    ],
+    "warningCodes": [
+      "missing-date-column"
+    ]
+  },
+  "samples/portfolio/portfolio_test6.csv": {
+    "delimiter": ",",
+    "hasDetectedHeader": true,
+    "skippedPreambleRowCount": 0,
+    "rowCount": 41,
+    "bodyRowCount": 40,
+    "parsedItemCount": 40,
+    "reviewStatus": "ok",
+    "headerLabels": [
+      "date",
+      "종목 티커",
+      "price",
+      "volume",
+      "return"
+    ],
+    "mappedColumns": {
+      "stockName": null,
+      "stockCode": {
+        "index": 1,
+        "label": "종목 티커",
+        "fieldKey": "stockCode",
+        "confidence": 1,
+        "sampleValues": [
+          "FUBO",
+          "NFLX",
+          "GOOGL"
+        ]
+      },
+      "buyDate": {
+        "index": 0,
+        "label": "date",
+        "fieldKey": "buyDate",
+        "confidence": 1,
+        "sampleValues": [
+          "2024-01-01",
+          "2024-01-02",
+          "2024-01-03"
+        ]
+      },
+      "return": {
+        "index": 4,
+        "label": "return",
+        "fieldKey": "return",
+        "confidence": 1,
+        "sampleValues": [
+          "-0.006",
+          "-0.0386",
+          "0.006"
+        ]
+      },
+      "accountId": null,
+      "accountType": null
+    },
+    "fieldRoleNames": [
+      "quantity",
+      "returnRate",
+      "securityCode",
+      "snapshotDate"
+    ],
+    "warningCodes": []
+  },
+  "samples/portfolio/portfolio_test7.csv": {
+    "delimiter": ",",
+    "hasDetectedHeader": true,
+    "skippedPreambleRowCount": 0,
+    "rowCount": 41,
+    "bodyRowCount": 40,
+    "parsedItemCount": 40,
+    "reviewStatus": "ok",
+    "headerLabels": [
+      "date",
+      "종목 티커",
+      "price",
+      "volume",
+      "return"
+    ],
+    "mappedColumns": {
+      "stockName": null,
+      "stockCode": {
+        "index": 1,
+        "label": "종목 티커",
+        "fieldKey": "stockCode",
+        "confidence": 1,
+        "sampleValues": [
+          "TWTR",
+          "AAPL",
+          "GOOGL"
+        ]
+      },
+      "buyDate": {
+        "index": 0,
+        "label": "date",
+        "fieldKey": "buyDate",
+        "confidence": 1,
+        "sampleValues": [
+          "2024-01-01",
+          "2024-01-02",
+          "2024-01-03"
+        ]
+      },
+      "return": {
+        "index": 4,
+        "label": "return",
+        "fieldKey": "return",
+        "confidence": 1,
+        "sampleValues": [
+          "-0.0713",
+          "-0.0097",
+          "0.0131"
+        ]
+      },
+      "accountId": null,
+      "accountType": null
+    },
+    "fieldRoleNames": [
+      "quantity",
+      "returnRate",
+      "securityCode",
+      "securityName",
+      "snapshotDate"
+    ],
+    "warningCodes": []
+  },
+  "samples/portfolio/portfolio_test8.csv": {
+    "delimiter": ",",
+    "hasDetectedHeader": true,
+    "skippedPreambleRowCount": 0,
+    "rowCount": 41,
+    "bodyRowCount": 40,
+    "parsedItemCount": 40,
+    "reviewStatus": "ok",
+    "headerLabels": [
+      "date",
+      "종목 티커",
+      "price",
+      "volume",
+      "return"
+    ],
+    "mappedColumns": {
+      "stockName": null,
+      "stockCode": {
+        "index": 1,
+        "label": "종목 티커",
+        "fieldKey": "stockCode",
+        "confidence": 1,
+        "sampleValues": [
+          "AMD",
+          "AMD",
+          "AMD"
+        ]
+      },
+      "buyDate": {
+        "index": 0,
+        "label": "date",
+        "fieldKey": "buyDate",
+        "confidence": 1,
+        "sampleValues": [
+          "2024-01-01",
+          "2024-01-02",
+          "2024-01-03"
+        ]
+      },
+      "return": {
+        "index": 4,
+        "label": "return",
+        "fieldKey": "return",
+        "confidence": 1,
+        "sampleValues": [
+          "-0.0011",
+          "-0.0687",
+          "-0.0417"
+        ]
+      },
+      "accountId": null,
+      "accountType": null
+    },
+    "fieldRoleNames": [
+      "quantity",
+      "returnRate",
+      "securityCode",
+      "snapshotDate"
+    ],
+    "warningCodes": []
+  },
+  "samples/portfolio/portfolio_test9.csv": {
+    "delimiter": ",",
+    "hasDetectedHeader": true,
+    "skippedPreambleRowCount": 0,
+    "rowCount": 41,
+    "bodyRowCount": 40,
+    "parsedItemCount": 40,
+    "reviewStatus": "ok",
+    "headerLabels": [
+      "date",
+      "종목 티커",
+      "price",
+      "volume",
+      "return"
+    ],
+    "mappedColumns": {
+      "stockName": null,
+      "stockCode": {
+        "index": 1,
+        "label": "종목 티커",
+        "fieldKey": "stockCode",
+        "confidence": 1,
+        "sampleValues": [
+          "DOCU",
+          "TWTR",
+          "ORCL"
+        ]
+      },
+      "buyDate": {
+        "index": 0,
+        "label": "date",
+        "fieldKey": "buyDate",
+        "confidence": 1,
+        "sampleValues": [
+          "2024-01-01",
+          "2024-01-02",
+          "2024-01-03"
+        ]
+      },
+      "return": {
+        "index": 4,
+        "label": "return",
+        "fieldKey": "return",
+        "confidence": 1,
+        "sampleValues": [
+          "0.0656",
+          "0.009",
+          "0.0067"
+        ]
+      },
+      "accountId": null,
+      "accountType": null
+    },
+    "fieldRoleNames": [
+      "quantity",
+      "returnRate",
+      "securityCode",
+      "snapshotDate"
+    ],
+    "warningCodes": []
+  },
+  "samples/portfolio/portfolio_test10.csv": {
+    "delimiter": ",",
+    "hasDetectedHeader": true,
+    "skippedPreambleRowCount": 0,
+    "rowCount": 41,
+    "bodyRowCount": 40,
+    "parsedItemCount": 40,
+    "reviewStatus": "ok",
+    "headerLabels": [
+      "date",
+      "종목 티커",
+      "price",
+      "volume",
+      "return"
+    ],
+    "mappedColumns": {
+      "stockName": null,
+      "stockCode": {
+        "index": 1,
+        "label": "종목 티커",
+        "fieldKey": "stockCode",
+        "confidence": 1,
+        "sampleValues": [
+          "GOOGL",
+          "PINS",
+          "GOOGL"
+        ]
+      },
+      "buyDate": {
+        "index": 0,
+        "label": "date",
+        "fieldKey": "buyDate",
+        "confidence": 1,
+        "sampleValues": [
+          "2024-01-01",
+          "2024-01-02",
+          "2024-01-03"
+        ]
+      },
+      "return": {
+        "index": 4,
+        "label": "return",
+        "fieldKey": "return",
+        "confidence": 1,
+        "sampleValues": [
+          "0.0156",
+          "-0.0034",
+          "0.0095"
+        ]
+      },
+      "accountId": null,
+      "accountType": null
+    },
+    "fieldRoleNames": [
+      "quantity",
+      "returnRate",
+      "securityCode",
+      "securityName",
+      "snapshotDate"
+    ],
+    "warningCodes": []
+  },
+  "samples/portfolio/portfolio_test11.csv": {
+    "delimiter": ",",
+    "hasDetectedHeader": true,
+    "skippedPreambleRowCount": 0,
+    "rowCount": 41,
+    "bodyRowCount": 40,
+    "parsedItemCount": 40,
+    "reviewStatus": "ok",
+    "headerLabels": [
+      "date",
+      "종목 티커",
+      "price",
+      "volume",
+      "return"
+    ],
+    "mappedColumns": {
+      "stockName": null,
+      "stockCode": {
+        "index": 1,
+        "label": "종목 티커",
+        "fieldKey": "stockCode",
+        "confidence": 1,
+        "sampleValues": [
+          "ZM",
+          "DOCU",
+          "META"
+        ]
+      },
+      "buyDate": {
+        "index": 0,
+        "label": "date",
+        "fieldKey": "buyDate",
+        "confidence": 1,
+        "sampleValues": [
+          "2024-01-01",
+          "2024-01-02",
+          "2024-01-03"
+        ]
+      },
+      "return": {
+        "index": 4,
+        "label": "return",
+        "fieldKey": "return",
+        "confidence": 1,
+        "sampleValues": [
+          "0.0428",
+          "-0.0233",
+          "0.0341"
+        ]
+      },
+      "accountId": null,
+      "accountType": null
+    },
+    "fieldRoleNames": [
+      "quantity",
+      "returnRate",
+      "securityCode",
+      "snapshotDate"
+    ],
+    "warningCodes": []
+  },
+  "samples/portfolio/portfolio_test12.csv": {
+    "delimiter": ",",
+    "hasDetectedHeader": true,
+    "skippedPreambleRowCount": 0,
+    "rowCount": 41,
+    "bodyRowCount": 40,
+    "parsedItemCount": 40,
+    "reviewStatus": "ok",
+    "headerLabels": [
+      "date",
+      "종목 티커",
+      "price",
+      "volume",
+      "return"
+    ],
+    "mappedColumns": {
+      "stockName": null,
+      "stockCode": {
+        "index": 1,
+        "label": "종목 티커",
+        "fieldKey": "stockCode",
+        "confidence": 1,
+        "sampleValues": [
+          "CRM",
+          "ZM",
+          "TSLA"
+        ]
+      },
+      "buyDate": {
+        "index": 0,
+        "label": "date",
+        "fieldKey": "buyDate",
+        "confidence": 1,
+        "sampleValues": [
+          "2024-01-01",
+          "2024-01-02",
+          "2024-01-03"
+        ]
+      },
+      "return": {
+        "index": 4,
+        "label": "return",
+        "fieldKey": "return",
+        "confidence": 1,
+        "sampleValues": [
+          "0.0092",
+          "0.0173",
+          "0.0216"
+        ]
+      },
+      "accountId": null,
+      "accountType": null
+    },
+    "fieldRoleNames": [
+      "quantity",
+      "returnRate",
+      "securityCode",
+      "securityName",
+      "snapshotDate"
+    ],
+    "warningCodes": []
+  }
+}
