@@ -8,18 +8,27 @@ import {
   billboardHitMeshes,
   pickAtPointer,
 } from './raycastInteraction.js';
-import { createLabelRenderer, resizeLabelRenderer, createAtomLabelObject, setAtomLabelSelected } from './cssLabels.js';
+import {
+  createLabelRenderer,
+  resizeLabelRenderer,
+  createAtomLabelObject,
+  setAtomLabelSelected,
+  createPortfolioPreviewLabelObject,
+} from './cssLabels.js';
 import { tick as tickTransition } from './blackhole/transitionMachine.js';
 import { computeCameraFrame } from './blackhole/cameraFraming.js';
 import { createSpringVector3, stepSpringVector3 } from './blackhole/springDamper.js';
 import { createWarpStreaks, updateWarpStreaks, disposeWarpStreaks } from './blackhole/warpStreaks.js';
+import { createPortfolioPreviewMesh, positionPortfolioPreviewMesh, getPortfolioPreviewSlot } from './portfolioPreview.js';
 
-// Stage D: a "fly to the target atom" camera transition layered on top of Stage B/C's static
+// Stage D: a "fly to a distant portfolio" camera transition layered on top of Stage B/C's static
 // rendering + interaction + bloom — a spaceship-style approach (camera travels through space and
-// stops just short of the atom), not an absorption effect. transitionRef is owned by App.jsx
-// (same ref-mutated-outside-React pattern as rotationRef) and ticked here every frame;
-// onTransitionPhaseChange reports edge-triggered phase changes back so App.jsx can open/close
-// AtomDetailPanel in sync with the camera's arrival instead of at click time. See
+// stops just short of the destination), not an absorption effect. Only the "other portfolio"
+// preview clusters (small, distant, mounted directly under `scene`) trigger it; atoms within the
+// current portfolio keep their plain hover/click behavior, unrelated to any of this.
+// transitionRef is owned by App.jsx (same ref-mutated-outside-React pattern as rotationRef) and
+// ticked here every frame; onTransitionPhaseChange reports edge-triggered phase changes back so
+// App.jsx can switch the active portfolio right as the camera arrives. See
 // .claude/plans/binary-leaping-wind.md, Stage D.
 export function AtomCanvas({
   atoms,
@@ -27,7 +36,9 @@ export function AtomCanvas({
   motionPreferenceRef,
   bondLength,
   transitionRef,
+  portfolioPreviewEntries,
   onTransitionPhaseChange,
+  onPortfolioPreviewSelect,
   onAtomPointerDown,
   onAtomPointerEnter,
   onAtomPointerMove,
@@ -41,8 +52,10 @@ export function AtomCanvas({
   const sceneObjectsRef = useRef({ scene: null, camera: null, renderer: null, labelRenderer: null });
   const hitMeshesRef = useRef([]);
   const labelObjectsRef = useRef(new Map());
-  const atomMeshesRef = useRef(new Map());
   const warpStreaksRef = useRef(null);
+  const previewMeshesRef = useRef(new Map());
+  const previewLabelObjectsRef = useRef(new Map());
+  const previewHitMeshesRef = useRef([]);
   const cameraPositionSpringRef = useRef(createSpringVector3(CAMERA_HOME_POSITION.x, CAMERA_HOME_POSITION.y, CAMERA_HOME_POSITION.z));
   const hoveredIdRef = useRef(null);
   const frameRef = useRef(0);
@@ -57,6 +70,7 @@ export function AtomCanvas({
     onKeyboardSelect,
     onCenterClick,
     onTransitionPhaseChange,
+    onPortfolioPreviewSelect,
   };
 
   useEffect(() => {
@@ -120,14 +134,14 @@ export function AtomCanvas({
           callbacksRef.current.onTransitionPhaseChange?.(nextState.phase, nextState.targetAtomId);
         }
 
-        const targetMesh = nextState.targetAtomId ? atomMeshesRef.current.get(nextState.targetAtomId) : null;
-        const atomWorldPosition = targetMesh
-          ? targetMesh.userData.localPosition.clone().applyQuaternion(rig.quaternion)
-          : null;
+        // Preview meshes sit directly under `scene` (not the rig), already in world space, so
+        // their stored position needs no rig-quaternion correction.
+        const targetMesh = nextState.targetAtomId ? previewMeshesRef.current.get(nextState.targetAtomId) : null;
+        const targetWorldPosition = targetMesh ? targetMesh.userData.localPosition : null;
 
         const frame = computeCameraFrame(
           nextState.phase,
-          atomWorldPosition,
+          targetWorldPosition,
           CAMERA_HOME_POSITION,
           CAMERA_HOME_LOOKAT,
         );
@@ -152,6 +166,7 @@ export function AtomCanvas({
       }
 
       billboardHitMeshes(hitMeshesRef.current, camera);
+      billboardHitMeshes(previewHitMeshesRef.current, camera);
       composer.render();
       labelRenderer.render(scene, camera);
     };
@@ -190,12 +205,9 @@ export function AtomCanvas({
     const hitMeshes = [centerHit];
     rig.add(centerHit);
 
-    const atomMeshes = new Map();
-
     for (const atom of atoms ?? []) {
       const atomMesh = createAtomMesh(atom, bondLength);
       rig.add(atomMesh);
-      atomMeshes.set(atom.id, atomMesh);
 
       const hitMesh = createAtomHitMesh(atom);
       hitMesh.position.copy(atomMesh.userData.localPosition);
@@ -211,12 +223,52 @@ export function AtomCanvas({
     }
 
     hitMeshesRef.current = hitMeshes;
-    atomMeshesRef.current = atomMeshes;
 
     return undefined;
     // Rebuild geometry only when the set of atoms actually changes shape, not on every
     // frameTime-driven re-render of the `atoms` prop.
   }, [(atoms ?? []).map((atom) => atom.id).join(','), bondLength]);
+
+  useEffect(() => {
+    const scene = sceneObjectsRef.current.scene;
+    if (!scene) {
+      return undefined;
+    }
+
+    for (const mesh of previewMeshesRef.current.values()) {
+      scene.remove(mesh);
+    }
+    for (const labelObject of previewLabelObjectsRef.current.values()) {
+      labelObject.element.remove();
+    }
+
+    const previewMeshes = new Map();
+    const previewLabels = new Map();
+    const previewHitMeshes = [];
+
+    (portfolioPreviewEntries ?? []).forEach((entry, index) => {
+      const slot = getPortfolioPreviewSlot(index);
+      const mesh = createPortfolioPreviewMesh(entry, slot);
+      const position = positionPortfolioPreviewMesh(mesh, slot);
+      scene.add(mesh);
+      previewMeshes.set(entry.id, mesh);
+      previewHitMeshes.push(mesh.userData.hitMesh);
+
+      const labelObject = createPortfolioPreviewLabelObject(entry, {
+        onSelect: (entryId) => callbacksRef.current.onPortfolioPreviewSelect?.(entryId),
+      });
+      labelObject.position.copy(position);
+      scene.add(labelObject);
+      previewLabels.set(entry.id, labelObject);
+    });
+
+    previewMeshesRef.current = previewMeshes;
+    previewLabelObjectsRef.current = previewLabels;
+    previewHitMeshesRef.current = previewHitMeshes;
+
+    return undefined;
+    // Rebuild only when the set of *other* portfolios actually changes, not on every re-render.
+  }, [(portfolioPreviewEntries ?? []).map((entry) => entry.id).join(',')]);
 
   useEffect(() => {
     for (const atom of atoms ?? []) {
@@ -233,7 +285,8 @@ export function AtomCanvas({
     if (!camera) {
       return null;
     }
-    return pickAtPointer(event, canvasRef.current, camera, raycasterRef.current, hitMeshesRef.current);
+    const combinedHitMeshes = hitMeshesRef.current.concat(previewHitMeshesRef.current);
+    return pickAtPointer(event, canvasRef.current, camera, raycasterRef.current, combinedHitMeshes);
   };
 
   const handlePointerDown = (event) => {
@@ -242,6 +295,8 @@ export function AtomCanvas({
       callbacksRef.current.onAtomPointerDown?.(pick.atomId, event);
     } else if (pick?.center) {
       callbacksRef.current.onCenterClick?.(event);
+    } else if (pick?.previewId) {
+      callbacksRef.current.onPortfolioPreviewSelect?.(pick.previewId);
     }
   };
 

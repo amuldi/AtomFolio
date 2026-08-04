@@ -5638,43 +5638,35 @@ export default function App() {
     interactionRef.current.lastInputAt = performance.now();
   };
 
-  // Selection dispatch shared by pointer click, keyboard select, and center-clear across both
-  // renderers. On the SVG path (production default) this is just the original instant
-  // toggle. On the WebGL preview path it drives transitionRef instead: AtomCanvas's RAF loop
-  // ticks the transition and reports phase changes back via onTransitionPhaseChange, which is
-  // what actually opens/closes AtomDetailPanel (on ARRIVED / IDLE) so the panel's crossfade
-  // lines up with the camera's arrival rather than popping in at click time. Reduced motion
-  // collapses straight to the terminal phase synchronously inside transitionMachine, so it's
-  // applied here immediately rather than waiting for a frame tick.
+  // Plain instant select/deselect for atoms within the current portfolio — same on both
+  // renderers, unrelated to the fly-to transition below. The camera-flight/warp-streak
+  // transition is reserved for navigating to a *different* portfolio (see
+  // dispatchPortfolioPreviewSelect); clicking an atom in the current scene never triggers it.
   const dispatchAtomSelect = useCallback((atomId) => {
-    if (!ENABLE_WEBGL_SCENE_PREVIEW) {
-      setSelectedAtomId((current) => (current === atomId ? null : atomId));
-      return;
-    }
-    const reducedMotion = motionPreferenceRef.current.reduced;
-    transitionRef.current = selectTransitionAtom(transitionRef.current, atomId, { reducedMotion });
-    if (reducedMotion) {
-      setSelectedAtomId(transitionRef.current.targetAtomId);
-    }
+    setSelectedAtomId((current) => (current === atomId ? null : atomId));
   }, []);
 
   const dispatchAtomClose = useCallback(() => {
+    setSelectedAtomId(null);
+  }, []);
+
+  // Distant "other portfolio" preview click, WebGL-preview-only: drives transitionRef the same
+  // way atom selection used to. AtomCanvas's RAF loop ticks it and reports phase changes back
+  // via handlePortfolioPreviewPhaseChange, which switches the active portfolio once the camera
+  // arrives — there's no detail panel to hold open here, arriving *is* the destination, so it
+  // immediately snaps back to idle once the switch happens (see there for why).
+  const dispatchPortfolioPreviewSelect = useCallback((entryId) => {
     if (!ENABLE_WEBGL_SCENE_PREVIEW) {
-      setSelectedAtomId(null);
       return;
     }
     const reducedMotion = motionPreferenceRef.current.reduced;
-    transitionRef.current = requestTransitionClose(transitionRef.current, { reducedMotion });
-    if (reducedMotion) {
-      setSelectedAtomId(null);
-    }
+    transitionRef.current = selectTransitionAtom(transitionRef.current, entryId, { reducedMotion });
   }, []);
 
-  const handleTransitionPhaseChange = useCallback((phase, atomId) => {
-    if (phase === TRANSITION_PHASE.ARRIVED) {
-      setSelectedAtomId(atomId);
-    } else if (phase === TRANSITION_PHASE.IDLE) {
-      setSelectedAtomId(null);
+  const handlePortfolioPreviewPhaseChange = useCallback((phase, entryId) => {
+    if (phase === TRANSITION_PHASE.ARRIVED && entryId) {
+      setActivePortfolioId(entryId);
+      transitionRef.current = createTransitionState();
     }
   }, []);
 
@@ -6610,6 +6602,10 @@ export default function App() {
           setSettingsOpen(false);
         } else if (interactionRef.current.selectedAtomId) {
           dispatchAtomClose();
+        } else if (transitionRef.current.phase !== TRANSITION_PHASE.IDLE) {
+          transitionRef.current = requestTransitionClose(transitionRef.current, {
+            reducedMotion: motionPreferenceRef.current.reduced,
+          });
         }
         return;
       }
@@ -7733,6 +7729,10 @@ export default function App() {
       '--shooting-star-opacity': format(shootingStar.opacity),
     };
   }, [shootingStar]);
+  const otherPortfolioEntries = useMemo(
+    () => portfolioEntries.filter((entry) => entry.id !== activePortfolioId),
+    [portfolioEntries, activePortfolioId],
+  );
   const atoms = useMemo(
     () =>
       atomsRef.current.map((atom) => {
@@ -8011,7 +8011,9 @@ export default function App() {
                     motionPreferenceRef={motionPreferenceRef}
                     bondLength={BOND_LENGTH}
                     transitionRef={transitionRef}
-                    onTransitionPhaseChange={handleTransitionPhaseChange}
+                    portfolioPreviewEntries={otherPortfolioEntries}
+                    onTransitionPhaseChange={handlePortfolioPreviewPhaseChange}
+                    onPortfolioPreviewSelect={dispatchPortfolioPreviewSelect}
                     onAtomPointerDown={handleNodePointerDown}
                     onAtomPointerEnter={handleNodeEnter}
                     onAtomPointerMove={handleNodeMove}
@@ -8037,7 +8039,7 @@ export default function App() {
                   onPointerLeave={handleNodeLeave}
                   onKeyboardSelect={handleNodeKeyboardSelect}
                 />
-                {portfolioEntries.length ? (
+                {portfolioEntries.length && !ENABLE_WEBGL_SCENE_PREVIEW ? (
                   <div className="portfolio-preview-layer">
                     {portfolioEntries
                       .slice(0, PORTFOLIO_PREVIEW_SLOTS.length)

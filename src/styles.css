@@ -6612,6 +6612,21 @@ body::after {
   opacity: 0.28;
 }
 
+.atom-webgl-preview-label {
+  position: relative;
+  transform: translate(-50%, 10px);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.atom-webgl-preview-label__name {
+  font-family: var(--ui-font);
+  font-size: 0.56rem;
+  font-weight: 550;
+  letter-spacing: 0.02em;
+  color: rgba(249, 239, 218, 0.42);
+}
+
 .atom-webgl-focus-target {
   position: absolute;
   width: 1px;

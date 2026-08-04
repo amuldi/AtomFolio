@@ -3,8 +3,8 @@ import { jitter } from '../utils/math.js';
 import { buildLoopPoints, buildBlotPoints } from '../utils/scene.js';
 import {
   createBondMaterial,
-  createNodeFillMaterial,
   createNodeOutlineMaterial,
+  createNodeVolumeMaterial,
   createDustMaterial,
 } from './materials.js';
 
@@ -14,20 +14,44 @@ function pointsToVector3Array(points, z = 0) {
   return points.map((point) => new THREE.Vector3(point.x, point.y, z));
 }
 
-function buildLoopMesh(radius, seed) {
+// Same hand-sketched wobble loop as before, but as an outline only — the volumetric node builds
+// its "fill" separately from a lit sphere instead, so these rings don't need their own flat fill.
+function buildLoopOutline(radius, seed) {
   const points = buildLoopPoints(radius, seed);
   const vectors = pointsToVector3Array(points);
   vectors.push(vectors[0].clone());
+  const geometry = new THREE.BufferGeometry().setFromPoints(vectors);
+  return new THREE.Line(geometry, createNodeOutlineMaterial());
+}
 
-  const shape = new THREE.Shape(points.map((point) => new THREE.Vector2(point.x, point.y)));
-  const fillGeometry = new THREE.ShapeGeometry(shape);
-  const fill = new THREE.Mesh(fillGeometry, createNodeFillMaterial());
+// Three tilt axes for the hand-sketched wobble rings below — chosen so their combination reads
+// as a rounded 3D form (an "armillary sphere") from any viewing angle, instead of the flat disc
+// a single loop in the XY plane always looked like regardless of camera angle.
+const RING_TILTS = [
+  { axis: new THREE.Vector3(1, 0, 0), angle: 0 },
+  { axis: new THREE.Vector3(0.2, 1, 0).normalize(), angle: Math.PI * 0.42 },
+  { axis: new THREE.Vector3(1, 0.3, 0.6).normalize(), angle: Math.PI * 0.31 },
+];
 
-  const outlineGeometry = new THREE.BufferGeometry().setFromPoints(vectors);
-  const outline = new THREE.Line(outlineGeometry, createNodeOutlineMaterial());
-
+// A node (atom or nucleus): a softly lit sphere for volume, read via the scene's
+// hemisphere/key lights, plus the wobble-ring outlines tilted around it for the sketchy line
+// texture. Replaces the old flat single-plane loop shapes.
+function buildVolumetricNode(outerRadius, innerRadius, seed) {
   const group = new THREE.Group();
-  group.add(fill, outline);
+
+  const volume = new THREE.Mesh(
+    new THREE.SphereGeometry(outerRadius * 0.8, 14, 10),
+    createNodeVolumeMaterial(),
+  );
+  group.add(volume);
+
+  const radii = [outerRadius, outerRadius * 0.92, innerRadius];
+  RING_TILTS.forEach((tilt, index) => {
+    const ring = buildLoopOutline(radii[index], seed + index * 137);
+    ring.quaternion.setFromAxisAngle(tilt.axis, tilt.angle);
+    group.add(ring);
+  });
+
   return group;
 }
 
@@ -77,8 +101,7 @@ export function createAtomMesh(atom, bondLength) {
 
   const nodeGroup = new THREE.Group();
   nodeGroup.position.copy(localPosition);
-  nodeGroup.add(buildLoopMesh(atom.node, atom.seed + 201));
-  nodeGroup.add(buildLoopMesh(atom.node * 0.84, atom.seed + 301));
+  nodeGroup.add(buildVolumetricNode(atom.node, atom.node * 0.84, atom.seed + 201));
   group.add(nodeGroup);
 
   group.userData.atomId = atom.id;
@@ -97,10 +120,6 @@ export function createNucleusMesh() {
     [10.7, 613],
     [7.9, 727],
   ];
-  const loopSeeds = [
-    [14.8, 811],
-    [12.9, 883],
-  ];
 
   for (const [radius, seed] of blotSeeds) {
     const points = pointsToVector3Array(buildBlotPoints(radius, seed));
@@ -109,9 +128,7 @@ export function createNucleusMesh() {
     group.add(new THREE.Line(geometry, createNodeOutlineMaterial()));
   }
 
-  for (const [radius, seed] of loopSeeds) {
-    group.add(buildLoopMesh(radius, seed));
-  }
+  group.add(buildVolumetricNode(14.8, 12.9, 811));
 
   return group;
 }
