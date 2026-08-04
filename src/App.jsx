@@ -55,11 +55,19 @@ import DigitalTwinPanel from './components/panels/DigitalTwinPanel.jsx';
 import { AuthPanel } from './components/auth/AuthPanel.jsx';
 import { AtomDetailPanel } from './components/panels/AtomDetailPanel.jsx';
 import { AtomCanvas } from './scene/index.js';
+import {
+  createTransitionState,
+  selectAtom as selectTransitionAtom,
+  requestClose as requestTransitionClose,
+  PHASE as TRANSITION_PHASE,
+} from './scene/blackhole/transitionMachine.js';
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? '';
-// Stage A dev-only preview of the WebGL scene migration (see plan at
-// .claude/plans/binary-leaping-wind.md). Off by default; append ?webglScene=1 to compare against
-// the SVG scene. Removed once Stage B lands and the WebGL path becomes the real renderer.
+// Dev-only preview of the WebGL scene migration (see plan at .claude/plans/binary-leaping-wind.md).
+// Off by default; append ?webglScene=1 to compare against the SVG scene. The black-hole
+// absorption transition (Stage D) only exists on this path — it needs a real WebGL context for
+// its shader/particle work, so the SVG fallback keeps its original instant select/deselect
+// behavior. Removed once full manual interaction QA passes and the SVG path is deleted.
 const ENABLE_WEBGL_SCENE_PREVIEW =
   typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('webglScene') === '1';
 
@@ -5545,6 +5553,9 @@ export default function App() {
     reduced: readPrefersReducedMotion(),
     visible: typeof document === 'undefined' || document.visibilityState !== 'hidden',
   });
+  // Black-hole absorption transition (Stage D), WebGL-preview-only. Ticked every frame inside
+  // AtomCanvas's own RAF loop, same ref-mutated-outside-React pattern as rotationRef/cameraRef.
+  const transitionRef = useRef(createTransitionState());
   const frameCommitRef = useRef(0);
   const targetTiltRef = useRef({ x: 0, y: 0 });
   const currentTiltRef = useRef({ x: 0, y: 0 });
@@ -5626,6 +5637,46 @@ export default function App() {
   const noteInteraction = () => {
     interactionRef.current.lastInputAt = performance.now();
   };
+
+  // Selection dispatch shared by pointer click, keyboard select, and center-clear across both
+  // renderers. On the SVG path (production default) this is just the original instant
+  // toggle. On the WebGL preview path it drives transitionRef instead: AtomCanvas's RAF loop
+  // ticks the transition and reports phase changes back via onTransitionPhaseChange, which is
+  // what actually opens/closes AtomDetailPanel (on ARRIVED / IDLE) so the panel's crossfade
+  // lines up with the camera's arrival rather than popping in at click time. Reduced motion
+  // collapses straight to the terminal phase synchronously inside transitionMachine, so it's
+  // applied here immediately rather than waiting for a frame tick.
+  const dispatchAtomSelect = useCallback((atomId) => {
+    if (!ENABLE_WEBGL_SCENE_PREVIEW) {
+      setSelectedAtomId((current) => (current === atomId ? null : atomId));
+      return;
+    }
+    const reducedMotion = motionPreferenceRef.current.reduced;
+    transitionRef.current = selectTransitionAtom(transitionRef.current, atomId, { reducedMotion });
+    if (reducedMotion) {
+      setSelectedAtomId(transitionRef.current.targetAtomId);
+    }
+  }, []);
+
+  const dispatchAtomClose = useCallback(() => {
+    if (!ENABLE_WEBGL_SCENE_PREVIEW) {
+      setSelectedAtomId(null);
+      return;
+    }
+    const reducedMotion = motionPreferenceRef.current.reduced;
+    transitionRef.current = requestTransitionClose(transitionRef.current, { reducedMotion });
+    if (reducedMotion) {
+      setSelectedAtomId(null);
+    }
+  }, []);
+
+  const handleTransitionPhaseChange = useCallback((phase, atomId) => {
+    if (phase === TRANSITION_PHASE.ARRIVED) {
+      setSelectedAtomId(atomId);
+    } else if (phase === TRANSITION_PHASE.IDLE) {
+      setSelectedAtomId(null);
+    }
+  }, []);
 
   const interactWithFloatingTool = useCallback((toolKey) => {
     noteInteraction();
@@ -6557,6 +6608,8 @@ export default function App() {
       if (event.key === 'Escape') {
         if (settingsOpen) {
           setSettingsOpen(false);
+        } else if (interactionRef.current.selectedAtomId) {
+          dispatchAtomClose();
         }
         return;
       }
@@ -6713,7 +6766,7 @@ export default function App() {
       setHoverInfo(null);
 
       if (!wasMoved) {
-        setSelectedAtomId((current) => (current === clickedAtomId ? null : clickedAtomId));
+        dispatchAtomSelect(clickedAtomId);
       }
     };
 
@@ -6832,8 +6885,8 @@ export default function App() {
     noteInteraction();
     setHoverInfo(null);
     setActiveGroupKey(null);
-    setSelectedAtomId((current) => (current === atomId ? null : atomId));
-  }, []);
+    dispatchAtomSelect(atomId);
+  }, [dispatchAtomSelect]);
 
   const handlePointerMove = () => {
     noteInteraction();
@@ -7607,7 +7660,7 @@ export default function App() {
   const showCenterClearHit = Boolean(selectedAtomId || activeGroupKey);
   const clearCenterSelection = () => {
     noteInteraction();
-    setSelectedAtomId(null);
+    dispatchAtomClose();
     setActiveGroupKey(null);
   };
   const handleFocusPortfolioHolding = useCallback(
@@ -7957,6 +8010,8 @@ export default function App() {
                     rotationRef={rotationRef}
                     motionPreferenceRef={motionPreferenceRef}
                     bondLength={BOND_LENGTH}
+                    transitionRef={transitionRef}
+                    onTransitionPhaseChange={handleTransitionPhaseChange}
                     onAtomPointerDown={handleNodePointerDown}
                     onAtomPointerEnter={handleNodeEnter}
                     onAtomPointerMove={handleNodeMove}
@@ -8023,7 +8078,7 @@ export default function App() {
           text={text}
           onClose={() => {
             noteInteraction();
-            setSelectedAtomId(null);
+            dispatchAtomClose();
           }}
         />
       ) : null}

@@ -2,6 +2,12 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { createDistortionPass } from './blackhole/distortionShader.js';
+
+// The camera's resting pose — also the black-hole transition's "home" target for
+// idle/charging(partial)/reversing, see blackhole/cameraFraming.js.
+export const CAMERA_HOME_POSITION = { x: 0, y: 0, z: 470 };
+export const CAMERA_HOME_LOOKAT = { x: 0, y: 0, z: 0 };
 
 // UnrealBloomPass's composite pass writes an opaque alpha regardless of the renderer's clear
 // alpha, so once bloom is in the pipeline the canvas is opaque black — matching --app-bg
@@ -16,8 +22,8 @@ export function createSceneRenderer(canvas, width, height) {
   const scene = new THREE.Scene();
 
   const camera = new THREE.PerspectiveCamera(32, width / height, 10, 4000);
-  camera.position.set(0, 0, 470);
-  camera.lookAt(0, 0, 0);
+  camera.position.set(CAMERA_HOME_POSITION.x, CAMERA_HOME_POSITION.y, CAMERA_HOME_POSITION.z);
+  camera.lookAt(CAMERA_HOME_LOOKAT.x, CAMERA_HOME_LOOKAT.y, CAMERA_HOME_LOOKAT.z);
 
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
@@ -27,7 +33,12 @@ export function createSceneRenderer(canvas, width, height) {
   const bloomPass = new UnrealBloomPass(new THREE.Vector2(width, height), 0.55, 0.6, 0.72);
   composer.addPass(bloomPass);
 
-  return { renderer, scene, camera, composer, bloomPass };
+  // Black-hole transition's radial warp — always last in the chain (see distortionShader.js for
+  // why it stays enabled with strength 0 rather than being toggled).
+  const distortionPass = createDistortionPass();
+  composer.addPass(distortionPass);
+
+  return { renderer, scene, camera, composer, bloomPass, distortionPass };
 }
 
 export function resizeSceneRenderer(renderer, camera, composer, width, height) {

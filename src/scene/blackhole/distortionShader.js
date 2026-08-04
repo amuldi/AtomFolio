@@ -40,9 +40,11 @@ const DistortionShader = {
 };
 
 export function createDistortionPass() {
-  const pass = new ShaderPass(DistortionShader);
-  pass.enabled = false;
-  return pass;
+  // Left permanently enabled with strength 0 (a no-op copy) rather than toggled via
+  // pass.enabled: EffectComposer only knows to render to screen from the *last* pass in its
+  // array, so disabling it whenever it's last would blank the canvas — strength is the only
+  // control surface, this pass always stays in the chain.
+  return new ShaderPass(DistortionShader);
 }
 
 export function setDistortionStrength(pass, strength, center) {
@@ -50,5 +52,4 @@ export function setDistortionStrength(pass, strength, center) {
   if (center) {
     pass.uniforms.center.value.set(center.x, center.y);
   }
-  pass.enabled = strength > 0.001;
 }
