@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { generateAtomLayout, buildLoopPoints } from '../utils/scene.js';
-import { createNodeOutlineMaterial, createNodeFillMaterial } from './materials.js';
+import { generateAtomLayout } from '../utils/scene.js';
+import { buildVolumetricNode } from './atomMeshFactory.js';
 import { createPortfolioPreviewHitMesh } from './raycastInteraction.js';
 
 // Fixed positions for "other portfolio" previews — distant destinations for the fly-to
@@ -41,20 +41,6 @@ function hashStringToSeed(value) {
   return Math.abs(hash) || 1;
 }
 
-function buildMiniLoopMesh(radius, seed) {
-  const points = buildLoopPoints(radius, seed);
-  const vectors = points.map((point) => new THREE.Vector3(point.x, point.y, 0));
-  vectors.push(vectors[0].clone());
-
-  const shape = new THREE.Shape(points.map((point) => new THREE.Vector2(point.x, point.y)));
-  const fill = new THREE.Mesh(new THREE.ShapeGeometry(shape), createNodeFillMaterial());
-  const outline = new THREE.Line(new THREE.BufferGeometry().setFromPoints(vectors), createNodeOutlineMaterial());
-
-  const group = new THREE.Group();
-  group.add(fill, outline);
-  return group;
-}
-
 export function getPortfolioPreviewSlot(index) {
   return PREVIEW_SLOTS[index % PREVIEW_SLOTS.length];
 }
@@ -72,12 +58,12 @@ export function createPortfolioPreviewMesh(entry, slot) {
     const nodeSeed = (holding?.seed ?? seed) + i * 41;
     const angle = (i / nodeCount) * Math.PI * 2 + seed * 0.01;
     const localRadius = CLUSTER_SPREAD * (0.55 + (i % 3) * 0.22);
-    const node = buildMiniLoopMesh(2.6 + (i % 2) * 1.1, nodeSeed);
+    const node = buildVolumetricNode(2.6 + (i % 2) * 1.1, nodeSeed);
     node.position.set(Math.cos(angle) * localRadius, Math.sin(angle) * localRadius * 0.7, Math.sin(nodeSeed) * 6);
     group.add(node);
   }
 
-  group.add(buildMiniLoopMesh(5.5, seed + 900));
+  group.add(buildVolumetricNode(5.5, seed + 900));
 
   const scale = slot.scale ?? 1;
   group.scale.setScalar(scale);

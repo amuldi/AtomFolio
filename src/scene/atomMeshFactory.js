@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { jitter } from '../utils/math.js';
-import { buildLoopPoints, buildBlotPoints } from '../utils/scene.js';
+import { buildBlotPoints } from '../utils/scene.js';
 import {
   createBondMaterial,
   createNodeOutlineMaterial,
@@ -14,56 +14,43 @@ function pointsToVector3Array(points, z = 0) {
   return points.map((point) => new THREE.Vector3(point.x, point.y, z));
 }
 
-// Same hand-sketched wobble loop as before, but as an outline only — the volumetric node builds
-// its "fill" separately from a lit sphere instead, so these rings don't need their own flat fill.
-// A small out-of-plane jitter on every point keeps the ring from ever fully flattening into a
-// hard-edged sliver when it happens to face the camera nearly edge-on (found live: a purely flat
-// 2D loop tilted into 3D degenerates into a crisp, distinctly un-hand-drawn-looking box shape at
-// certain rig rotation angles — this wobble keeps it reading as a loose scribble instead).
-function buildLoopOutline(radius, seed) {
-  const points = buildLoopPoints(radius, seed);
-  const vectors = points.map(
-    (point, index) => new THREE.Vector3(point.x, point.y, jitter(seed + index * 5.7, radius * 0.22)),
-  );
-  vectors.push(vectors[0].clone());
-  const geometry = new THREE.BufferGeometry().setFromPoints(vectors);
-  return new THREE.Line(geometry, createNodeOutlineMaterial());
+// A low-poly icosahedron (12 vertices, 30 edges) with every vertex bumped in/out along its own
+// direction from center by a seeded jitter — an irregular hand-cut "gem" instead of a perfect
+// geodesic sphere. A single coherent 3D mesh, not several independent flat loops: its edges are
+// spread across the whole real surface, so there's no angle where it can degenerate into a flat
+// sliver, and no risk of several overlapping wireframes cluttering the view or z-fighting when
+// the camera gets close — both of which were real problems with the previous "several tilted
+// rings" design (verified live: a box-shaped artifact from one ring going edge-on, and visible
+// flicker/clutter up close from the layered lines).
+function buildWobbledIcosphereGeometry(radius, seed) {
+  const geometry = new THREE.IcosahedronGeometry(radius, 0);
+  const position = geometry.attributes.position;
+  const vertex = new THREE.Vector3();
+  for (let i = 0; i < position.count; i += 1) {
+    vertex.fromBufferAttribute(position, i);
+    vertex.multiplyScalar(1 + jitter(seed + i * 13.7, 0.16));
+    position.setXYZ(i, vertex.x, vertex.y, vertex.z);
+  }
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
-// Five tilt axes (roughly the face-normal spread of an octahedron plus two diagonals) for the
-// hand-sketched wobble rings below — enough that no single rig rotation ever leaves the
-// silhouette dominated by just one ring's worst-case viewing angle, so the combination reads as
-// a rounded 3D form (an "armillary sphere") from any direction instead of the flat disc a single
-// loop in the XY plane always looked like regardless of camera angle.
-const RING_TILTS = [
-  { axis: new THREE.Vector3(1, 0, 0), angle: 0 },
-  { axis: new THREE.Vector3(0, 1, 0), angle: Math.PI / 2 },
-  { axis: new THREE.Vector3(0, 0, 1), angle: Math.PI / 2 },
-  { axis: new THREE.Vector3(1, 1, 0).normalize(), angle: Math.PI / 3 },
-  { axis: new THREE.Vector3(1, -1, 1).normalize(), angle: Math.PI / 2.4 },
-];
-
-// A node (atom or nucleus): a softly lit sphere for volume, read via the scene's
-// hemisphere/key lights, plus the wobble-ring outlines tilted around it for the sketchy line
-// texture. Replaces the old flat single-plane loop shapes.
-function buildVolumetricNode(outerRadius, innerRadius, seed) {
+// A node (atom or nucleus): a softly lit "gem" mesh, read via the scene's hemisphere/key lights,
+// plus its own edge wireframe for the sketchy line texture. Exported so portfolioPreview.js's
+// distant clusters can build their nodes the same way, rather than the flat 2D loop shapes it
+// used to use — those looked visibly inconsistent with the main scene and, up close during the
+// fly-to transition, read as flat, edgeless blobs rather than a coherent 3D form.
+export function buildVolumetricNode(radius, seed) {
   const group = new THREE.Group();
 
-  // Higher segment count than a typical low-poly placeholder sphere — at only a handful of
-  // these on screen at once the cost is negligible, and it avoids visible faceting under the
-  // hemisphere/key lights that would otherwise read as another un-rounded, geometric artifact.
-  const volume = new THREE.Mesh(
-    new THREE.SphereGeometry(outerRadius * 0.8, 24, 16),
-    createNodeVolumeMaterial(),
-  );
+  const volume = new THREE.Mesh(buildWobbledIcosphereGeometry(radius * 0.86, seed), createNodeVolumeMaterial());
   group.add(volume);
 
-  const radii = [outerRadius, outerRadius * 0.96, outerRadius * 0.9, innerRadius, innerRadius * 0.94];
-  RING_TILTS.forEach((tilt, index) => {
-    const ring = buildLoopOutline(radii[index], seed + index * 137);
-    ring.quaternion.setFromAxisAngle(tilt.axis, tilt.angle);
-    group.add(ring);
-  });
+  // Edges are built from a very slightly larger copy of the same shape, not the fill geometry
+  // itself — coincident geometry z-fights/flickers, especially once the camera is close.
+  const edgeGeometry = buildWobbledIcosphereGeometry(radius * 0.875, seed);
+  const outline = new THREE.LineSegments(new THREE.EdgesGeometry(edgeGeometry), createNodeOutlineMaterial());
+  group.add(outline);
 
   return group;
 }
@@ -114,7 +101,7 @@ export function createAtomMesh(atom, bondLength) {
 
   const nodeGroup = new THREE.Group();
   nodeGroup.position.copy(localPosition);
-  nodeGroup.add(buildVolumetricNode(atom.node, atom.node * 0.84, atom.seed + 201));
+  nodeGroup.add(buildVolumetricNode(atom.node, atom.seed + 201));
   group.add(nodeGroup);
 
   group.userData.atomId = atom.id;
@@ -141,7 +128,7 @@ export function createNucleusMesh() {
     group.add(new THREE.Line(geometry, createNodeOutlineMaterial()));
   }
 
-  group.add(buildVolumetricNode(14.8, 12.9, 811));
+  group.add(buildVolumetricNode(14.8, 811));
 
   return group;
 }
