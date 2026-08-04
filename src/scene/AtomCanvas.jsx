@@ -9,17 +9,18 @@ import {
   pickAtPointer,
 } from './raycastInteraction.js';
 import { createLabelRenderer, resizeLabelRenderer, createAtomLabelObject, setAtomLabelSelected } from './cssLabels.js';
-import { PHASE, tick as tickTransition, getDistortionStrength, getReleaseProgress } from './blackhole/transitionMachine.js';
+import { tick as tickTransition } from './blackhole/transitionMachine.js';
 import { computeCameraFrame } from './blackhole/cameraFraming.js';
 import { createSpringVector3, stepSpringVector3 } from './blackhole/springDamper.js';
-import { createParticleSwirl, setParticleSwirlProgress, disposeParticleSwirl } from './blackhole/particleSwirl.js';
-import { setDistortionStrength } from './blackhole/distortionShader.js';
+import { createWarpStreaks, updateWarpStreaks, disposeWarpStreaks } from './blackhole/warpStreaks.js';
 
-// Stage D: the black-hole absorption transition is layered on top of Stage B/C's static
-// rendering + interaction + bloom. transitionRef is owned by App.jsx (same ref-mutated-outside-
-// React pattern as rotationRef) and ticked here every frame; onTransitionPhaseChange reports
-// edge-triggered phase changes back so App.jsx can open/close AtomDetailPanel in sync with the
-// camera's arrival instead of at click time. See .claude/plans/binary-leaping-wind.md, Stage D.
+// Stage D: a "fly to the target atom" camera transition layered on top of Stage B/C's static
+// rendering + interaction + bloom — a spaceship-style approach (camera travels through space and
+// stops just short of the atom), not an absorption effect. transitionRef is owned by App.jsx
+// (same ref-mutated-outside-React pattern as rotationRef) and ticked here every frame;
+// onTransitionPhaseChange reports edge-triggered phase changes back so App.jsx can open/close
+// AtomDetailPanel in sync with the camera's arrival instead of at click time. See
+// .claude/plans/binary-leaping-wind.md, Stage D.
 export function AtomCanvas({
   atoms,
   rotationRef,
@@ -41,8 +42,7 @@ export function AtomCanvas({
   const hitMeshesRef = useRef([]);
   const labelObjectsRef = useRef(new Map());
   const atomMeshesRef = useRef(new Map());
-  const atomDataRef = useRef(new Map());
-  const particleSwirlsRef = useRef(new Map());
+  const warpStreaksRef = useRef(null);
   const cameraPositionSpringRef = useRef(createSpringVector3(CAMERA_HOME_POSITION.x, CAMERA_HOME_POSITION.y, CAMERA_HOME_POSITION.z));
   const hoveredIdRef = useRef(null);
   const frameRef = useRef(0);
@@ -69,7 +69,7 @@ export function AtomCanvas({
     const parent = canvas.parentElement ?? canvas;
     const width = parent.clientWidth || 1;
     const height = parent.clientHeight || 1;
-    const { renderer, scene, camera, composer, distortionPass } = createSceneRenderer(canvas, width, height);
+    const { renderer, scene, camera, composer } = createSceneRenderer(canvas, width, height);
     const labelRenderer = createLabelRenderer(width, height);
     labelLayer.appendChild(labelRenderer.domElement);
 
@@ -78,6 +78,13 @@ export function AtomCanvas({
     rigRef.current = rig;
     sceneObjectsRef.current = { scene, camera, renderer, composer, labelRenderer };
 
+    // Fixed backdrop, not a child of `rig` — the atoms/nucleus keep spinning independently
+    // while these stars stay put in world space, which is what makes them read as a passing
+    // starfield rather than part of the atom structure.
+    const warpStreaks = createWarpStreaks();
+    scene.add(warpStreaks);
+    warpStreaksRef.current = warpStreaks;
+
     const handleResize = () => {
       const nextWidth = parent.clientWidth || 1;
       const nextHeight = parent.clientHeight || 1;
@@ -85,43 +92,6 @@ export function AtomCanvas({
       resizeLabelRenderer(labelRenderer, nextWidth, nextHeight);
     };
     window.addEventListener('resize', handleResize);
-
-    // atomId -> Points, for whichever atom(s) currently need a swirl: the active target
-    // (collapsing/arrived/reversing) and/or an atom just released by an A->B crossfade.
-    const syncParticleSwirls = (state) => {
-      const wanted = new Map();
-
-      if (state.targetAtomId && state.phase !== PHASE.IDLE && state.phase !== PHASE.CHARGING) {
-        wanted.set(state.targetAtomId, getDistortionStrength(state));
-      }
-      if (state.releasingAtomId) {
-        wanted.set(state.releasingAtomId, 1 - getReleaseProgress(state));
-      }
-
-      for (const [atomId, points] of particleSwirlsRef.current.entries()) {
-        if (!wanted.has(atomId)) {
-          rig.remove(points);
-          disposeParticleSwirl(points);
-          particleSwirlsRef.current.delete(atomId);
-        }
-      }
-
-      for (const [atomId, progress] of wanted.entries()) {
-        let points = particleSwirlsRef.current.get(atomId);
-        if (!points) {
-          const atomData = atomDataRef.current.get(atomId);
-          const atomMesh = atomMeshesRef.current.get(atomId);
-          if (!atomData || !atomMesh) {
-            continue;
-          }
-          points = createParticleSwirl(atomData);
-          points.position.copy(atomMesh.userData.localPosition);
-          rig.add(points);
-          particleSwirlsRef.current.set(atomId, points);
-        }
-        setParticleSwirlProgress(points, progress);
-      }
-    };
 
     let lastTime = performance.now();
 
@@ -174,8 +144,11 @@ export function AtomCanvas({
         );
         camera.lookAt(frame.lookAt.x, frame.lookAt.y, frame.lookAt.z);
 
-        setDistortionStrength(distortionPass, getDistortionStrength(nextState));
-        syncParticleSwirls(nextState);
+        updateWarpStreaks(warpStreaks, {
+          x: cameraPositionSpringRef.current.vx,
+          y: cameraPositionSpringRef.current.vy,
+          z: cameraPositionSpringRef.current.vz,
+        });
       }
 
       billboardHitMeshes(hitMeshesRef.current, camera);
@@ -187,10 +160,8 @@ export function AtomCanvas({
     return () => {
       cancelAnimationFrame(frameRef.current);
       window.removeEventListener('resize', handleResize);
-      for (const points of particleSwirlsRef.current.values()) {
-        disposeParticleSwirl(points);
-      }
-      particleSwirlsRef.current = new Map();
+      disposeWarpStreaks(warpStreaks);
+      warpStreaksRef.current = null;
       composer.dispose();
       renderer.dispose();
       labelLayer.removeChild(labelRenderer.domElement);
@@ -212,11 +183,6 @@ export function AtomCanvas({
     }
     labelObjectsRef.current = new Map();
 
-    for (const points of particleSwirlsRef.current.values()) {
-      disposeParticleSwirl(points);
-    }
-    particleSwirlsRef.current = new Map();
-
     rig.add(createNucleusMesh());
     rig.add(createDustPoints());
 
@@ -225,13 +191,11 @@ export function AtomCanvas({
     rig.add(centerHit);
 
     const atomMeshes = new Map();
-    const atomData = new Map();
 
     for (const atom of atoms ?? []) {
       const atomMesh = createAtomMesh(atom, bondLength);
       rig.add(atomMesh);
       atomMeshes.set(atom.id, atomMesh);
-      atomData.set(atom.id, atom);
 
       const hitMesh = createAtomHitMesh(atom);
       hitMesh.position.copy(atomMesh.userData.localPosition);
@@ -248,7 +212,6 @@ export function AtomCanvas({
 
     hitMeshesRef.current = hitMeshes;
     atomMeshesRef.current = atomMeshes;
-    atomDataRef.current = atomData;
 
     return undefined;
     // Rebuild geometry only when the set of atoms actually changes shape, not on every

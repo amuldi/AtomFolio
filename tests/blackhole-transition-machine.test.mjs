@@ -6,14 +6,11 @@ import {
   CHARGE_DURATION_MS,
   COLLAPSE_DURATION_MS,
   REVERSE_DURATION_MS,
-  RELEASE_DURATION_MS,
   createTransitionState,
   selectAtom,
   requestClose,
   tick,
   isTransitioning,
-  getDistortionStrength,
-  getReleaseProgress,
 } from '../src/scene/blackhole/transitionMachine.js';
 
 test('idle: selecting an atom starts charging', () => {
@@ -93,31 +90,20 @@ test('reversing from a partial collapse takes the same total duration but starts
   assert.ok(state.progress > 0 && state.progress < 0.4);
 });
 
-test('clicking a different atom while collapsing/arrived crossfades directly without resetting progress', () => {
+test('clicking a different atom while collapsing/arrived retargets mid-flight without resetting progress', () => {
   let state = { ...createTransitionState(), phase: PHASE.COLLAPSING, targetAtomId: 'atom-a', progress: 0.6 };
   state = selectAtom(state, 'atom-b');
   assert.equal(state.phase, PHASE.COLLAPSING);
   assert.equal(state.targetAtomId, 'atom-b');
   assert.equal(state.progress, 0.6, 'progress must be preserved so the camera spring never pops');
-  assert.equal(state.releasingAtomId, 'atom-a');
 });
 
-test('the released atom stops releasing after RELEASE_DURATION_MS', () => {
-  let state = { ...createTransitionState(), phase: PHASE.COLLAPSING, targetAtomId: 'atom-b', releasingAtomId: 'atom-a', progress: 0.6 };
-  state = tick(state, RELEASE_DURATION_MS - 1);
-  assert.equal(state.releasingAtomId, 'atom-a');
-  assert.ok(getReleaseProgress(state) < 1);
-
-  state = tick(state, 1);
-  assert.equal(state.releasingAtomId, null);
-});
-
-test('clicking a different atom while arrived also crossfades (not just while collapsing)', () => {
+test('clicking a different atom while arrived also retargets (not just while collapsing)', () => {
   let state = { ...createTransitionState(), phase: PHASE.ARRIVED, targetAtomId: 'atom-a', progress: 1 };
   state = selectAtom(state, 'atom-b');
   assert.equal(state.phase, PHASE.COLLAPSING);
   assert.equal(state.progress, 1);
-  assert.equal(state.releasingAtomId, 'atom-a');
+  assert.equal(state.targetAtomId, 'atom-b');
 });
 
 test('clicking any atom while reversing cancels the reverse and starts a fresh charge', () => {
@@ -163,14 +149,6 @@ test('reducedMotion: re-selecting the arrived atom jumps straight back to idle',
 test('reducedMotion: requestClose always returns straight to idle', () => {
   const state = selectAtom(createTransitionState(), 'atom-a', { reducedMotion: true });
   assert.deepEqual(requestClose(state, { reducedMotion: true }), createTransitionState());
-});
-
-test('getDistortionStrength tracks progress through collapsing, peaks at arrived, decays on reverse', () => {
-  assert.equal(getDistortionStrength(createTransitionState()), 0);
-  assert.equal(getDistortionStrength({ ...createTransitionState(), phase: PHASE.CHARGING, progress: 0.5 }), 0);
-  assert.equal(getDistortionStrength({ ...createTransitionState(), phase: PHASE.COLLAPSING, progress: 0.5 }), 0.5);
-  assert.equal(getDistortionStrength({ ...createTransitionState(), phase: PHASE.ARRIVED, progress: 1 }), 1);
-  assert.equal(getDistortionStrength({ ...createTransitionState(), phase: PHASE.REVERSING, progress: 0.3 }), 0.3);
 });
 
 test('tick clamps negative dt to zero instead of moving state backwards', () => {
