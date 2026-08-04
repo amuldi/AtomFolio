@@ -16,21 +16,31 @@ function pointsToVector3Array(points, z = 0) {
 
 // Same hand-sketched wobble loop as before, but as an outline only — the volumetric node builds
 // its "fill" separately from a lit sphere instead, so these rings don't need their own flat fill.
+// A small out-of-plane jitter on every point keeps the ring from ever fully flattening into a
+// hard-edged sliver when it happens to face the camera nearly edge-on (found live: a purely flat
+// 2D loop tilted into 3D degenerates into a crisp, distinctly un-hand-drawn-looking box shape at
+// certain rig rotation angles — this wobble keeps it reading as a loose scribble instead).
 function buildLoopOutline(radius, seed) {
   const points = buildLoopPoints(radius, seed);
-  const vectors = pointsToVector3Array(points);
+  const vectors = points.map(
+    (point, index) => new THREE.Vector3(point.x, point.y, jitter(seed + index * 5.7, radius * 0.22)),
+  );
   vectors.push(vectors[0].clone());
   const geometry = new THREE.BufferGeometry().setFromPoints(vectors);
   return new THREE.Line(geometry, createNodeOutlineMaterial());
 }
 
-// Three tilt axes for the hand-sketched wobble rings below — chosen so their combination reads
-// as a rounded 3D form (an "armillary sphere") from any viewing angle, instead of the flat disc
-// a single loop in the XY plane always looked like regardless of camera angle.
+// Five tilt axes (roughly the face-normal spread of an octahedron plus two diagonals) for the
+// hand-sketched wobble rings below — enough that no single rig rotation ever leaves the
+// silhouette dominated by just one ring's worst-case viewing angle, so the combination reads as
+// a rounded 3D form (an "armillary sphere") from any direction instead of the flat disc a single
+// loop in the XY plane always looked like regardless of camera angle.
 const RING_TILTS = [
   { axis: new THREE.Vector3(1, 0, 0), angle: 0 },
-  { axis: new THREE.Vector3(0.2, 1, 0).normalize(), angle: Math.PI * 0.42 },
-  { axis: new THREE.Vector3(1, 0.3, 0.6).normalize(), angle: Math.PI * 0.31 },
+  { axis: new THREE.Vector3(0, 1, 0), angle: Math.PI / 2 },
+  { axis: new THREE.Vector3(0, 0, 1), angle: Math.PI / 2 },
+  { axis: new THREE.Vector3(1, 1, 0).normalize(), angle: Math.PI / 3 },
+  { axis: new THREE.Vector3(1, -1, 1).normalize(), angle: Math.PI / 2.4 },
 ];
 
 // A node (atom or nucleus): a softly lit sphere for volume, read via the scene's
@@ -39,13 +49,16 @@ const RING_TILTS = [
 function buildVolumetricNode(outerRadius, innerRadius, seed) {
   const group = new THREE.Group();
 
+  // Higher segment count than a typical low-poly placeholder sphere — at only a handful of
+  // these on screen at once the cost is negligible, and it avoids visible faceting under the
+  // hemisphere/key lights that would otherwise read as another un-rounded, geometric artifact.
   const volume = new THREE.Mesh(
-    new THREE.SphereGeometry(outerRadius * 0.8, 14, 10),
+    new THREE.SphereGeometry(outerRadius * 0.8, 24, 16),
     createNodeVolumeMaterial(),
   );
   group.add(volume);
 
-  const radii = [outerRadius, outerRadius * 0.92, innerRadius];
+  const radii = [outerRadius, outerRadius * 0.96, outerRadius * 0.9, innerRadius, innerRadius * 0.94];
   RING_TILTS.forEach((tilt, index) => {
     const ring = buildLoopOutline(radii[index], seed + index * 137);
     ring.quaternion.setFromAxisAngle(tilt.axis, tilt.angle);
