@@ -88,14 +88,16 @@ function midpoint2(a, b) {
 // A closed loop through jittered points around a circle, connected with quadratic curves through
 // each edge's midpoint — the same construction the dashboard uses for its atom/nucleus outlines,
 // which is what gives them a wobbly, hand-drawn feel instead of a mechanically perfect circle.
+// Wobble is deliberately heavy (up to ~38% of radius) — a subtle wobble reads as antialiasing at
+// this size, not a hand-drawn line.
 function buildWobbleLoopPoints(radius, seed, pointCount = 9) {
   const points = [];
   for (let index = 0; index < pointCount; index += 1) {
     const angle = (index / pointCount) * Math.PI * 2;
-    const ring = radius + jitter(seed + index * 1.19, radius * 0.22);
+    const ring = radius + jitter(seed + index * 1.19, radius * 0.38);
     points.push({
-      x: Math.cos(angle) * ring + jitter(seed + index * 2.17, radius * 0.1),
-      y: Math.sin(angle) * ring + jitter(seed + index * 3.03, radius * 0.1),
+      x: Math.cos(angle) * ring + jitter(seed + index * 2.17, radius * 0.22),
+      y: Math.sin(angle) * ring + jitter(seed + index * 3.03, radius * 0.22),
     });
   }
   return points;
@@ -255,18 +257,22 @@ function renderAtomStage(state) {
   const nodesLayer = svgEl('g', { class: 'atom-nodes' });
 
   // Nucleus never moves, so its wobble outline can be baked once at its final position instead of
-  // redrawn every frame — a closed hand-drawn loop, not a mechanical circle.
-  const nucleusPoints = buildWobbleLoopPoints(13, 777, 10).map((point) => ({
-    x: point.x + cx,
-    y: point.y + cy,
-  }));
-  const nucleus = svgEl('path', {
-    d: closedSketchPath(nucleusPoints),
+  // redrawn every frame — two overlapping hand-drawn loops (a fainter wider one behind a crisper
+  // inner one), the same double-pass sketch technique the dashboard draws its atoms with, rather
+  // than a single mechanical circle.
+  const nucleusGroup = svgEl('g', {
     class: 'atom-nucleus',
     role: 'button',
     'aria-label': '포트폴리오 총액',
+    transform: `translate(${cx} ${cy})`,
   });
-  nucleus.addEventListener('click', (event) => {
+  const nucleusSoftPath = closedSketchPath(buildWobbleLoopPoints(14.5, 777, 11));
+  const nucleusMainPath = closedSketchPath(buildWobbleLoopPoints(12, 881, 10));
+  nucleusGroup.append(
+    svgEl('path', { d: nucleusSoftPath, class: 'atom-nucleus__soft' }),
+    svgEl('path', { d: nucleusMainPath, class: 'atom-nucleus__main' }),
+  );
+  nucleusGroup.addEventListener('click', (event) => {
     event.stopPropagation();
     if (dragMoved) {
       return;
@@ -279,14 +285,18 @@ function renderAtomStage(state) {
     const direction = sphereDirection(index, holdings.length);
     const isSelected = holding.id === selectedHoldingId;
     const seed = 100 + index * 47;
-    // Baked once in local space (centered on 0,0) — repositioned every frame via a translate+scale
-    // transform instead of rebuilding the wobble path itself, so the hand-drawn shape doesn't
-    // "redraw" itself every animation tick, only move.
-    const ringPoints = buildWobbleLoopPoints(4.3, seed, 8);
-    const ringPath = closedSketchPath(ringPoints);
+    // Baked once in local space (centered on 0,0) — repositioned every frame via a
+    // translate+rotate+scale transform instead of rebuilding the wobble path itself, so the
+    // hand-drawn shape doesn't "redraw" itself every animation tick, only move. Two overlapping
+    // loops per node (soft outer + crisper inner), plus a small fixed per-node tilt, mirror the
+    // dashboard's own node-shell construction (SketchAtom's node-soft/node-main pair + nodeTilt).
+    const ringSoftPath = closedSketchPath(buildWobbleLoopPoints(5.1, seed, 8));
+    const ringMainPath = closedSketchPath(buildWobbleLoopPoints(4.1, seed + 31, 9));
+    const tiltDeg = jitter(seed + 601, 18);
 
-    const spoke = svgEl('path', {
-      class: `atom-spoke${isSelected ? ' is-selected' : ''}`,
+    const spokeSoft = svgEl('path', { class: 'atom-spoke atom-spoke--soft' });
+    const spokeMain = svgEl('path', {
+      class: `atom-spoke atom-spoke--main${isSelected ? ' is-selected' : ''}`,
     });
 
     const nodeGroup = svgEl('g', {
@@ -297,7 +307,10 @@ function renderAtomStage(state) {
     });
     nodeGroup.dataset.holdingId = holding.id ?? '';
 
-    const ring = svgEl('path', { d: ringPath, class: 'atom-node__ring' });
+    const ringShell = svgEl('g', { class: 'atom-node__shell' });
+    const ringSoft = svgEl('path', { d: ringSoftPath, class: 'atom-node__ring-soft' });
+    const ringMain = svgEl('path', { d: ringMainPath, class: 'atom-node__ring-main' });
+    ringShell.append(ringSoft, ringMain);
     const label = svgEl('text', { class: 'atom-node__label' });
     label.textContent = truncateLabel(holding.label || holding.code || '');
     const percent = svgEl('text', {
@@ -306,7 +319,7 @@ function renderAtomStage(state) {
     percent.textContent = formatPercent(holding.returnRate);
     const title = svgEl('title', {});
     title.textContent = holding.label || holding.code || '';
-    nodeGroup.append(ring, label, percent, title);
+    nodeGroup.append(ringShell, label, percent, title);
 
     nodeGroup.addEventListener('click', (event) => {
       event.stopPropagation();
@@ -317,13 +330,13 @@ function renderAtomStage(state) {
       render(state);
     });
 
-    spokesLayer.append(spoke);
+    spokesLayer.append(spokeSoft, spokeMain);
     nodesLayer.append(nodeGroup);
 
-    return { direction, seed, spoke, nodeGroup, ring, label, percent };
+    return { direction, seed, tiltDeg, spokeSoft, spokeMain, nodeGroup, ringShell, label, percent };
   });
 
-  svg.append(spokesLayer, nucleus, nodesLayer);
+  svg.append(spokesLayer, nucleusGroup, nodesLayer);
   stage.append(svg);
 
   // Repositions every node for the current rotation — called on every drag move and every idle-
@@ -339,10 +352,17 @@ function renderAtomStage(state) {
       const depthScale = clampNumber(projected.scale, 0.6, 1.55);
       const depthFade = (depthScale - 0.6) / (1.55 - 0.6);
 
-      ref.spoke.setAttribute('d', buildBondPath(cx, cy, nx, ny, ref.seed));
-      ref.spoke.style.opacity = String(0.22 + depthFade * 0.5);
+      const bondPath = buildBondPath(cx, cy, nx, ny, ref.seed);
+      ref.spokeSoft.setAttribute('d', bondPath);
+      ref.spokeMain.setAttribute('d', bondPath);
+      const spokeOpacity = 0.22 + depthFade * 0.5;
+      ref.spokeSoft.style.opacity = String(spokeOpacity * 0.6);
+      ref.spokeMain.style.opacity = String(spokeOpacity);
 
-      ref.ring.setAttribute('transform', `translate(${nx.toFixed(2)} ${ny.toFixed(2)}) scale(${depthScale.toFixed(3)})`);
+      ref.ringShell.setAttribute(
+        'transform',
+        `translate(${nx.toFixed(2)} ${ny.toFixed(2)}) rotate(${ref.tiltDeg.toFixed(1)}) scale(${depthScale.toFixed(3)})`,
+      );
       ref.nodeGroup.style.opacity = String(0.5 + depthFade * 0.5);
 
       const labelIsRight = nx >= cx;

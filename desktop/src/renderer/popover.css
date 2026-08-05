@@ -113,22 +113,30 @@ body {
 }
 
 .portfolio-picker select {
+  appearance: none;
   width: 100%;
-  padding: 6px 9px;
-  border-radius: 8px;
+  padding: 9px 30px 9px 12px;
+  border-radius: 9px;
   border: 1px solid var(--hairline);
-  background: rgba(255, 255, 255, 0.04);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6' viewBox='0 0 9 6'%3E%3Cpath d='M1 1l3.5 3.5L8 1' fill='none' stroke='rgba(250,246,240,0.5)' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+      no-repeat right 12px center,
+    rgba(255, 255, 255, 0.045);
   color: var(--ink);
   font-family: inherit;
   font-size: 12px;
   font-weight: 580;
   outline: none;
   cursor: pointer;
-  transition: border-color 140ms var(--ease);
+  transition: border-color 140ms var(--ease), background-color 140ms var(--ease);
+}
+
+.portfolio-picker select:hover {
+  background-color: rgba(255, 255, 255, 0.07);
 }
 
 .portfolio-picker select:hover,
-.portfolio-picker select:focus {
+.portfolio-picker select:focus-visible {
   border-color: rgba(250, 246, 240, 0.32);
 }
 
@@ -156,20 +164,46 @@ body {
   overflow: visible;
 }
 
+/* Stroke-only "pencil line" shapes throughout the atom — fill:none plus round caps/joins is what
+   reads as hand-drawn rather than vector-perfect; non-scaling-stroke keeps the line weight
+   constant even while a shape is being scaled for depth each frame. */
 .atom-spoke {
+  fill: none;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.atom-spoke--soft {
   stroke: var(--hairline);
+  stroke-width: 2.2;
+}
+
+.atom-spoke--main {
+  stroke: rgba(250, 246, 240, 0.24);
   stroke-width: 1;
 }
 
-.atom-spoke.is-selected {
+.atom-spoke--main.is-selected {
   stroke: var(--ink-faint);
 }
 
-.atom-node__ring {
-  fill: rgba(18, 17, 20, 0.7);
+.atom-node__ring-soft,
+.atom-node__ring-main {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  transition: stroke 160ms var(--ease);
+}
+
+.atom-node__ring-soft {
+  stroke: rgba(250, 246, 240, 0.22);
+  stroke-width: 2.6;
+}
+
+.atom-node__ring-main {
   stroke: var(--ink-dim);
-  stroke-width: 1.3;
-  transition: stroke 160ms var(--ease), fill 160ms var(--ease);
+  stroke-width: 1.5;
 }
 
 /* Label x/y are set directly every animation frame (see applyFrame in popover.js) — real 3D
@@ -199,14 +233,18 @@ body {
   cursor: pointer;
 }
 
-.atom-node:hover .atom-node__ring,
-.atom-node.is-selected .atom-node__ring {
+.atom-node:hover .atom-node__ring-main,
+.atom-node.is-selected .atom-node__ring-main {
   stroke: var(--ink);
-  fill: rgba(250, 246, 240, 0.12);
 }
 
-.atom-node.is-selected .atom-node__ring {
-  filter: drop-shadow(0 0 5px rgba(250, 246, 240, 0.55));
+.atom-node:hover .atom-node__ring-soft,
+.atom-node.is-selected .atom-node__ring-soft {
+  stroke: rgba(250, 246, 240, 0.4);
+}
+
+.atom-node.is-selected .atom-node__shell {
+  filter: drop-shadow(0 0 5px rgba(250, 246, 240, 0.5));
 }
 
 .atom-node.is-selected .atom-node__label {
@@ -214,18 +252,32 @@ body {
 }
 
 .atom-nucleus {
-  fill: rgba(250, 246, 240, 0.08);
-  stroke: var(--ink);
-  stroke-width: 1.6;
   cursor: pointer;
-  transition: transform 160ms var(--ease), fill 160ms var(--ease);
+  transition: transform 160ms var(--ease);
   transform-box: fill-box;
   transform-origin: center;
 }
 
 .atom-nucleus:hover {
-  transform: scale(1.08);
-  fill: rgba(250, 246, 240, 0.16);
+  transform: scale(1.06);
+}
+
+.atom-nucleus__soft,
+.atom-nucleus__main {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.atom-nucleus__soft {
+  stroke: rgba(250, 246, 240, 0.3);
+  stroke-width: 3;
+}
+
+.atom-nucleus__main {
+  stroke: var(--ink);
+  stroke-width: 1.7;
 }
 
 .atom-readout {
