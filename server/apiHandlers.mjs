@@ -382,6 +382,17 @@ async function fetchMarketNewsWithFinnhubPromotion({ query, tickers, language, m
   }
 }
 
+const NEWS_DEFAULT_PAGE_SIZE = 20;
+const NEWS_MAX_PAGE_SIZE = 40;
+
+function parsePositiveInt(value, fallback, { min = 1, max = Number.MAX_SAFE_INTEGER } = {}) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, parsed));
+}
+
 export async function handleMarketNewsRequest({ method, query, clientKey, sendJson }) {
   if (method !== 'GET') {
     sendMethodNotAllowed(sendJson);
@@ -402,14 +413,31 @@ export async function handleMarketNewsRequest({ method, query, clientKey, sendJs
     const language = queryValue(query, 'language') === 'en' ? 'en' : 'ko';
     const mode = queryValue(query, 'mode') === 'search' ? 'search' : 'today';
     const refreshKey = cleanQueryText(queryValue(query, '_ts', 'refresh'), 32);
+    const page = parsePositiveInt(queryValue(query, 'page'), 1, { min: 1 });
+    const pageSize = parsePositiveInt(queryValue(query, 'pageSize'), NEWS_DEFAULT_PAGE_SIZE, {
+      min: 1,
+      max: NEWS_MAX_PAGE_SIZE,
+    });
 
-    sendJson(
-      200,
-      await getMarketNewsWithCache(
-        { query: newsQuery, tickers, language, mode, refreshKey },
-        { fetcher: fetchMarketNewsWithFinnhubPromotion },
-      ),
+    // The cache holds one big pool per (language, mode, query, tickers) — see newsCache.mjs's key,
+    // which deliberately excludes page/pageSize — so paging through it past page 1 costs nothing
+    // beyond an array slice until the whole pool ages out of the 2.5 min cache.
+    const payload = await getMarketNewsWithCache(
+      { query: newsQuery, tickers, language, mode, refreshKey },
+      { fetcher: fetchMarketNewsWithFinnhubPromotion },
     );
+    const allItems = Array.isArray(payload?.items) ? payload.items : [];
+    const start = (page - 1) * pageSize;
+    const pageItems = allItems.slice(start, start + pageSize);
+
+    sendJson(200, {
+      ...payload,
+      items: pageItems,
+      page,
+      pageSize,
+      totalCount: allItems.length,
+      hasMore: start + pageItems.length < allItems.length,
+    });
   } catch (error) {
     sendProviderError(sendJson, error, 'Market news fetch failed.', 'market-news-failed');
   }

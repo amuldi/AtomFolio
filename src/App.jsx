@@ -3560,6 +3560,7 @@ function StockDetailCard({
 // (that rule governs the badge's own enter/exit transition, defined in CSS, not how long it stays).
 const NEWS_AUTO_REFRESH_MS = 90 * 1000;
 const NEWS_NEW_BADGE_VISIBLE_MS = 8000;
+const NEWS_PAGE_SIZE = 20;
 
 function MarketNewsPanel({ language }) {
   const requestIdRef = useRef(0);
@@ -3570,19 +3571,28 @@ function MarketNewsPanel({ language }) {
   const [submittedQuery, setSubmittedQuery] = useState('');
   const [news, setNews] = useState(null);
   const [status, setStatus] = useState('idle');
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [newArticleIds, setNewArticleIds] = useState(() => new Set());
 
   const loadNews = useCallback(
-    async (nextQuery = '', { silent = false } = {}) => {
+    async (nextQuery = '', { silent = false, page = 1, append = false } = {}) => {
       const requestId = requestIdRef.current + 1;
       requestIdRef.current = requestId;
-      activeNewsAbortRef.current?.abort();
+
+      if (!append) {
+        activeNewsAbortRef.current?.abort();
+      }
+
       const controller = new AbortController();
-      activeNewsAbortRef.current = controller;
+      if (!append) {
+        activeNewsAbortRef.current = controller;
+      }
       const cleanQuery = String(nextQuery ?? '').trim();
 
-      if (!silent) {
+      if (append) {
+        setLoadingMore(true);
+      } else if (!silent) {
         setStatus('loading');
         setError('');
       }
@@ -3592,11 +3602,22 @@ function MarketNewsPanel({ language }) {
           query: cleanQuery,
           language,
           mode: cleanQuery ? 'search' : 'today',
-          refreshKey: `${Date.now()}-${requestId}`,
+          refreshKey: append ? undefined : `${Date.now()}-${requestId}`,
+          page,
+          pageSize: NEWS_PAGE_SIZE,
           signal: controller.signal,
         });
 
         if (requestIdRef.current !== requestId || controller.signal.aborted) {
+          return;
+        }
+
+        if (append) {
+          setNews((previous) => ({
+            ...payload,
+            items: [...(previous?.items ?? []), ...(payload.items ?? [])],
+          }));
+          setLoadingMore(false);
           return;
         }
 
@@ -3631,6 +3652,11 @@ function MarketNewsPanel({ language }) {
           return;
         }
 
+        if (append) {
+          setLoadingMore(false);
+          return;
+        }
+
         // A silent (background poll) failure keeps whatever's already on screen rather than
         // blanking the panel over a single missed 90s tick.
         if (silent) {
@@ -3660,7 +3686,8 @@ function MarketNewsPanel({ language }) {
 
   // Auto-refresh: only while this panel is mounted (i.e. actually open — see ToolSideDrawer's
   // resolvedTool.key === 'news' gate) and the tab is in the foreground. Background tabs pause
-  // entirely rather than firing polls that'll just be wasted work.
+  // entirely rather than firing polls that'll just be wasted work. Re-fetches page 1 only —
+  // any pages the user already loaded via "더 보기" stay as they were rather than being reset.
   useEffect(() => {
     const tick = () => {
       if (document.visibilityState === 'visible') {
@@ -3687,6 +3714,11 @@ function MarketNewsPanel({ language }) {
   const handleRefresh = useCallback(() => {
     loadNews(submittedQuery);
   }, [loadNews, submittedQuery]);
+
+  const handleLoadMore = useCallback(() => {
+    const nextPage = (news?.page ?? 1) + 1;
+    loadNews(submittedQuery, { page: nextPage, append: true });
+  }, [loadNews, news?.page, submittedQuery]);
 
   const newsItems = news?.items ?? [];
   const isSearchMode = Boolean(submittedQuery || news?.mode === 'search');
@@ -3772,6 +3804,19 @@ function MarketNewsPanel({ language }) {
           );
         })}
       </div>
+
+      {news?.hasMore ? (
+        <button
+          type="button"
+          className="tool-drawer__news-more"
+          onClick={handleLoadMore}
+          disabled={loadingMore}
+        >
+          {loadingMore
+            ? language === 'en' ? 'Loading…' : '불러오는 중…'
+            : language === 'en' ? 'Load more' : '더 보기'}
+        </button>
+      ) : null}
     </div>
   );
 }

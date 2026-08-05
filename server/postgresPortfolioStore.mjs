@@ -101,6 +101,23 @@ const SCHEMA_STATEMENTS = [
   )`,
   `CREATE INDEX IF NOT EXISTS atomfolio_portfolio_snapshots_portfolio_idx
     ON atomfolio_portfolio_snapshots (workspace_id, portfolio_id, snapshot_date DESC)`,
+  // Broker credentials (KIS first; broker is a free-text column so more can be added without a
+  // migration). encrypted_payload is one AES-256-GCM blob (iv + authTag + ciphertext, see
+  // secretCrypto.mjs) holding the whole secret bundle for that broker — app key/secret and, once
+  // KIS issues one, the access token. Expiry and status stay in plaintext columns on purpose:
+  // checking "is this token still valid" shouldn't require a decrypt.
+  `CREATE TABLE IF NOT EXISTS atomfolio_broker_credentials (
+    workspace_id text NOT NULL REFERENCES atomfolio_workspaces(id) ON DELETE CASCADE,
+    broker text NOT NULL,
+    encrypted_payload bytea NOT NULL,
+    status text NOT NULL DEFAULT 'connected',
+    last_error text,
+    access_token_expires_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, broker),
+    CHECK (status IN ('connected', 'expired', 'error'))
+  )`,
 ];
 
 let sqlClient = null;

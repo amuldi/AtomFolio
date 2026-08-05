@@ -4,6 +4,10 @@ const NAVER_NEWS_SEARCH_URL = 'https://search.naver.com/search.naver';
 const NEWS_TIMEOUT_MS = 8500;
 const KOREA_TIME_ZONE = 'Asia/Seoul';
 const DEFAULT_KOREAN_STOCK_NEWS_QUERY = '증시 오늘';
+// Size of the combined pool the default "today" view draws from (finance-list + Naver-search
+// pages merged, deduped, filtered) — sized well past one page (20) so /api/market/news can serve
+// several pages straight out of the cached pool with no new network calls.
+const TODAY_POOL_LIMIT = 60;
 
 function withTimeout(signal, timeoutMs = NEWS_TIMEOUT_MS) {
   const controller = new AbortController();
@@ -194,7 +198,10 @@ async function fetchText(url, { signal, encoding = 'utf-8' } = {}) {
 }
 
 const OG_IMAGE_TIMEOUT_MS = 4000;
-const OG_IMAGE_ENRICH_LIMIT = 6;
+// Bounded independent of the total pool size (which can now run to TODAY_POOL_LIMIT=60 for
+// pagination) — only the first page's worth gets the synchronous per-article fetch, so growing
+// the pool for "more pages available" doesn't also grow the time the first response takes.
+const OG_IMAGE_ENRICH_LIMIT = 20;
 const OG_IMAGE_PATTERN =
   /<meta\b[^>]*(?:property=["']og:image["'][^>]*content=["']([^"']+)["']|content=["']([^"']+)["'][^>]*property=["']og:image["'])[^>]*>/i;
 // finance.naver.com's article links are a JS bounce page (`top.location.href='...'`), not a real
@@ -323,18 +330,55 @@ async function fetchWithTimeout(url, options = {}) {
   }
 }
 
+// Fetching multiple pages of the same source (see pages > 1 in fetchNaverFinanceNews/
+// fetchNaverSearchNews and fetchWorldMarketNews) means the same underlying article can turn up
+// more than once with a URL that differs only in navigation-context noise that has nothing to do
+// with the article's identity — Bing wraps every link in apiclick.aspx?...&url=<encoded-real-
+// url>&c=<tracking-id>&..., and finance.naver.com's article links carry whatever list-page
+// (§ion_id/date/page) the scrape happened to come from. Normalize *only the dedup key* for both
+// known cases; the stored/rendered link stays exactly what the provider gave.
+function dedupeKeyFor(link) {
+  try {
+    const url = new URL(link);
+
+    const innerUrl = url.searchParams.get('url');
+    if (innerUrl) {
+      // Recurse: the same story can appear both Bing-wrapped and as a direct link with its own
+      // tracking query string (?ocid=... etc.) across different pages/providers — run the
+      // unwrapped inner URL back through the same generic query-string stripping below rather
+      // than trusting it to already be clean.
+      return dedupeKeyFor(safeExternalLink(innerUrl) || link);
+    }
+
+    if (url.hostname === 'finance.naver.com' && url.pathname.includes('news_read.naver')) {
+      const articleId = url.searchParams.get('article_id');
+      const officeId = url.searchParams.get('office_id');
+      if (articleId && officeId) {
+        return `naver-article:${officeId}:${articleId}`;
+      }
+    }
+
+    // Generic case: query strings on article URLs are almost always tracking/referrer noise
+    // (ocid, utm_*, ref, ...), not part of the article's identity — drop them for the dedup key.
+    return url.origin + url.pathname;
+  } catch {
+    return link;
+  }
+}
+
 export function uniqueNewsItems(items, limit = 12) {
   const seen = new Set();
   const result = [];
 
   for (const item of items) {
     const link = safeExternalLink(item.link);
+    const dedupeKey = link ? dedupeKeyFor(link) : link;
 
-    if (!item.title || !link || seen.has(link)) {
+    if (!item.title || !link || seen.has(dedupeKey)) {
       continue;
     }
 
-    seen.add(link);
+    seen.add(dedupeKey);
     result.push({
       ...item,
       link,
@@ -471,17 +515,36 @@ function parseNaverSearchItems(html, limit = 12) {
   return uniqueNewsItems(items, limit);
 }
 
-async function fetchNaverFinanceNews({ signal, cacheBust } = {}) {
-  const url = new URL(NAVER_FINANCE_NEWS_URL);
-  url.searchParams.set('mode', 'LSS2D');
-  url.searchParams.set('section_id', '101');
-  url.searchParams.set('section_id2', '258');
+// pages > 1 fires the extra page fetches in parallel (Promise.allSettled — one page failing
+// doesn't drop the others) rather than one after another, so a bigger pool costs latency roughly
+// like the single slowest page, not the sum of all of them.
+async function fetchNaverFinanceNews({ signal, cacheBust, pages = 1 } = {}) {
+  const requests = Array.from({ length: Math.max(1, pages) }, (_, index) => {
+    const url = new URL(NAVER_FINANCE_NEWS_URL);
+    url.searchParams.set('mode', 'LSS2D');
+    url.searchParams.set('section_id', '101');
+    url.searchParams.set('section_id2', '258');
+    if (index > 0) {
+      url.searchParams.set('page', String(index + 1));
+    }
+    return fetchText(applyCacheBust(url, cacheBust), { signal, encoding: 'euc-kr' }).then((html) =>
+      parseNaverFinanceItems(html, 20),
+    );
+  });
 
-  const html = await fetchText(applyCacheBust(url, cacheBust), { signal, encoding: 'euc-kr' });
-  return parseNaverFinanceItems(html, 12);
+  const results = await Promise.allSettled(requests);
+  const allItems = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []));
+  return uniqueNewsItems(allItems, allItems.length || 1);
 }
 
-async function fetchNaverSearchNews({ query, tickers = [], signal, todayOnly = false, cacheBust } = {}) {
+async function fetchNaverSearchNews({
+  query,
+  tickers = [],
+  signal,
+  todayOnly = false,
+  cacheBust,
+  pages = 1,
+} = {}) {
   const cleanQuery = normalizeQuery(query);
   const tickerText = Array.isArray(tickers)
     ? tickers.map(normalizeTicker).filter(Boolean).slice(0, 5).join(' ')
@@ -491,24 +554,41 @@ async function fetchNaverSearchNews({ query, tickers = [], signal, todayOnly = f
       ? [DEFAULT_KOREAN_STOCK_NEWS_QUERY, '오늘', '최신뉴스'].join(' ')
       : cleanQuery || tickerText || DEFAULT_KOREAN_STOCK_NEWS_QUERY,
   );
-  const url = new URL(NAVER_NEWS_SEARCH_URL);
-  url.searchParams.set('where', 'news');
-  url.searchParams.set('sm', todayOnly ? 'tab_opt' : 'tab_hty.top');
-  url.searchParams.set('sort', '1');
-  url.searchParams.set('query', searchQuery);
 
-  if (todayOnly) {
-    const today = koreanDateParts();
-    const dateValue = naverDateValue(today);
-    const compactDateValue = naverCompactDateValue(today);
-    url.searchParams.set('pd', '3');
-    url.searchParams.set('ds', dateValue);
-    url.searchParams.set('de', dateValue);
-    url.searchParams.set('nso', 'so:dd,p:from' + compactDateValue + 'to' + compactDateValue + ',a:all');
-  }
+  const buildUrl = (pageIndex) => {
+    const url = new URL(NAVER_NEWS_SEARCH_URL);
+    url.searchParams.set('where', 'news');
+    url.searchParams.set('sm', todayOnly ? 'tab_opt' : 'tab_hty.top');
+    url.searchParams.set('sort', '1');
+    url.searchParams.set('query', searchQuery);
 
-  const html = await fetchText(applyCacheBust(url, cacheBust), { signal });
-  return parseNaverSearchItems(html, 12);
+    if (todayOnly) {
+      const today = koreanDateParts();
+      const dateValue = naverDateValue(today);
+      const compactDateValue = naverCompactDateValue(today);
+      url.searchParams.set('pd', '3');
+      url.searchParams.set('ds', dateValue);
+      url.searchParams.set('de', dateValue);
+      url.searchParams.set('nso', 'so:dd,p:from' + compactDateValue + 'to' + compactDateValue + ',a:all');
+    }
+
+    // Naver search pagination: 1 item per result page start at 1, 11, 21, ...
+    if (pageIndex > 0) {
+      url.searchParams.set('start', String(pageIndex * 10 + 1));
+    }
+
+    return url;
+  };
+
+  const requests = Array.from({ length: Math.max(1, pages) }, (_, index) =>
+    fetchText(applyCacheBust(buildUrl(index), cacheBust), { signal }).then((html) =>
+      parseNaverSearchItems(html, 20),
+    ),
+  );
+
+  const results = await Promise.allSettled(requests);
+  const allItems = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []));
+  return uniqueNewsItems(allItems, allItems.length || 1);
 }
 
 function latestStockNewsItems(items, limit = 12) {
@@ -591,8 +671,23 @@ async function fetchMarketNewsPayload({ query, tickers = [], language = 'ko', mo
 
   if (normalizedLanguage === 'ko') {
     if (isDefaultTodayMode) {
+      // Finance-list and search are fetched concurrently (not "try one, fall back to the other")
+      // and merged into one pool — bigger result count for the default view, and no slower than
+      // fetching just one of them since Promise.all runs them in parallel. Each already fans out
+      // to several pages internally (see fetchNaverFinanceNews/fetchNaverSearchNews).
       try {
-        const items = todayNewsItems(await fetchNaverFinanceNews({ signal, cacheBust }), 12);
+        const [financeItems, searchItems] = await Promise.all([
+          fetchNaverFinanceNews({ signal, cacheBust, pages: 3 }).catch(() => []),
+          fetchNaverSearchNews({
+            query: DEFAULT_KOREAN_STOCK_NEWS_QUERY,
+            tickers: [],
+            signal,
+            todayOnly: true,
+            cacheBust,
+            pages: 2,
+          }).catch(() => []),
+        ]);
+        const items = todayNewsItems([...financeItems, ...searchItems], TODAY_POOL_LIMIT);
 
         if (items.length) {
           primaryPayload = {
@@ -602,41 +697,34 @@ async function fetchMarketNewsPayload({ query, tickers = [], language = 'ko', mo
             mode: 'today',
             fetchedAt: Date.now(),
           };
-
-          if (items.length >= 4) {
-            return primaryPayload;
-          }
-        }
-      } catch {
-        // Try Naver search before falling back to RSS.
-      }
-    }
-
-    try {
-      const rawItems = await fetchNaverSearchNews({
-        query: isDefaultTodayMode ? DEFAULT_KOREAN_STOCK_NEWS_QUERY : cleanQuery,
-        tickers: isDefaultTodayMode ? [] : tickers,
-        signal,
-        todayOnly: isDefaultTodayMode,
-        cacheBust,
-      });
-      const items = isDefaultTodayMode ? todayNewsItems(rawItems, 12) : rawItems;
-
-      if (items.length) {
-        primaryPayload = {
-          query: isDefaultTodayMode ? todayStockNewsQuery('ko') : cleanQuery || tickerText || '주식 뉴스',
-          items,
-          source: isDefaultTodayMode ? '네이버 최신뉴스' : '검색 결과',
-          mode: isDefaultTodayMode ? 'today' : 'search',
-          fetchedAt: Date.now(),
-        };
-
-        if (!isDefaultTodayMode || items.length >= 4) {
           return primaryPayload;
         }
+      } catch {
+        // Fall back to RSS below if both Naver providers are temporarily unavailable.
       }
-    } catch {
-      // Fall back to RSS below if the primary provider is temporarily unavailable.
+    } else {
+      try {
+        const items = await fetchNaverSearchNews({
+          query: cleanQuery,
+          tickers,
+          signal,
+          todayOnly: false,
+          cacheBust,
+          pages: 2,
+        });
+
+        if (items.length) {
+          return {
+            query: cleanQuery || tickerText || '주식 뉴스',
+            items,
+            source: '검색 결과',
+            mode: 'search',
+            fetchedAt: Date.now(),
+          };
+        }
+      } catch {
+        // Fall back to RSS below if the primary provider is temporarily unavailable.
+      }
     }
   }
 
@@ -661,8 +749,8 @@ async function fetchMarketNewsPayload({ query, tickers = [], language = 'ko', mo
 
   try {
     const xml = await fetchText(applyCacheBust(url, cacheBust), { signal });
-    const rawItems = uniqueNewsItems(parseRssItems(xml, 12), 12);
-    const items = isDefaultFallbackMode ? todayNewsItems(rawItems, 12) : rawItems;
+    const rawItems = uniqueNewsItems(parseRssItems(xml, 20), 20);
+    const items = isDefaultFallbackMode ? todayNewsItems(rawItems, 20) : rawItems;
 
     if (items.length || !primaryPayload) {
       return {
@@ -682,9 +770,66 @@ async function fetchMarketNewsPayload({ query, tickers = [], language = 'ko', mo
   return primaryPayload;
 }
 
-// Public entry point: runs whichever provider chain above succeeds, then makes one bounded
-// best-effort pass to backfill thumbnails for items that still don't have one (see
-// enrichWithOgImages) before handing the payload back to the server route / direct caller.
+const WORLD_NEWS_BLEND_LIMIT = 10;
+const WORLD_NEWS_COMBINED_LIMIT = TODAY_POOL_LIMIT;
+
+function sortByPublishedAtDesc(items) {
+  return [...items].sort((left, right) => {
+    const leftTime = Number(left.publishedAt);
+    const rightTime = Number(right.publishedAt);
+    const leftHasTime = Number.isFinite(leftTime);
+    const rightHasTime = Number.isFinite(rightTime);
+
+    if (leftHasTime && rightHasTime) {
+      return rightTime - leftTime;
+    }
+
+    return leftHasTime ? -1 : rightHasTime ? 1 : 0;
+  });
+}
+
+// A small English-language Bing RSS pull, blended into the default Korean "today" view so it
+// isn't 100% Naver — real foreign-market coverage without requiring a Finnhub key (see
+// apiHandlers.mjs for the fuller Finnhub-backed path once one's configured). Best-effort: a
+// failure here just means the panel stays domestic-only for this refresh, not an error.
+async function fetchWorldMarketNews({ signal, cacheBust } = {}) {
+  const buildUrl = (pageIndex) => {
+    const url = new URL(BING_NEWS_RSS_URL);
+    url.searchParams.set('q', 'global stock market today');
+    url.searchParams.set('format', 'rss');
+    url.searchParams.set('setlang', 'en-US');
+    url.searchParams.set('cc', 'US');
+    if (pageIndex > 0) {
+      url.searchParams.set('first', String(pageIndex * 10 + 1));
+    }
+    return url;
+  };
+
+  const results = await Promise.allSettled(
+    [0, 1].map((pageIndex) =>
+      fetchText(applyCacheBust(buildUrl(pageIndex), cacheBust), { signal }).then((xml) =>
+        parseRssItems(xml, 12),
+      ),
+    ),
+  );
+  const allItems = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []));
+  const rawItems = uniqueNewsItems(allItems, allItems.length || 1);
+
+  // msn.com articles are client-rendered — a plain HTML fetch never sees an og:image tag there,
+  // so they'd reliably end up thumbnail-less after enrichWithOgImages. A big chunk of Bing's World
+  // results happen to route through MSN, so pick non-MSN items first (still real Bing results,
+  // just reordered) and only fall back to MSN ones if there aren't enough others.
+  const isMsnLink = (item) => /(^|\.)msn\.com$/i.test(new URL(item.link).hostname);
+  const preferred = rawItems.filter((item) => !isMsnLink(item));
+  const fallback = rawItems.filter(isMsnLink);
+
+  return [...preferred, ...fallback].slice(0, WORLD_NEWS_BLEND_LIMIT);
+}
+
+// Public entry point: runs whichever provider chain above succeeds, blends in a handful of
+// foreign-source items for the default domestic view, then makes one bounded best-effort pass to
+// backfill thumbnails for items that still don't have one (see enrichWithOgImages) before handing
+// the payload back to the server route / direct caller.
 export async function fetchMarketNewsFromProviders(options = {}) {
   const payload = await fetchMarketNewsPayload(options);
 
@@ -692,12 +837,41 @@ export async function fetchMarketNewsFromProviders(options = {}) {
     return payload;
   }
 
+  const normalizedLanguage = normalizeLanguage(options.language);
+  const isDefaultTodayView =
+    normalizedLanguage === 'ko' && !normalizeQuery(options.query) && options.mode !== 'search';
+  let items = payload.items;
+
+  if (isDefaultTodayView) {
+    try {
+      const worldItems = await fetchWorldMarketNews({
+        signal: options.signal,
+        cacheBust: options.refreshKey || Date.now(),
+      });
+
+      if (worldItems.length) {
+        items = uniqueNewsItems(sortByPublishedAtDesc([...items, ...worldItems]), WORLD_NEWS_COMBINED_LIMIT);
+      }
+    } catch {
+      // Domestic-only is still a perfectly valid response — the foreign blend is best-effort.
+    }
+  }
+
   return {
     ...payload,
-    items: await enrichWithOgImages(payload.items, { signal: options.signal }),
+    items: await enrichWithOgImages(items, { signal: options.signal }),
   };
 }
-export async function fetchMarketNews({ query, tickers, language, mode, refreshKey, signal } = {}) {
+export async function fetchMarketNews({
+  query,
+  tickers,
+  language,
+  mode,
+  refreshKey,
+  signal,
+  page,
+  pageSize,
+} = {}) {
   if (typeof window !== 'undefined') {
     const url = new URL('/api/market/news', window.location.origin);
 
@@ -716,6 +890,12 @@ export async function fetchMarketNews({ query, tickers, language, mode, refreshK
     if (refreshKey) {
       url.searchParams.set('_ts', String(refreshKey));
       url.searchParams.set('refresh', '1');
+    }
+    if (page) {
+      url.searchParams.set('page', String(page));
+    }
+    if (pageSize) {
+      url.searchParams.set('pageSize', String(pageSize));
     }
 
     const response = await fetchWithTimeout(url.toString(), { signal, cache: 'no-store' });
