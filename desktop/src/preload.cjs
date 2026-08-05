@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('atomfolio', {
   getState: () => ipcRenderer.invoke('atomfolio:get-state'),
   connect: (workspaceId) => ipcRenderer.invoke('atomfolio:connect', workspaceId),
   disconnect: () => ipcRenderer.invoke('atomfolio:disconnect'),
+  selectPortfolio: (portfolioId) => ipcRenderer.invoke('atomfolio:select-portfolio', portfolioId),
   openExternal: (url) => ipcRenderer.invoke('atomfolio:open-external', url),
   onState: (callback) => {
     const listener = (_event, state) => callback(state);

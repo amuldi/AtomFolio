@@ -49,6 +49,23 @@ function toneClass(value) {
   return Number(value) > 0 ? 'is-profit' : Number(value) < 0 ? 'is-loss' : '';
 }
 
+function truncateLabel(value, max = 10) {
+  const text = String(value ?? '').trim();
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+// A small deterministic hash (not real randomness) so a given holding always lands at the same
+// spot on the atom relative to the others — re-renders (every 60s poll, every selection change)
+// must not reshuffle the layout the user is looking at.
+function hashSeed(value) {
+  let hash = 0;
+  const str = String(value ?? '');
+  for (let i = 0; i < str.length; i += 1) {
+    hash = (hash * 31 + str.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
 function el(tag, className, children) {
   const node = document.createElement(tag);
   if (className) {
@@ -116,69 +133,94 @@ function renderConnect(state) {
   return container;
 }
 
-// The atom stage: a nucleus (total portfolio) with each holding orbiting it as a node, sized by
-// portfolio weight and tinted by return. Drag horizontally to rotate the ring — the same "spin to
-// browse" gesture as the web app's atom scene, scaled down to a menu bar popover. Clicking a node
-// pins its detail in the readout below; clicking the nucleus (or nothing) returns to the total.
+// The atom stage: a nucleus (total portfolio) with each holding scattered around it on a thin
+// radiating line — the same "star chart" the web dashboard draws (varied angle/distance per
+// holding, not a uniform ring), just scaled to a menu bar popover. Drag to spin the whole
+// arrangement freely; left alone, it turns slowly on its own. Clicking a node pins its detail in
+// the readout below; clicking the nucleus (or the same node again) returns to the total.
 function renderAtomStage(state) {
   const holdings = Array.isArray(state.holdings) ? state.holdings : [];
   const totals = state.totals;
 
   const stage = el('div', 'atom-stage', []);
   const svg = svgEl('svg', {
-    viewBox: '0 0 320 200',
+    viewBox: '0 0 300 220',
     class: 'atom-stage__svg',
     role: 'img',
-    'aria-label': '보유 종목 궤도',
+    'aria-label': '보유 종목 지도',
   });
 
-  const cx = 160;
-  const cy = 100;
-  const rx = 122;
-  const ry = 62;
+  const cx = 150;
+  const cy = 110;
+  const maxRadius = 76;
+  const count = Math.max(1, holdings.length);
 
   const orbitGroup = svgEl('g', { class: 'atom-orbit-group' });
   orbitGroup.style.setProperty('--rotate', `${rotationDeg}deg`);
   orbitGroup.style.transformOrigin = `${cx}px ${cy}px`;
 
-  // Faint orbit path purely for visual grounding — not interactive.
-  orbitGroup.append(
-    svgEl('ellipse', {
-      cx,
-      cy,
-      rx,
-      ry,
-      class: 'atom-orbit-ring',
-    }),
-  );
-
-  const weights = holdings.map((holding) => Number(holding.weightPercent) || 0);
-  const maxWeight = Math.max(1, ...weights);
-
   holdings.forEach((holding, index) => {
-    const angle = (index / Math.max(1, holdings.length)) * Math.PI * 2;
-    const nx = cx + Math.cos(angle) * rx;
-    const ny = cy + Math.sin(angle) * ry;
-    const weightRatio = (Number(holding.weightPercent) || 0) / maxWeight;
-    const radius = 4.5 + weightRatio * 5.5;
+    // Evenly spaced base angle plus a per-holding jitter (deterministic, not Math.random — must
+    // stay put across re-renders) so nodes scatter organically instead of sitting on a perfect
+    // ring, echoing the dashboard's atom layout. Jitter is kept well under half the base spacing
+    // (holdings is capped at 6, so spacing is at least 60deg) so labels don't collide.
+    const baseAngleDeg = (index / count) * 360;
+    const jitterDeg = ((hashSeed(`${holding.id ?? index}:a`) % 100) / 100 - 0.5) * 20;
+    const angle = ((baseAngleDeg + jitterDeg) * Math.PI) / 180;
+    const radiusRatio = 0.62 + (hashSeed(`${holding.id ?? index}:r`) % 100) / 100 * 0.38;
+    const radius = maxRadius * radiusRatio;
+    const nx = cx + Math.cos(angle) * radius;
+    const ny = cy + Math.sin(angle) * radius;
+    const isSelected = holding.id === selectedHoldingId;
 
-    const node = svgEl('circle', {
-      cx: nx,
-      cy: ny,
-      r: radius,
-      class: `atom-node ${toneClass(holding.returnRate)}${
-        holding.id === selectedHoldingId ? ' is-selected' : ''
-      }`,
+    const nodeGroup = svgEl('g', {
+      class: `atom-node${isSelected ? ' is-selected' : ''}`,
       tabindex: '0',
       role: 'button',
       'aria-label': holding.label || holding.code || '종목',
     });
-    node.dataset.holdingId = holding.id ?? '';
+    nodeGroup.dataset.holdingId = holding.id ?? '';
+
+    nodeGroup.append(
+      svgEl('line', {
+        x1: cx,
+        y1: cy,
+        x2: nx,
+        y2: ny,
+        class: 'atom-spoke',
+      }),
+      svgEl('circle', {
+        cx: nx,
+        cy: ny,
+        r: 4.4,
+        class: 'atom-node__ring',
+      }),
+    );
+
+    // Label sits on the outward side of the node, right-aligned when the node is left of center
+    // so the text always reads away from the nucleus instead of crossing over it.
+    const labelIsRight = nx >= cx;
+    const label = svgEl('text', {
+      x: nx + (labelIsRight ? 8 : -8),
+      y: ny - 2,
+      class: 'atom-node__label',
+      'text-anchor': labelIsRight ? 'start' : 'end',
+    });
+    label.textContent = truncateLabel(holding.label || holding.code || '');
+    const percentLabel = svgEl('text', {
+      x: nx + (labelIsRight ? 8 : -8),
+      y: ny + 9,
+      class: `atom-node__percent ${toneClass(holding.returnRate)}`.trim(),
+      'text-anchor': labelIsRight ? 'start' : 'end',
+    });
+    percentLabel.textContent = formatPercent(holding.returnRate);
+    nodeGroup.append(label, percentLabel);
+
     const title = svgEl('title', {});
     title.textContent = holding.label || holding.code || '';
-    node.append(title);
+    nodeGroup.append(title);
 
-    node.addEventListener('click', (event) => {
+    nodeGroup.addEventListener('click', (event) => {
       event.stopPropagation();
       if (dragMoved) {
         return;
@@ -187,7 +229,7 @@ function renderAtomStage(state) {
       render(state);
     });
 
-    orbitGroup.append(node);
+    orbitGroup.append(nodeGroup);
   });
 
   svg.append(orbitGroup);
@@ -195,8 +237,8 @@ function renderAtomStage(state) {
   const nucleus = svgEl('circle', {
     cx,
     cy,
-    r: 16,
-    class: `atom-nucleus ${toneClass(totals?.totalReturnRate)}`,
+    r: 13,
+    class: 'atom-nucleus',
     role: 'button',
     'aria-label': '포트폴리오 총액',
   });
@@ -308,6 +350,30 @@ function wireAtomDrag(stage, orbitGroup) {
   atomFrameId = requestAnimationFrame(idleSpin);
 }
 
+// Only shown once there's something to choose between — a single-portfolio workspace (the common
+// case) skips straight to the atom instead of a picker with one disabled-feeling option.
+function renderPortfolioPicker(state) {
+  const portfolios = Array.isArray(state.portfolios) ? state.portfolios : [];
+  if (portfolios.length < 2) {
+    return null;
+  }
+
+  const select = el('select', '', []);
+  for (const portfolio of portfolios) {
+    const option = el('option', '', [`${portfolio.name} · ${portfolio.holdingsCount}개 종목`]);
+    option.value = portfolio.id;
+    option.selected = portfolio.id === state.selectedPortfolioId;
+    select.append(option);
+  }
+
+  select.addEventListener('change', () => {
+    selectedHoldingId = null;
+    void window.atomfolio.selectPortfolio(select.value);
+  });
+
+  return el('div', 'portfolio-picker', [select]);
+}
+
 function renderConnected(state) {
   const fragment = document.createDocumentFragment();
 
@@ -323,6 +389,10 @@ function renderConnected(state) {
     ]),
   ]);
   fragment.append(header);
+  const picker = renderPortfolioPicker(state);
+  if (picker) {
+    fragment.append(picker);
+  }
   fragment.append(renderAtomStage(state));
 
   if (state.lastError) {

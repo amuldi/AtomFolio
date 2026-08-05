@@ -20,8 +20,8 @@
 
 html,
 body {
-  width: 360px;
-  height: 600px;
+  width: 336px;
+  height: 540px;
   overflow: hidden;
   background: transparent;
   font-family:
@@ -86,15 +86,42 @@ body {
   color: var(--ink-dim);
 }
 
+/* ---------- Portfolio picker ---------- */
+
+.portfolio-picker {
+  flex: 0 0 auto;
+  padding: 0 16px 8px;
+}
+
+.portfolio-picker select {
+  width: 100%;
+  padding: 6px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--hairline);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 580;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 140ms var(--ease);
+}
+
+.portfolio-picker select:hover,
+.portfolio-picker select:focus {
+  border-color: rgba(250, 246, 240, 0.32);
+}
+
 /* ---------- Atom stage ---------- */
 
 .atom-section {
   flex: 0 0 auto;
-  padding: 2px 8px 12px;
+  padding: 2px 8px 10px;
 }
 
 .atom-stage {
-  height: 168px;
+  height: 182px;
   cursor: grab;
   touch-action: none;
 }
@@ -109,62 +136,88 @@ body {
   overflow: visible;
 }
 
-.atom-orbit-ring {
-  fill: none;
-  stroke: var(--hairline);
-  stroke-width: 1;
-}
-
 .atom-orbit-group {
   transform: rotate(var(--rotate));
 }
 
-.atom-node {
-  fill: rgba(250, 246, 240, 0.5);
-  stroke: none;
-  cursor: pointer;
+.atom-spoke {
+  stroke: var(--hairline);
+  stroke-width: 1;
+  transition: stroke 160ms var(--ease);
+}
+
+.atom-node__ring {
+  fill: rgba(18, 17, 20, 0.7);
+  stroke: var(--ink-dim);
+  stroke-width: 1.3;
+  transition: stroke 160ms var(--ease), fill 160ms var(--ease);
+}
+
+/* Labels live inside the same rotating group as their node, so they're counter-rotated by the
+   exact inverse angle — otherwise they'd spin sideways/upside-down as the ring turns. */
+.atom-node__label,
+.atom-node__percent {
+  transform: rotate(calc(var(--rotate, 0deg) * -1));
   transform-box: fill-box;
   transform-origin: center;
-  transition: transform 160ms var(--ease), fill 160ms var(--ease);
 }
 
-.atom-node:hover {
-  transform: scale(1.3);
+.atom-node__label {
+  font-size: 8.6px;
+  font-weight: 560;
+  fill: var(--ink-dim);
 }
 
-.atom-node.is-profit {
+.atom-node__percent {
+  font-size: 8px;
+  font-weight: 560;
+  fill: var(--ink-faint);
+}
+
+.atom-node__percent.is-profit {
   fill: var(--profit);
 }
 
-.atom-node.is-loss {
+.atom-node__percent.is-loss {
   fill: var(--loss);
 }
 
-.atom-node.is-selected {
-  transform: scale(1.4);
-  filter: drop-shadow(0 0 6px currentColor);
+.atom-node {
+  cursor: pointer;
+}
+
+.atom-node:hover .atom-node__ring,
+.atom-node.is-selected .atom-node__ring {
+  stroke: var(--ink);
+  fill: rgba(250, 246, 240, 0.12);
+}
+
+.atom-node:hover .atom-spoke,
+.atom-node.is-selected .atom-spoke {
+  stroke: var(--ink-faint);
+}
+
+.atom-node.is-selected .atom-node__ring {
+  filter: drop-shadow(0 0 5px rgba(250, 246, 240, 0.55));
+}
+
+.atom-node.is-selected .atom-node__label {
+  fill: var(--ink);
 }
 
 .atom-nucleus {
-  fill: var(--ink);
-  stroke: rgba(255, 255, 255, 0.14);
-  stroke-width: 6;
+  fill: rgba(250, 246, 240, 0.08);
+  stroke: var(--ink);
+  stroke-width: 1.6;
   cursor: pointer;
-  transition: transform 160ms var(--ease);
+  transition: transform 160ms var(--ease), fill 160ms var(--ease);
   transform-box: fill-box;
   transform-origin: center;
 }
 
 .atom-nucleus:hover {
-  transform: scale(1.06);
-}
-
-.atom-nucleus.is-profit {
-  stroke: var(--profit-bg);
-}
-
-.atom-nucleus.is-loss {
-  stroke: var(--loss-bg);
+  transform: scale(1.08);
+  fill: rgba(250, 246, 240, 0.16);
 }
 
 .atom-readout {

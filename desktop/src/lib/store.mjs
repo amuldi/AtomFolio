@@ -9,6 +9,7 @@ const DEFAULTS = {
   apiBaseUrl: process.env.ATOMFOLIO_API_BASE_URL || 'https://atomfolio.vercel.app',
   pollIntervalSec: 60,
   lastSeenArticleIds: [],
+  selectedPortfolioId: null,
 };
 
 const MAX_SEEN_IDS = 80;

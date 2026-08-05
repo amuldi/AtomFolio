@@ -7,6 +7,7 @@ import {
   summarizeWorkspacePortfolios,
   summarizeWorkspaceHoldings,
   collectWorkspaceTickers,
+  listWorkspacePortfolios,
 } from './lib/portfolioTotals.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -14,8 +15,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Polling never runs faster than this even if a config file is hand-edited — protects the shared
 // news/portfolio API from a misconfigured client.
 const MIN_POLL_INTERVAL_SEC = 60;
-const POPOVER_WIDTH = 360;
-const POPOVER_HEIGHT = 600;
+const POPOVER_WIDTH = 336;
+const POPOVER_HEIGHT = 540;
 
 let tray = null;
 let popover = null;
@@ -33,6 +34,8 @@ let state = {
   totals: null,
   holdings: [],
   news: [],
+  portfolios: [],
+  selectedPortfolioId: null,
 };
 
 function broadcastState() {
@@ -136,11 +139,28 @@ function createTray() {
   });
 }
 
+// refresh() does two sequential awaited network calls, so two calls can overlap — most likely the
+// initial connect's refresh still in flight when the user immediately switches portfolios in the
+// picker. Without this guard, whichever call happens to finish last wins and can silently clobber
+// a newer selection with a stale one. Each call captures its own token at entry and only commits
+// state if it's still the latest by the time its awaits resolve.
+let latestRefreshToken = 0;
+
 async function refresh({ silent = false } = {}) {
+  const requestToken = ++latestRefreshToken;
   const config = loadConfig();
 
   if (!config.workspaceId) {
-    setState({ connected: false, loading: false, totals: null, holdings: [], news: [], lastError: null });
+    setState({
+      connected: false,
+      loading: false,
+      totals: null,
+      holdings: [],
+      news: [],
+      portfolios: [],
+      selectedPortfolioId: null,
+      lastError: null,
+    });
     return;
   }
 
@@ -153,9 +173,25 @@ async function refresh({ silent = false } = {}) {
   try {
     const portfolioPayload = await api.fetchPortfolios();
     const portfolios = portfolioPayload?.portfolios ?? [];
-    const totals = summarizeWorkspacePortfolios(portfolios);
-    const holdings = summarizeWorkspaceHoldings(portfolios);
-    const tickers = collectWorkspaceTickers(portfolios);
+    const portfolioList = listWorkspacePortfolios(portfolios);
+
+    // The atom view and news are scoped to one portfolio at a time (not the whole workspace
+    // pooled together) so switching portfolios in the picker actually shows a different atom and
+    // different holding-scoped news, not just a different slice of the same aggregate. Falls back
+    // to the first portfolio if nothing was picked yet, or the picked one no longer exists.
+    const requestedId = config.selectedPortfolioId;
+    const selectedPortfolio =
+      portfolios.find((entry) => entry.id === requestedId) ?? portfolios[0] ?? null;
+    const selectedPortfolioId = selectedPortfolio?.id ?? null;
+
+    if (selectedPortfolioId !== requestedId && requestToken === latestRefreshToken) {
+      saveConfig({ selectedPortfolioId });
+    }
+
+    const scopedPortfolios = selectedPortfolio ? [selectedPortfolio] : [];
+    const totals = summarizeWorkspacePortfolios(scopedPortfolios);
+    const holdings = summarizeWorkspaceHoldings(scopedPortfolios);
+    const tickers = collectWorkspaceTickers(scopedPortfolios);
 
     let newsItems = [];
     try {
@@ -197,6 +233,10 @@ async function refresh({ silent = false } = {}) {
       rememberSeenArticleIds(config, newsItems.map((item) => item.id).filter(Boolean));
     }
 
+    if (requestToken !== latestRefreshToken) {
+      return;
+    }
+
     setState({
       connected: true,
       loading: false,
@@ -205,8 +245,14 @@ async function refresh({ silent = false } = {}) {
       totals,
       holdings,
       news: decoratedNews,
+      portfolios: portfolioList,
+      selectedPortfolioId,
     });
   } catch (error) {
+    if (requestToken !== latestRefreshToken) {
+      return;
+    }
+
     setState({
       connected: true,
       loading: false,
@@ -247,7 +293,7 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('atomfolio:disconnect', () => {
-    saveConfig({ workspaceId: null, lastSeenArticleIds: [] });
+    saveConfig({ workspaceId: null, lastSeenArticleIds: [], selectedPortfolioId: null });
     notifiedThisSessionIds.clear();
 
     if (pollTimer) {
@@ -255,7 +301,22 @@ function registerIpcHandlers() {
       pollTimer = null;
     }
 
-    setState({ connected: false, totals: null, holdings: [], news: [], lastError: null });
+    setState({
+      connected: false,
+      totals: null,
+      holdings: [],
+      news: [],
+      portfolios: [],
+      selectedPortfolioId: null,
+      lastError: null,
+    });
+    return { ok: true };
+  });
+
+  ipcMain.handle('atomfolio:select-portfolio', async (_event, portfolioId) => {
+    const cleanId = String(portfolioId ?? '').trim() || null;
+    saveConfig({ selectedPortfolioId: cleanId });
+    await refresh();
     return { ok: true };
   });
 

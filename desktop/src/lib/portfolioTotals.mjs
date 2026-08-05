@@ -16,8 +16,10 @@ export function summarizeWorkspacePortfolios(portfolios = []) {
 }
 
 // Per-holding detail for the popover's atom view — the biggest positions by weight, largest
-// first, since only a handful of orbiting nodes fit legibly in a 340px-wide window.
-export function summarizeWorkspaceHoldings(portfolios = [], limit = 8) {
+// first. Capped at 6, not more: each node carries a persistent name+return label (see
+// popover.js's renderAtomStage), and beyond ~6 in a ~300px-wide stage the labels start
+// overlapping each other.
+export function summarizeWorkspaceHoldings(portfolios = [], limit = 6) {
   const allItems = portfolios.flatMap((entry) => (Array.isArray(entry.items) ? entry.items : []));
   const summary = createPortfolioAnalyticsSummary(allItems, allItems);
 
@@ -34,6 +36,24 @@ export function summarizeWorkspaceHoldings(portfolios = [], limit = 8) {
       returnRate: position.returnRate,
       weightPercent: position.weightPercent,
     }));
+}
+
+// Same fallback the web dashboard uses for an unlabeled import (see src/App.jsx's
+// `activePortfolio.fileName?.replace(...)` display-name logic) — strips the .csv/.manual.csv
+// suffix so "portfolio_test1.csv" reads as "portfolio_test1" in the picker.
+export function portfolioDisplayName(entry) {
+  const raw = String(entry?.metadata?.accountName ?? entry?.fileName ?? '').trim();
+  const stripped = raw.replace(/\.(manual\.)?csv$/i, '').trim();
+  return stripped || entry?.id || '포트폴리오';
+}
+
+// The picker's option list — every portfolio in the workspace, not just the selected one.
+export function listWorkspacePortfolios(portfolios = []) {
+  return portfolios.map((entry) => ({
+    id: entry.id,
+    name: portfolioDisplayName(entry),
+    holdingsCount: Array.isArray(entry.items) ? entry.items.length : 0,
+  }));
 }
 
 export function collectWorkspaceTickers(portfolios = [], limit = 5) {
