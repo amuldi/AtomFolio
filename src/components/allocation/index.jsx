@@ -213,7 +213,13 @@ export function PortfolioAllocationRing({
   );
 }
 
-export function PortfolioAllocationCard({ allocation, language, onInteract, onPointerDown }) {
+export function PortfolioAllocationCard({
+  allocation,
+  language,
+  onInteract,
+  onPointerDown,
+  className = 'allocation-panel',
+}) {
   const panelRef = useRef(null);
   const text = textFor(language);
   const [hoverInfo, setHoverInfo] = useState(null);
@@ -254,7 +260,7 @@ export function PortfolioAllocationCard({ allocation, language, onInteract, onPo
   return (
     <aside
       ref={panelRef}
-      className="allocation-panel"
+      className={className}
       aria-label={text.allocationChartAria}
       onPointerDown={(event) => {
         onPointerDown?.(event);
