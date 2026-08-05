@@ -1079,6 +1079,37 @@ function formatDateKeyForBasis(value = new Date(), dateBasis = 'kst') {
   return `${byType.year}-${byType.month}-${byType.day}`;
 }
 
+// A Date object whose *local* getters (getFullYear/getMonth/getDate/...) read back as the KST
+// wall-clock time, for callers (like the heatmap's day-bucketing) that need an actual Date to do
+// local-time day math with, not just a formatted string.
+function nowForDateBasis(dateBasis = 'kst') {
+  const now = new Date();
+  if (dateBasis !== 'kst') {
+    return now;
+  }
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(now);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+
+  return new Date(
+    Number(byType.year),
+    Number(byType.month) - 1,
+    Number(byType.day),
+    Number(byType.hour),
+    Number(byType.minute),
+    Number(byType.second),
+  );
+}
+
 function textFor(language) {
   return UI_TEXT[language] ?? UI_TEXT.ko;
 }
@@ -3214,7 +3245,7 @@ const newsPanelCache = {
   seenArticleIds: new Set(),
 };
 
-const MarketNewsPanel = memo(function MarketNewsPanel({ language }) {
+const MarketNewsPanel = memo(function MarketNewsPanel({ language, dateBasis }) {
   const requestIdRef = useRef(0);
   const activeNewsAbortRef = useRef(null);
   const seenArticleIdsRef = useRef(newsPanelCache.seenArticleIds);
@@ -3442,7 +3473,7 @@ const MarketNewsPanel = memo(function MarketNewsPanel({ language }) {
           {status === 'loading'
             ? language === 'en' ? 'updating' : '갱신 중'
             : news?.fetchedAt
-              ? formatNewsTime(news.fetchedAt, language)
+              ? formatNewsTime(news.fetchedAt, language, dateBasis)
               : ''}
         </em>
       </div>
@@ -3487,7 +3518,9 @@ const MarketNewsPanel = memo(function MarketNewsPanel({ language }) {
                 </div>
                 <span>
                   {sourceLabel}
-                  {article.publishedAt ? ` · ${formatNewsTime(article.publishedAt, language)}` : ''}
+                  {article.publishedAt
+                    ? ` · ${formatNewsTime(article.publishedAt, language, dateBasis)}`
+                    : ''}
                 </span>
               </div>
             </a>
@@ -3567,6 +3600,7 @@ function ToolSideDrawer({
   language,
   baseCurrency = 'KRW',
   fxRates = DEFAULT_DISPLAY_FX_RATES,
+  dateBasis = 'kst',
   layerStyle,
   onInteract,
   renderSettingsPanel,
@@ -5247,7 +5281,7 @@ function ToolSideDrawer({
     }
 
     if (resolvedTool.key === 'news') {
-      return <MarketNewsPanel items={items} language={language} />;
+      return <MarketNewsPanel items={items} language={language} dateBasis={dateBasis} />;
     }
 
     if (resolvedTool.key === 'settings') {
@@ -7465,8 +7499,12 @@ export default function App() {
     });
   }, [hasPortfolio, portfolioItems, portfolioTimelineItems]);
   const portfolioHeatmap = useMemo(
-    () => createPortfolioHeatmap(portfolioTimelineItems, { weeks: 24 }),
-    [portfolioTimelineItems],
+    () =>
+      createPortfolioHeatmap(portfolioTimelineItems, {
+        weeks: 24,
+        today: nowForDateBasis(dateBasis),
+      }),
+    [portfolioTimelineItems, dateBasis],
   );
   const drawerHeatmap = useMemo(
     () =>
@@ -7712,6 +7750,7 @@ export default function App() {
             language={language}
             baseCurrency={baseCurrency}
             fxRates={displayFxRates}
+            dateBasis={dateBasis}
             layerStyle={floatingLayerStyleFor('tool-drawer')}
             onInteract={interactWithDrawerTool}
             renderSettingsPanel={renderSettingsPanel}

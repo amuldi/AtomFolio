@@ -910,7 +910,7 @@ export async function fetchMarketNews({
   return fetchMarketNewsFromProviders({ query, tickers, language, mode, refreshKey, signal });
 }
 
-export function formatNewsTime(value, language = 'ko') {
+export function formatNewsTime(value, language = 'ko', dateBasis = 'kst') {
   if (!Number.isFinite(Number(value))) {
     return '';
   }
@@ -920,5 +920,8 @@ export function formatNewsTime(value, language = 'ko') {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+    // Every article concerns the Korean market, so "한국 시간" is the meaningful default — only a
+    // user who's explicitly chosen "내 기기 시간" sees times in their own device's zone instead.
+    timeZone: dateBasis === 'kst' ? 'Asia/Seoul' : undefined,
   }).format(new Date(Number(value)));
 }
