@@ -68,6 +68,58 @@ function clampNumber(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
+// --- Hand-drawn "sketch" shapes, matching the web dashboard's atom aesthetic (see
+// src/utils/scene.js's noise/jitter/closedSketchPath/buildLoopPath) — reimplemented locally with
+// the same formulas rather than imported, since importing scene.js would pull in its `three`
+// dependency, which this dependency-free popover renderer doesn't have. ---
+function noise(seed) {
+  const value = Math.sin(seed * 127.1 + 311.7) * 43758.5453123;
+  return value - Math.floor(value);
+}
+
+function jitter(seed, amount) {
+  return (noise(seed) * 2 - 1) * amount;
+}
+
+function midpoint2(a, b) {
+  return { x: (a.x + b.x) * 0.5, y: (a.y + b.y) * 0.5 };
+}
+
+// A closed loop through jittered points around a circle, connected with quadratic curves through
+// each edge's midpoint — the same construction the dashboard uses for its atom/nucleus outlines,
+// which is what gives them a wobbly, hand-drawn feel instead of a mechanically perfect circle.
+function buildWobbleLoopPoints(radius, seed, pointCount = 9) {
+  const points = [];
+  for (let index = 0; index < pointCount; index += 1) {
+    const angle = (index / pointCount) * Math.PI * 2;
+    const ring = radius + jitter(seed + index * 1.19, radius * 0.22);
+    points.push({
+      x: Math.cos(angle) * ring + jitter(seed + index * 2.17, radius * 0.1),
+      y: Math.sin(angle) * ring + jitter(seed + index * 3.03, radius * 0.1),
+    });
+  }
+  return points;
+}
+
+function closedSketchPath(points) {
+  const firstMid = midpoint2(points[points.length - 1], points[0]);
+  let path = `M ${firstMid.x.toFixed(2)} ${firstMid.y.toFixed(2)}`;
+  for (let index = 0; index < points.length; index += 1) {
+    const next = points[(index + 1) % points.length];
+    const mid = midpoint2(points[index], next);
+    path += ` Q ${points[index].x.toFixed(2)} ${points[index].y.toFixed(2)} ${mid.x.toFixed(2)} ${mid.y.toFixed(2)}`;
+  }
+  return path;
+}
+
+// A gently wobbled line from the nucleus out to a node — the "bond" look, not a ruler-straight
+// spoke. Seeded per holding so it stays the same shape across frames/re-renders.
+function buildBondPath(originX, originY, targetX, targetY, seed) {
+  const midX = (originX + targetX) / 2 + jitter(seed + 4.1, 5);
+  const midY = (originY + targetY) / 2 + jitter(seed + 5.3, 5);
+  return `M ${originX.toFixed(2)} ${originY.toFixed(2)} Q ${midX.toFixed(2)} ${midY.toFixed(2)} ${targetX.toFixed(2)} ${targetY.toFixed(2)}`;
+}
+
 function formatCurrency(value) {
   if (!Number.isFinite(value)) {
     return '—';
@@ -202,10 +254,14 @@ function renderAtomStage(state) {
   const spokesLayer = svgEl('g', { class: 'atom-spokes' });
   const nodesLayer = svgEl('g', { class: 'atom-nodes' });
 
-  const nucleus = svgEl('circle', {
-    cx,
-    cy,
-    r: 13,
+  // Nucleus never moves, so its wobble outline can be baked once at its final position instead of
+  // redrawn every frame — a closed hand-drawn loop, not a mechanical circle.
+  const nucleusPoints = buildWobbleLoopPoints(13, 777, 10).map((point) => ({
+    x: point.x + cx,
+    y: point.y + cy,
+  }));
+  const nucleus = svgEl('path', {
+    d: closedSketchPath(nucleusPoints),
     class: 'atom-nucleus',
     role: 'button',
     'aria-label': '포트폴리오 총액',
@@ -222,10 +278,14 @@ function renderAtomStage(state) {
   const nodeRefs = holdings.map((holding, index) => {
     const direction = sphereDirection(index, holdings.length);
     const isSelected = holding.id === selectedHoldingId;
+    const seed = 100 + index * 47;
+    // Baked once in local space (centered on 0,0) — repositioned every frame via a translate+scale
+    // transform instead of rebuilding the wobble path itself, so the hand-drawn shape doesn't
+    // "redraw" itself every animation tick, only move.
+    const ringPoints = buildWobbleLoopPoints(4.3, seed, 8);
+    const ringPath = closedSketchPath(ringPoints);
 
-    const spoke = svgEl('line', {
-      x1: cx,
-      y1: cy,
+    const spoke = svgEl('path', {
       class: `atom-spoke${isSelected ? ' is-selected' : ''}`,
     });
 
@@ -237,7 +297,7 @@ function renderAtomStage(state) {
     });
     nodeGroup.dataset.holdingId = holding.id ?? '';
 
-    const ring = svgEl('circle', { r: 4.4, class: 'atom-node__ring' });
+    const ring = svgEl('path', { d: ringPath, class: 'atom-node__ring' });
     const label = svgEl('text', { class: 'atom-node__label' });
     label.textContent = truncateLabel(holding.label || holding.code || '');
     const percent = svgEl('text', {
@@ -260,7 +320,7 @@ function renderAtomStage(state) {
     spokesLayer.append(spoke);
     nodesLayer.append(nodeGroup);
 
-    return { direction, spoke, nodeGroup, ring, label, percent };
+    return { direction, seed, spoke, nodeGroup, ring, label, percent };
   });
 
   svg.append(spokesLayer, nucleus, nodesLayer);
@@ -279,17 +339,14 @@ function renderAtomStage(state) {
       const depthScale = clampNumber(projected.scale, 0.6, 1.55);
       const depthFade = (depthScale - 0.6) / (1.55 - 0.6);
 
-      ref.spoke.setAttribute('x2', String(nx));
-      ref.spoke.setAttribute('y2', String(ny));
+      ref.spoke.setAttribute('d', buildBondPath(cx, cy, nx, ny, ref.seed));
       ref.spoke.style.opacity = String(0.22 + depthFade * 0.5);
 
-      ref.ring.setAttribute('cx', String(nx));
-      ref.ring.setAttribute('cy', String(ny));
-      ref.ring.setAttribute('r', String(4.2 * depthScale));
+      ref.ring.setAttribute('transform', `translate(${nx.toFixed(2)} ${ny.toFixed(2)}) scale(${depthScale.toFixed(3)})`);
       ref.nodeGroup.style.opacity = String(0.5 + depthFade * 0.5);
 
       const labelIsRight = nx >= cx;
-      const labelX = nx + (labelIsRight ? 8 : -8);
+      const labelX = nx + (labelIsRight ? 9 : -9);
       ref.label.setAttribute('x', String(labelX));
       ref.label.setAttribute('y', String(ny - 2));
       ref.label.setAttribute('text-anchor', labelIsRight ? 'start' : 'end');
