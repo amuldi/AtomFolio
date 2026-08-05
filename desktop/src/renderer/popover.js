@@ -1,15 +1,20 @@
-// Header, portfolio picker, and news list — plain DOM, no build step needed. The atom visual
-// itself lives in atom-view.jsx/atom-view.bundle.js (a separate React root mounted at
-// #atom-visual-root, which this file never touches — see popover.html's comment on that node).
+// Header/picker (fixed chrome) + a 3-page horizontal pager (atom / news / settings) — plain DOM,
+// no build step needed. The atom visual itself lives in atom-view.jsx/atom-view.bundle.js (a
+// separate React root mounted at #atom-visual-root, which this file never touches — see
+// popover.html's comment on that node).
 const connectRoot = document.getElementById('connect-root');
+const appRoot = document.getElementById('app-root');
 const headerRoot = document.getElementById('header-root');
 const pickerRoot = document.getElementById('picker-root');
-const restRoot = document.getElementById('rest-root');
+const newsRoot = document.getElementById('news-root');
 const settingsRoot = document.getElementById('settings-root');
+const pagerEl = document.getElementById('pager');
+const pagerTrackEl = document.getElementById('pager-track');
+const pagerDotsEl = document.getElementById('pager-dots');
 
-// Settings overlay state lives outside render(state) — it's a local UI toggle, not portfolio
-// data, and must survive/ignore the poll-driven state pushes that drive the rest of the popover.
-let settingsOpen = false;
+// Settings content is fetched once and cached — it's local IPC (not portfolio data), so it's fine
+// to load eagerly alongside the rest of the page rather than waiting for the settings page to
+// become visible.
 let settingsCache = null;
 
 function formatTime(value) {
@@ -44,6 +49,290 @@ function setChildren(container, node) {
     container.append(node);
   }
 }
+
+// ---------- Pager: pointer drag + trackpad swipe (wheel deltaX) + interruptible spring snap ----------
+
+function createPager({ container, track, dots }) {
+  const PAGE_COUNT = dots.querySelectorAll('.pager-dot').length;
+  const SPRING_STIFFNESS = 340;
+  const SPRING_DAMPING = 32;
+  const RUBBER_BAND_CONSTANT = 0.55;
+  const VELOCITY_FLICK_THRESHOLD = 0.35; // px/ms — above this, a flick commits to the next/prev
+  // page even if it hasn't crossed the halfway point yet.
+  const AXIS_LOCK_THRESHOLD = 6; // px of movement before a drag commits to horizontal vs vertical
+  const WHEEL_IDLE_MS = 120; // gap with no wheel events that means "the trackpad gesture ended"
+
+  let pageWidth = container.getBoundingClientRect().width || 1;
+  let currentIndex = 0;
+  let translate = 0; // track's translateX in px, always <= 0
+
+  let dragState = null;
+  let wheelState = null;
+  let springFrame = null;
+  let springVelocity = 0;
+  let springTarget = 0;
+
+  const prefersReducedMotion = () =>
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+
+  function measure() {
+    pageWidth = container.getBoundingClientRect().width || pageWidth;
+  }
+
+  function targetTranslateFor(index) {
+    return -index * pageWidth;
+  }
+
+  // iOS-style rubber-banding: resistance grows the further past the edge you pull, so it never
+  // feels like it's stuck, but also never moves 1:1 with the gesture past the boundary.
+  function rubberBand(overshoot) {
+    return (overshoot * RUBBER_BAND_CONSTANT * pageWidth) / (pageWidth + RUBBER_BAND_CONSTANT * overshoot);
+  }
+
+  function applyRubberBand(rawTranslate) {
+    const max = 0;
+    const min = targetTranslateFor(PAGE_COUNT - 1);
+    if (rawTranslate > max) {
+      return max + rubberBand(rawTranslate - max);
+    }
+    if (rawTranslate < min) {
+      return min - rubberBand(min - rawTranslate);
+    }
+    return rawTranslate;
+  }
+
+  function setTransform(value) {
+    translate = value;
+    track.style.transform = `translate3d(${value}px, 0, 0)`;
+  }
+
+  function stopSpring() {
+    if (springFrame) {
+      cancelAnimationFrame(springFrame);
+      springFrame = null;
+    }
+  }
+
+  function updateDots() {
+    dots.querySelectorAll('.pager-dot').forEach((dot, index) => {
+      dot.classList.toggle('is-active', index === currentIndex);
+    });
+  }
+
+  // A real spring simulation (not a fixed-duration CSS transition) so the snap duration and
+  // overshoot naturally scale with how fast the page was released, and so a new drag mid-flight
+  // can just cancel this rAF loop and take over from the current position/velocity — no separate
+  // "interrupt" bookkeeping needed.
+  function runSpring(target, initialVelocity) {
+    stopSpring();
+    springTarget = target;
+    springVelocity = initialVelocity;
+
+    if (prefersReducedMotion()) {
+      setTransform(target);
+      return;
+    }
+
+    let last = performance.now();
+
+    const step = (now) => {
+      const dt = Math.min((now - last) / 1000, 0.032);
+      last = now;
+
+      const displacement = translate - springTarget;
+      const acceleration = -SPRING_STIFFNESS * displacement - SPRING_DAMPING * springVelocity;
+      springVelocity += acceleration * dt;
+      setTransform(translate + springVelocity * dt);
+
+      if (Math.abs(translate - springTarget) < 0.5 && Math.abs(springVelocity) < 8) {
+        setTransform(springTarget);
+        springFrame = null;
+        return;
+      }
+      springFrame = requestAnimationFrame(step);
+    };
+
+    springFrame = requestAnimationFrame(step);
+  }
+
+  function pickTargetIndex(velocityPxPerMs) {
+    const progress = -translate / pageWidth;
+    let target;
+    if (Math.abs(velocityPxPerMs) > VELOCITY_FLICK_THRESHOLD) {
+      // Negative velocity == moving toward higher indices (dragging/scrolling toward "next").
+      target = velocityPxPerMs < 0 ? Math.ceil(progress) : Math.floor(progress);
+    } else {
+      target = Math.round(progress);
+    }
+    return Math.max(0, Math.min(PAGE_COUNT - 1, target));
+  }
+
+  function velocityFromSamples(samples) {
+    if (samples.length < 2) {
+      return 0;
+    }
+    const first = samples[0];
+    const last = samples[samples.length - 1];
+    const dt = last.t - first.t;
+    return dt > 0 ? (last.x - first.x) / dt : 0; // px/ms
+  }
+
+  function pushSample(samples, sample) {
+    samples.push(sample);
+    const cutoff = sample.t - 100;
+    while (samples.length > 1 && samples[0].t < cutoff) {
+      samples.shift();
+    }
+  }
+
+  function goToPage(index, options = {}) {
+    currentIndex = Math.max(0, Math.min(PAGE_COUNT - 1, index));
+    updateDots();
+    const target = targetTranslateFor(currentIndex);
+    if (options.instant || prefersReducedMotion()) {
+      stopSpring();
+      setTransform(target);
+      return;
+    }
+    runSpring(target, options.velocity ?? 0);
+  }
+
+  // ---- Pointer (mouse/touch/pen) drag ----
+
+  function handlePointerDown(event) {
+    // Sliders (settings page) own horizontal drags on themselves — don't hijack them.
+    if (event.target.closest('input[type="range"]')) {
+      return;
+    }
+    if (dragState || (event.button != null && event.button !== 0)) {
+      return;
+    }
+    stopSpring();
+    if (wheelState) {
+      clearTimeout(wheelState.idleTimer);
+      wheelState = null;
+    }
+    dragState = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startTranslate: translate,
+      axis: null,
+      samples: [{ t: performance.now(), x: translate }],
+    };
+  }
+
+  function handlePointerMove(event) {
+    if (!dragState || event.pointerId !== dragState.pointerId) {
+      return;
+    }
+    const dx = event.clientX - dragState.startX;
+    const dy = event.clientY - dragState.startY;
+
+    if (dragState.axis === null) {
+      if (Math.abs(dx) < AXIS_LOCK_THRESHOLD && Math.abs(dy) < AXIS_LOCK_THRESHOLD) {
+        return;
+      }
+      if (Math.abs(dx) <= Math.abs(dy)) {
+        // Vertical gesture (e.g. scrolling the news list) — hand off to native scrolling.
+        dragState = null;
+        return;
+      }
+      dragState.axis = 'x';
+      // Not every pointerdown is guaranteed to have an OS-level pointer session backing it
+      // (synthetic input in particular) — setPointerCapture throws NotFoundError in that case.
+      // Capture is a nice-to-have here (dragging stays smooth if the cursor leaves the pager),
+      // not a requirement, since move/up are already handled on window, not on `container`.
+      try {
+        container.setPointerCapture?.(event.pointerId);
+      } catch {
+        // Ignored — see comment above.
+      }
+    }
+
+    event.preventDefault();
+    const next = applyRubberBand(dragState.startTranslate + dx);
+    setTransform(next);
+    pushSample(dragState.samples, { t: performance.now(), x: next });
+  }
+
+  function handlePointerUp(event) {
+    if (!dragState || event.pointerId !== dragState.pointerId) {
+      return;
+    }
+    const wasDraggingX = dragState.axis === 'x';
+    const velocity = wasDraggingX ? velocityFromSamples(dragState.samples) : 0;
+    dragState = null;
+    if (!wasDraggingX) {
+      return;
+    }
+    goToPage(pickTargetIndex(velocity), { velocity: velocity * 1000 });
+  }
+
+  container.addEventListener('pointerdown', handlePointerDown);
+  window.addEventListener('pointermove', handlePointerMove, { passive: false });
+  window.addEventListener('pointerup', handlePointerUp);
+  window.addEventListener('pointercancel', handlePointerUp);
+
+  // ---- Trackpad wheel (horizontal deltaX) ----
+
+  function handleWheel(event) {
+    if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
+      return; // vertical scroll — let the page under the cursor handle it normally
+    }
+    event.preventDefault();
+    stopSpring();
+
+    if (!wheelState) {
+      wheelState = { samples: [{ t: performance.now(), x: translate }] };
+    }
+
+    const next = applyRubberBand(translate - event.deltaX);
+    setTransform(next);
+    pushSample(wheelState.samples, { t: performance.now(), x: next });
+
+    clearTimeout(wheelState.idleTimer);
+    wheelState.idleTimer = setTimeout(() => {
+      const velocity = velocityFromSamples(wheelState.samples);
+      wheelState = null;
+      goToPage(pickTargetIndex(velocity), { velocity: velocity * 1000 });
+    }, WHEEL_IDLE_MS);
+  }
+
+  container.addEventListener('wheel', handleWheel, { passive: false });
+
+  dots.querySelectorAll('.pager-dot').forEach((dot, index) => {
+    dot.addEventListener('click', () => goToPage(index));
+  });
+
+  window.addEventListener('resize', () => {
+    measure();
+    goToPage(currentIndex, { instant: true });
+  });
+
+  measure();
+  setTransform(targetTranslateFor(0));
+  updateDots();
+
+  return {
+    goToPage,
+    get currentIndex() {
+      return currentIndex;
+    },
+  };
+}
+
+const pager = createPager({ container: pagerEl, track: pagerTrackEl, dots: pagerDotsEl });
+
+// Every time the popover is actually shown, land back on the atom page — a stale "you left it on
+// settings last time" isn't worth remembering for a menu-bar glance.
+function resetToAtomPageIfVisible() {
+  if (document.visibilityState === 'visible') {
+    pager.goToPage(0, { instant: true });
+  }
+}
+document.addEventListener('visibilitychange', resetToAtomPageIfVisible);
+window.addEventListener('focus', resetToAtomPageIfVisible);
 
 function renderConnect(state) {
   const container = el('div', 'connect');
@@ -100,7 +389,9 @@ function renderHeader(state) {
         const button = el('button', 'header__settings', ['⚙']);
         button.type = 'button';
         button.setAttribute('aria-label', '설정');
-        button.addEventListener('click', () => toggleSettings());
+        // A shortcut, not a toggle — settings is a normal page now, so this just jumps there;
+        // swiping or tapping another dot navigates away just like any other page.
+        button.addEventListener('click', () => pager.goToPage(2));
         return button;
       })(),
       (() => {
@@ -112,7 +403,72 @@ function renderHeader(state) {
   ]);
 }
 
-// ---------- Settings overlay ----------
+// Only shown once there's something to choose between — a single-portfolio workspace (the common
+// case) skips straight to the atom instead of a picker with one disabled-feeling option.
+function renderPortfolioPicker(state) {
+  const portfolios = Array.isArray(state.portfolios) ? state.portfolios : [];
+  if (portfolios.length < 2) {
+    return null;
+  }
+
+  const select = el('select', '', []);
+  for (const portfolio of portfolios) {
+    const option = el('option', '', [`${portfolio.name} · ${portfolio.holdingsCount}개 종목`]);
+    option.value = portfolio.id;
+    option.selected = portfolio.id === state.selectedPortfolioId;
+    select.append(option);
+  }
+
+  select.addEventListener('change', () => {
+    void window.atomfolio.selectPortfolio(select.value);
+  });
+
+  return el('div', 'portfolio-picker', [select]);
+}
+
+function renderNewsPage(state) {
+  const page = el('div', 'news-page', []);
+
+  if (state.lastError) {
+    page.append(el('div', 'error-banner', ['업데이트에 실패해 이전 데이터를 표시하고 있습니다.']));
+  }
+
+  page.append(el('div', 'section-label', ['종목 뉴스']));
+
+  const list = el('div', 'news-list', []);
+  list.id = 'news-list';
+
+  if (!state.news?.length) {
+    list.append(el('div', 'empty-state', ['표시할 뉴스가 없습니다.']));
+  } else {
+    for (const article of state.news) {
+      const card = el('button', 'news-card', []);
+      card.dataset.articleId = article.id ?? '';
+      card.append(
+        el('div', 'news-card__title-row', [
+          el('span', 'news-card__title', [article.title]),
+          article.isNew ? el('span', 'news-card__badge', ['NEW']) : null,
+        ]),
+        el('div', 'news-card__meta', [
+          [article.source, article.publishedAt ? formatTime(article.publishedAt) : null]
+            .filter(Boolean)
+            .join(' · '),
+        ]),
+      );
+      card.addEventListener('click', () => {
+        if (article.link) {
+          window.atomfolio.openExternal(article.link);
+        }
+      });
+      list.append(card);
+    }
+  }
+
+  page.append(list);
+  return page;
+}
+
+// ---------- Settings page ----------
 
 function renderSlider({ label, format, min, max, step, value, onCommit }) {
   const valueEl = el('span', 'settings-row__value', [format(value)]);
@@ -163,13 +519,6 @@ function updateSetting(partial) {
 }
 
 function renderSettingsPanel(settings) {
-  const closeButton = el('button', 'settings-panel__close', ['완료']);
-  closeButton.type = 'button';
-  closeButton.addEventListener('click', () => {
-    settingsOpen = false;
-    renderSettingsOverlay();
-  });
-
   const body = el('div', 'settings-panel__body', [
     renderToggle({
       label: '인사이트 알림',
@@ -215,123 +564,43 @@ function renderSettingsPanel(settings) {
   ]);
 
   return el('div', 'settings-panel', [
-    el('div', 'settings-panel__header', [
-      el('span', 'settings-panel__title', ['알림 설정']),
-      closeButton,
-    ]),
+    el('div', 'settings-panel__header', [el('span', 'settings-panel__title', ['알림 설정'])]),
     body,
   ]);
 }
 
-function renderSettingsOverlay() {
-  settingsRoot.classList.toggle('is-open', settingsOpen && Boolean(settingsCache));
-  if (!settingsOpen || !settingsCache) {
-    setChildren(settingsRoot, null);
+async function ensureSettingsLoaded() {
+  if (settingsCache) {
+    setChildren(settingsRoot, renderSettingsPanel(settingsCache));
     return;
   }
+  const settings = await window.atomfolio.getSettings();
+  settingsCache = settings;
   setChildren(settingsRoot, renderSettingsPanel(settingsCache));
-}
-
-function toggleSettings() {
-  settingsOpen = !settingsOpen;
-  if (settingsOpen && !settingsCache) {
-    window.atomfolio.getSettings().then((settings) => {
-      settingsCache = settings;
-      renderSettingsOverlay();
-    });
-    return;
-  }
-  renderSettingsOverlay();
-}
-
-// Only shown once there's something to choose between — a single-portfolio workspace (the common
-// case) skips straight to the atom instead of a picker with one disabled-feeling option.
-function renderPortfolioPicker(state) {
-  const portfolios = Array.isArray(state.portfolios) ? state.portfolios : [];
-  if (portfolios.length < 2) {
-    return null;
-  }
-
-  const select = el('select', '', []);
-  for (const portfolio of portfolios) {
-    const option = el('option', '', [`${portfolio.name} · ${portfolio.holdingsCount}개 종목`]);
-    option.value = portfolio.id;
-    option.selected = portfolio.id === state.selectedPortfolioId;
-    select.append(option);
-  }
-
-  select.addEventListener('change', () => {
-    void window.atomfolio.selectPortfolio(select.value);
-  });
-
-  return el('div', 'portfolio-picker', [select]);
-}
-
-function renderRest(state) {
-  const fragment = document.createDocumentFragment();
-
-  if (state.lastError) {
-    fragment.append(el('div', 'error-banner', ['업데이트에 실패해 이전 데이터를 표시하고 있습니다.']));
-  }
-
-  fragment.append(el('div', 'section-label', ['종목 뉴스']));
-
-  const list = el('div', 'news-list', []);
-  list.id = 'news-list';
-
-  if (!state.news?.length) {
-    list.append(el('div', 'empty-state', ['표시할 뉴스가 없습니다.']));
-  } else {
-    for (const article of state.news) {
-      const card = el('button', 'news-card', []);
-      card.dataset.articleId = article.id ?? '';
-      card.append(
-        el('div', 'news-card__title-row', [
-          el('span', 'news-card__title', [article.title]),
-          article.isNew ? el('span', 'news-card__badge', ['NEW']) : null,
-        ]),
-        el('div', 'news-card__meta', [
-          [article.source, article.publishedAt ? formatTime(article.publishedAt) : null]
-            .filter(Boolean)
-            .join(' · '),
-        ]),
-      );
-      card.addEventListener('click', () => {
-        if (article.link) {
-          window.atomfolio.openExternal(article.link);
-        }
-      });
-      list.append(card);
-    }
-  }
-
-  fragment.append(list);
-  return fragment;
 }
 
 function render(state) {
   if (!state?.connected) {
     setChildren(connectRoot, renderConnect(state));
-    setChildren(headerRoot, null);
-    setChildren(pickerRoot, null);
-    setChildren(restRoot, null);
-    settingsOpen = false;
-    renderSettingsOverlay();
+    appRoot.classList.add('is-hidden');
     return;
   }
 
   setChildren(connectRoot, null);
+  appRoot.classList.remove('is-hidden');
   setChildren(headerRoot, renderHeader(state));
   setChildren(pickerRoot, renderPortfolioPicker(state));
-  setChildren(restRoot, renderRest(state));
+  setChildren(newsRoot, renderNewsPage(state));
 }
 
 async function bootstrap() {
   const initialState = await window.atomfolio.getState();
   render(initialState);
+  void ensureSettingsLoaded();
 
   window.atomfolio.onState((state) => render(state));
   window.atomfolio.onFocusArticle((articleId) => {
+    pager.goToPage(1);
     const cardEl = document.querySelector(`[data-article-id="${CSS.escape(articleId ?? '')}"]`);
     cardEl?.scrollIntoView({ block: 'center' });
   });
