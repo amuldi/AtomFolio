@@ -124,6 +124,7 @@ body {
   height: 182px;
   cursor: grab;
   touch-action: none;
+  user-select: none;
 }
 
 .atom-stage.is-dragging {
@@ -136,14 +137,13 @@ body {
   overflow: visible;
 }
 
-.atom-orbit-group {
-  transform: rotate(var(--rotate));
-}
-
 .atom-spoke {
   stroke: var(--hairline);
   stroke-width: 1;
-  transition: stroke 160ms var(--ease);
+}
+
+.atom-spoke.is-selected {
+  stroke: var(--ink-faint);
 }
 
 .atom-node__ring {
@@ -153,15 +153,9 @@ body {
   transition: stroke 160ms var(--ease), fill 160ms var(--ease);
 }
 
-/* Labels live inside the same rotating group as their node, so they're counter-rotated by the
-   exact inverse angle — otherwise they'd spin sideways/upside-down as the ring turns. */
-.atom-node__label,
-.atom-node__percent {
-  transform: rotate(calc(var(--rotate, 0deg) * -1));
-  transform-box: fill-box;
-  transform-origin: center;
-}
-
+/* Positions are set directly on cx/cy/x/y every animation frame (see applyFrame in popover.js) —
+   real 3D rotation, not a CSS transform, so no counter-rotation trick is needed to keep labels
+   upright; they're never rotated in the first place. */
 .atom-node__label {
   font-size: 8.6px;
   font-weight: 560;
@@ -190,11 +184,6 @@ body {
 .atom-node.is-selected .atom-node__ring {
   stroke: var(--ink);
   fill: rgba(250, 246, 240, 0.12);
-}
-
-.atom-node:hover .atom-spoke,
-.atom-node.is-selected .atom-spoke {
-  stroke: var(--ink-faint);
 }
 
 .atom-node.is-selected .atom-node__ring {

@@ -2,15 +2,71 @@ const root = document.getElementById('root');
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 // Persists across re-renders (render() rebuilds the whole DOM on every state push, e.g. every
-// poll) so a background refresh doesn't snap the orbit back to 0deg or drop the user's selection.
-let rotationDeg = 0;
+// poll) so a background refresh doesn't snap the rotation back to 0 or drop the user's selection.
+// Two axes (radians), not one — this is a real trackball, not a flat record-player spin: dragging
+// horizontally yaws around the vertical axis, dragging vertically pitches around the horizontal
+// one, same two-axis feel as the web dashboard's atom scene.
+let rotationYaw = 0.4;
+let rotationPitch = -0.28;
 let selectedHoldingId = null;
 let atomFrameId = null;
 let isDraggingAtom = false;
-// True once a pointerdown-then-move has actually rotated the ring past a small threshold —
+// True once a pointerdown-then-move has actually rotated the atom past a small threshold —
 // distinct from isDraggingAtom (true for the whole press, including a plain tap) so a drag that
 // happens to end over a node doesn't get misread as a click on that node.
 let dragMoved = false;
+
+// --- Minimal 3D math (no Three.js in this tiny renderer — just what a trackball + perspective
+// projection needs: a couple of axis rotations and a divide). Mirrors the shape of the web
+// dashboard's own scene math (src/utils/scene.js's trackballVector/projectPoint) without pulling
+// in the WebGL-scene dependency for a menu bar popover. ---
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+const CAMERA_DISTANCE = 3.2;
+
+function normalize3(vector) {
+  const length = Math.hypot(vector[0], vector[1], vector[2]) || 1;
+  return [vector[0] / length, vector[1] / length, vector[2] / length];
+}
+
+function rotateAroundY(vector, angle) {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return [vector[0] * cos + vector[2] * sin, vector[1], vector[2] * cos - vector[0] * sin];
+}
+
+function rotateAroundX(vector, angle) {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return [vector[0], vector[1] * cos - vector[2] * sin, vector[1] * sin + vector[2] * cos];
+}
+
+// Fibonacci/golden-angle sphere distribution — the same even-but-organic placement
+// generateAtomLayout uses for the dashboard's atoms, so holdings scatter across the whole sphere
+// instead of clumping.
+function sphereDirection(index, total) {
+  if (total <= 1) {
+    return [0, 0, 1];
+  }
+
+  const ratio = index / (total - 1);
+  const y = 1 - ratio * 2;
+  const radiusAtY = Math.sqrt(Math.max(0, 1 - y * y));
+  const theta = index * GOLDEN_ANGLE;
+  return normalize3([Math.cos(theta) * radiusAtY, y, Math.sin(theta) * radiusAtY]);
+}
+
+function projectToScreen(vector, radiusPx) {
+  const perspective = CAMERA_DISTANCE / (CAMERA_DISTANCE - vector[2]);
+  return {
+    x: vector[0] * radiusPx * perspective,
+    y: vector[1] * radiusPx * perspective,
+    scale: perspective,
+  };
+}
+
+function clampNumber(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
 
 function formatCurrency(value) {
   if (!Number.isFinite(value)) {
@@ -52,18 +108,6 @@ function toneClass(value) {
 function truncateLabel(value, max = 10) {
   const text = String(value ?? '').trim();
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
-}
-
-// A small deterministic hash (not real randomness) so a given holding always lands at the same
-// spot on the atom relative to the others — re-renders (every 60s poll, every selection change)
-// must not reshuffle the layout the user is looking at.
-function hashSeed(value) {
-  let hash = 0;
-  const str = String(value ?? '');
-  for (let i = 0; i < str.length; i += 1) {
-    hash = (hash * 31 + str.charCodeAt(i)) | 0;
-  }
-  return Math.abs(hash);
 }
 
 function el(tag, className, children) {
@@ -133,11 +177,12 @@ function renderConnect(state) {
   return container;
 }
 
-// The atom stage: a nucleus (total portfolio) with each holding scattered around it on a thin
-// radiating line — the same "star chart" the web dashboard draws (varied angle/distance per
-// holding, not a uniform ring), just scaled to a menu bar popover. Drag to spin the whole
-// arrangement freely; left alone, it turns slowly on its own. Clicking a node pins its detail in
-// the readout below; clicking the nucleus (or the same node again) returns to the total.
+// The atom stage: a nucleus (total portfolio) with each holding placed on a sphere around it —
+// the same layout the web dashboard uses (generateAtomLayout's golden-angle sphere), rendered
+// here as a 2D perspective projection instead of WebGL. Drag in any direction to tumble it in true
+// 3D (yaw + pitch, full 360deg, not just a flat spin); left alone, it turns slowly on its own.
+// Clicking a node pins its detail in the readout below; clicking the nucleus (or the same node
+// again) returns to the total.
 function renderAtomStage(state) {
   const holdings = Array.isArray(state.holdings) ? state.holdings : [];
   const totals = state.totals;
@@ -152,87 +197,10 @@ function renderAtomStage(state) {
 
   const cx = 150;
   const cy = 110;
-  const maxRadius = 76;
-  const count = Math.max(1, holdings.length);
+  const sphereRadiusPx = 78;
 
-  const orbitGroup = svgEl('g', { class: 'atom-orbit-group' });
-  orbitGroup.style.setProperty('--rotate', `${rotationDeg}deg`);
-  orbitGroup.style.transformOrigin = `${cx}px ${cy}px`;
-
-  holdings.forEach((holding, index) => {
-    // Evenly spaced base angle plus a per-holding jitter (deterministic, not Math.random — must
-    // stay put across re-renders) so nodes scatter organically instead of sitting on a perfect
-    // ring, echoing the dashboard's atom layout. Jitter is kept well under half the base spacing
-    // (holdings is capped at 6, so spacing is at least 60deg) so labels don't collide.
-    const baseAngleDeg = (index / count) * 360;
-    const jitterDeg = ((hashSeed(`${holding.id ?? index}:a`) % 100) / 100 - 0.5) * 20;
-    const angle = ((baseAngleDeg + jitterDeg) * Math.PI) / 180;
-    const radiusRatio = 0.62 + (hashSeed(`${holding.id ?? index}:r`) % 100) / 100 * 0.38;
-    const radius = maxRadius * radiusRatio;
-    const nx = cx + Math.cos(angle) * radius;
-    const ny = cy + Math.sin(angle) * radius;
-    const isSelected = holding.id === selectedHoldingId;
-
-    const nodeGroup = svgEl('g', {
-      class: `atom-node${isSelected ? ' is-selected' : ''}`,
-      tabindex: '0',
-      role: 'button',
-      'aria-label': holding.label || holding.code || '종목',
-    });
-    nodeGroup.dataset.holdingId = holding.id ?? '';
-
-    nodeGroup.append(
-      svgEl('line', {
-        x1: cx,
-        y1: cy,
-        x2: nx,
-        y2: ny,
-        class: 'atom-spoke',
-      }),
-      svgEl('circle', {
-        cx: nx,
-        cy: ny,
-        r: 4.4,
-        class: 'atom-node__ring',
-      }),
-    );
-
-    // Label sits on the outward side of the node, right-aligned when the node is left of center
-    // so the text always reads away from the nucleus instead of crossing over it.
-    const labelIsRight = nx >= cx;
-    const label = svgEl('text', {
-      x: nx + (labelIsRight ? 8 : -8),
-      y: ny - 2,
-      class: 'atom-node__label',
-      'text-anchor': labelIsRight ? 'start' : 'end',
-    });
-    label.textContent = truncateLabel(holding.label || holding.code || '');
-    const percentLabel = svgEl('text', {
-      x: nx + (labelIsRight ? 8 : -8),
-      y: ny + 9,
-      class: `atom-node__percent ${toneClass(holding.returnRate)}`.trim(),
-      'text-anchor': labelIsRight ? 'start' : 'end',
-    });
-    percentLabel.textContent = formatPercent(holding.returnRate);
-    nodeGroup.append(label, percentLabel);
-
-    const title = svgEl('title', {});
-    title.textContent = holding.label || holding.code || '';
-    nodeGroup.append(title);
-
-    nodeGroup.addEventListener('click', (event) => {
-      event.stopPropagation();
-      if (dragMoved) {
-        return;
-      }
-      selectedHoldingId = selectedHoldingId === holding.id ? null : holding.id;
-      render(state);
-    });
-
-    orbitGroup.append(nodeGroup);
-  });
-
-  svg.append(orbitGroup);
+  const spokesLayer = svgEl('g', { class: 'atom-spokes' });
+  const nodesLayer = svgEl('g', { class: 'atom-nodes' });
 
   const nucleus = svgEl('circle', {
     cx,
@@ -250,10 +218,89 @@ function renderAtomStage(state) {
     selectedHoldingId = null;
     render(state);
   });
-  svg.append(nucleus);
 
+  const nodeRefs = holdings.map((holding, index) => {
+    const direction = sphereDirection(index, holdings.length);
+    const isSelected = holding.id === selectedHoldingId;
+
+    const spoke = svgEl('line', {
+      x1: cx,
+      y1: cy,
+      class: `atom-spoke${isSelected ? ' is-selected' : ''}`,
+    });
+
+    const nodeGroup = svgEl('g', {
+      class: `atom-node${isSelected ? ' is-selected' : ''}`,
+      tabindex: '0',
+      role: 'button',
+      'aria-label': holding.label || holding.code || '종목',
+    });
+    nodeGroup.dataset.holdingId = holding.id ?? '';
+
+    const ring = svgEl('circle', { r: 4.4, class: 'atom-node__ring' });
+    const label = svgEl('text', { class: 'atom-node__label' });
+    label.textContent = truncateLabel(holding.label || holding.code || '');
+    const percent = svgEl('text', {
+      class: `atom-node__percent ${toneClass(holding.returnRate)}`.trim(),
+    });
+    percent.textContent = formatPercent(holding.returnRate);
+    const title = svgEl('title', {});
+    title.textContent = holding.label || holding.code || '';
+    nodeGroup.append(ring, label, percent, title);
+
+    nodeGroup.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (dragMoved) {
+        return;
+      }
+      selectedHoldingId = selectedHoldingId === holding.id ? null : holding.id;
+      render(state);
+    });
+
+    spokesLayer.append(spoke);
+    nodesLayer.append(nodeGroup);
+
+    return { direction, spoke, nodeGroup, ring, label, percent };
+  });
+
+  svg.append(spokesLayer, nucleus, nodesLayer);
   stage.append(svg);
-  wireAtomDrag(stage, orbitGroup);
+
+  // Repositions every node for the current rotation — called on every drag move and every idle-
+  // spin animation frame. Depth (how far toward/away from the viewer a node has rotated) drives
+  // both its projected distance from the nucleus and its size/opacity, which is what actually
+  // reads as "3D" rather than a flat shape sliding around.
+  const applyFrame = () => {
+    for (const ref of nodeRefs) {
+      const rotated = rotateAroundX(rotateAroundY(ref.direction, rotationYaw), rotationPitch);
+      const projected = projectToScreen(rotated, sphereRadiusPx);
+      const nx = cx + projected.x;
+      const ny = cy + projected.y;
+      const depthScale = clampNumber(projected.scale, 0.6, 1.55);
+      const depthFade = (depthScale - 0.6) / (1.55 - 0.6);
+
+      ref.spoke.setAttribute('x2', String(nx));
+      ref.spoke.setAttribute('y2', String(ny));
+      ref.spoke.style.opacity = String(0.22 + depthFade * 0.5);
+
+      ref.ring.setAttribute('cx', String(nx));
+      ref.ring.setAttribute('cy', String(ny));
+      ref.ring.setAttribute('r', String(4.2 * depthScale));
+      ref.nodeGroup.style.opacity = String(0.5 + depthFade * 0.5);
+
+      const labelIsRight = nx >= cx;
+      const labelX = nx + (labelIsRight ? 8 : -8);
+      ref.label.setAttribute('x', String(labelX));
+      ref.label.setAttribute('y', String(ny - 2));
+      ref.label.setAttribute('text-anchor', labelIsRight ? 'start' : 'end');
+      ref.percent.setAttribute('x', String(labelX));
+      ref.percent.setAttribute('y', String(ny + 9));
+      ref.percent.setAttribute('text-anchor', labelIsRight ? 'start' : 'end');
+    }
+  };
+
+  applyFrame();
+  wireAtomDrag(stage, applyFrame);
 
   const selectedHolding = holdings.find((holding) => holding.id === selectedHoldingId) ?? null;
   const readout = renderAtomReadout(selectedHolding, totals);
@@ -297,23 +344,24 @@ function renderAtomReadout(holding, totals) {
   ]);
 }
 
-// Pointer-drag rotates the orbit group; releasing lets a slow idle spin resume from wherever the
-// user left it (never snaps back to 0), matching the "rotate to browse" feel of the web app scene.
-function wireAtomDrag(stage, orbitGroup) {
+// Drag in any direction to tumble the sphere freely (both axes, unclamped — true 360deg in every
+// direction, not a flat single-axis spin). Releasing lets a slow idle yaw resume from wherever the
+// user left it (never snaps back), matching the web dashboard scene's "rotate to browse" feel.
+function wireAtomDrag(stage, applyFrame) {
   let dragStartX = 0;
-  let dragStartRotation = rotationDeg;
-
-  const applyRotation = () => {
-    orbitGroup.style.setProperty('--rotate', `${rotationDeg}deg`);
-  };
+  let dragStartY = 0;
+  let dragStartYaw = rotationYaw;
+  let dragStartPitch = rotationPitch;
 
   const handlePointerMove = (event) => {
     const deltaX = event.clientX - dragStartX;
-    if (Math.abs(deltaX) > 3) {
+    const deltaY = event.clientY - dragStartY;
+    if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
       dragMoved = true;
     }
-    rotationDeg = dragStartRotation + deltaX * 0.6;
-    applyRotation();
+    rotationYaw = dragStartYaw + deltaX * 0.012;
+    rotationPitch = dragStartPitch + deltaY * 0.012;
+    applyFrame();
   };
 
   const handlePointerUp = () => {
@@ -330,7 +378,9 @@ function wireAtomDrag(stage, orbitGroup) {
     isDraggingAtom = true;
     dragMoved = false;
     dragStartX = event.clientX;
-    dragStartRotation = rotationDeg;
+    dragStartY = event.clientY;
+    dragStartYaw = rotationYaw;
+    dragStartPitch = rotationPitch;
     stage.classList.add('is-dragging');
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp, { once: true });
@@ -342,8 +392,8 @@ function wireAtomDrag(stage, orbitGroup) {
 
   const idleSpin = () => {
     if (!isDraggingAtom) {
-      rotationDeg += 0.03;
-      applyRotation();
+      rotationYaw += 0.0035;
+      applyFrame();
     }
     atomFrameId = requestAnimationFrame(idleSpin);
   };
