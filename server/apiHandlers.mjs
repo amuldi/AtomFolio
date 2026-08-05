@@ -6,7 +6,13 @@ import {
 } from './securityEnrichment.mjs';
 import { searchMarketSymbolSuggestions } from '../src/lib/liveMarketData.js';
 import { fetchCompanyFinancialsFromProviders } from '../src/lib/companyFinancials.js';
-import { fetchMarketNewsFromProviders } from '../src/lib/marketNews.js';
+import { fetchMarketNewsFromProviders, uniqueNewsItems } from '../src/lib/marketNews.js';
+import {
+  isFinnhubConfigured,
+  fetchFinnhubGeneralNews,
+  fetchFinnhubCompanyNewsForSymbols,
+} from './finnhubNews.mjs';
+import { getMarketNewsWithCache } from './newsCache.mjs';
 import {
   claimGuestWorkspaceForUser,
   createPortfolio,
@@ -299,6 +305,83 @@ export async function handleMarketFinancialsRequest({ method, query, clientKey, 
   }
 }
 
+// A ticker made only of digits is AtomFolio's convention for a Korean-listed code (e.g. KODEX/
+// TIGER products like "360750"); anything else (AAPL, NVDA, 005930.KS-style suffixed forms would
+// still start with digits so they're still treated as domestic) is treated as foreign.
+function isDomesticTicker(ticker) {
+  return /^\d/.test(ticker);
+}
+
+function sortByPublishedAtDesc(items) {
+  return [...items].sort((left, right) => {
+    const leftTime = Number(left.publishedAt);
+    const rightTime = Number(right.publishedAt);
+    const leftHasTime = Number.isFinite(leftTime);
+    const rightHasTime = Number.isFinite(rightTime);
+
+    if (leftHasTime && rightHasTime) {
+      return rightTime - leftTime;
+    }
+
+    return leftHasTime ? -1 : rightHasTime ? 1 : 0;
+  });
+}
+
+// Finnhub becomes the primary source once it's configured and either the request is in English
+// or at least one held ticker is foreign — Bing RSS drops down to being Finnhub's own failure
+// fallback instead of standing in for "foreign news" by default the way it used to.
+async function fetchMarketNewsWithFinnhubPromotion({ query, tickers, language, mode, refreshKey, signal }) {
+  const foreignTickers = tickers.filter((ticker) => !isDomesticTicker(ticker));
+  const domesticTickers = tickers.filter(isDomesticTicker);
+  const shouldPreferFinnhub = isFinnhubConfigured() && (language === 'en' || foreignTickers.length > 0);
+
+  if (!shouldPreferFinnhub) {
+    return fetchMarketNewsFromProviders({ query, tickers, language, mode, refreshKey, signal });
+  }
+
+  try {
+    const finnhubItems = foreignTickers.length
+      ? await fetchFinnhubCompanyNewsForSymbols(foreignTickers, { signal })
+      : await fetchFinnhubGeneralNews({ signal });
+
+    if (!finnhubItems.length) {
+      throw new Error('finnhub-empty-result');
+    }
+
+    let combinedItems = sortByPublishedAtDesc(finnhubItems);
+    let source = 'Finnhub';
+
+    if (domesticTickers.length) {
+      try {
+        const domesticPayload = await fetchMarketNewsFromProviders({
+          query,
+          tickers: domesticTickers,
+          language: 'ko',
+          mode,
+          refreshKey,
+          signal,
+        });
+        combinedItems = sortByPublishedAtDesc([...combinedItems, ...(domesticPayload?.items ?? [])]);
+        source = domesticPayload?.items?.length ? 'Finnhub + 네이버' : source;
+      } catch {
+        // The domestic half failing shouldn't throw away the foreign half already in hand.
+      }
+    }
+
+    return {
+      query: query || (language === 'en' ? 'stock market news' : '주식 뉴스'),
+      items: uniqueNewsItems(combinedItems, 12),
+      source,
+      mode,
+      fetchedAt: Date.now(),
+    };
+  } catch {
+    // Finnhub unreachable/unconfigured/empty — fall back to the pre-existing pipeline exactly as
+    // before (which still ends in Bing RSS for foreign-language queries).
+    return fetchMarketNewsFromProviders({ query, tickers, language, mode, refreshKey, signal });
+  }
+}
+
 export async function handleMarketNewsRequest({ method, query, clientKey, sendJson }) {
   if (method !== 'GET') {
     sendMethodNotAllowed(sendJson);
@@ -322,13 +405,10 @@ export async function handleMarketNewsRequest({ method, query, clientKey, sendJs
 
     sendJson(
       200,
-      await fetchMarketNewsFromProviders({
-        query: newsQuery,
-        tickers,
-        language,
-        mode,
-        refreshKey,
-      }),
+      await getMarketNewsWithCache(
+        { query: newsQuery, tickers, language, mode, refreshKey },
+        { fetcher: fetchMarketNewsWithFinnhubPromotion },
+      ),
     );
   } catch (error) {
     sendProviderError(sendJson, error, 'Market news fetch failed.', 'market-news-failed');

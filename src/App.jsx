@@ -55,19 +55,11 @@ import DigitalTwinPanel from './components/panels/DigitalTwinPanel.jsx';
 import { AuthPanel } from './components/auth/AuthPanel.jsx';
 import { AtomDetailPanel } from './components/panels/AtomDetailPanel.jsx';
 import { AtomCanvas } from './scene/index.js';
-import {
-  createTransitionState,
-  selectAtom as selectTransitionAtom,
-  requestClose as requestTransitionClose,
-  PHASE as TRANSITION_PHASE,
-} from './scene/blackhole/transitionMachine.js';
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? '';
-// Dev-only preview of the WebGL scene migration (see plan at .claude/plans/binary-leaping-wind.md).
-// Off by default; append ?webglScene=1 to compare against the SVG scene. The black-hole
-// absorption transition (Stage D) only exists on this path — it needs a real WebGL context for
-// its shader/particle work, so the SVG fallback keeps its original instant select/deselect
-// behavior. Removed once full manual interaction QA passes and the SVG path is deleted.
+// Stage A dev-only preview of the WebGL scene migration (see plan at
+// .claude/plans/binary-leaping-wind.md). Off by default; append ?webglScene=1 to compare against
+// the SVG scene. Removed once Stage B lands and the WebGL path becomes the real renderer.
 const ENABLE_WEBGL_SCENE_PREVIEW =
   typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('webglScene') === '1';
 
@@ -5553,9 +5545,6 @@ export default function App() {
     reduced: readPrefersReducedMotion(),
     visible: typeof document === 'undefined' || document.visibilityState !== 'hidden',
   });
-  // Black-hole absorption transition (Stage D), WebGL-preview-only. Ticked every frame inside
-  // AtomCanvas's own RAF loop, same ref-mutated-outside-React pattern as rotationRef/cameraRef.
-  const transitionRef = useRef(createTransitionState());
   const frameCommitRef = useRef(0);
   const targetTiltRef = useRef({ x: 0, y: 0 });
   const currentTiltRef = useRef({ x: 0, y: 0 });
@@ -5637,38 +5626,6 @@ export default function App() {
   const noteInteraction = () => {
     interactionRef.current.lastInputAt = performance.now();
   };
-
-  // Plain instant select/deselect for atoms within the current portfolio — same on both
-  // renderers, unrelated to the fly-to transition below. The camera-flight/warp-streak
-  // transition is reserved for navigating to a *different* portfolio (see
-  // dispatchPortfolioPreviewSelect); clicking an atom in the current scene never triggers it.
-  const dispatchAtomSelect = useCallback((atomId) => {
-    setSelectedAtomId((current) => (current === atomId ? null : atomId));
-  }, []);
-
-  const dispatchAtomClose = useCallback(() => {
-    setSelectedAtomId(null);
-  }, []);
-
-  // Distant "other portfolio" preview click, WebGL-preview-only: drives transitionRef the same
-  // way atom selection used to. AtomCanvas's RAF loop ticks it and reports phase changes back
-  // via handlePortfolioPreviewPhaseChange, which switches the active portfolio once the camera
-  // arrives — there's no detail panel to hold open here, arriving *is* the destination, so it
-  // immediately snaps back to idle once the switch happens (see there for why).
-  const dispatchPortfolioPreviewSelect = useCallback((entryId) => {
-    if (!ENABLE_WEBGL_SCENE_PREVIEW) {
-      return;
-    }
-    const reducedMotion = motionPreferenceRef.current.reduced;
-    transitionRef.current = selectTransitionAtom(transitionRef.current, entryId, { reducedMotion });
-  }, []);
-
-  const handlePortfolioPreviewPhaseChange = useCallback((phase, entryId) => {
-    if (phase === TRANSITION_PHASE.ARRIVED && entryId) {
-      setActivePortfolioId(entryId);
-      transitionRef.current = createTransitionState();
-    }
-  }, []);
 
   const interactWithFloatingTool = useCallback((toolKey) => {
     noteInteraction();
@@ -6600,12 +6557,6 @@ export default function App() {
       if (event.key === 'Escape') {
         if (settingsOpen) {
           setSettingsOpen(false);
-        } else if (interactionRef.current.selectedAtomId) {
-          dispatchAtomClose();
-        } else if (transitionRef.current.phase !== TRANSITION_PHASE.IDLE) {
-          transitionRef.current = requestTransitionClose(transitionRef.current, {
-            reducedMotion: motionPreferenceRef.current.reduced,
-          });
         }
         return;
       }
@@ -6762,7 +6713,7 @@ export default function App() {
       setHoverInfo(null);
 
       if (!wasMoved) {
-        dispatchAtomSelect(clickedAtomId);
+        setSelectedAtomId((current) => (current === clickedAtomId ? null : clickedAtomId));
       }
     };
 
@@ -6881,8 +6832,8 @@ export default function App() {
     noteInteraction();
     setHoverInfo(null);
     setActiveGroupKey(null);
-    dispatchAtomSelect(atomId);
-  }, [dispatchAtomSelect]);
+    setSelectedAtomId((current) => (current === atomId ? null : atomId));
+  }, []);
 
   const handlePointerMove = () => {
     noteInteraction();
@@ -7656,7 +7607,7 @@ export default function App() {
   const showCenterClearHit = Boolean(selectedAtomId || activeGroupKey);
   const clearCenterSelection = () => {
     noteInteraction();
-    dispatchAtomClose();
+    setSelectedAtomId(null);
     setActiveGroupKey(null);
   };
   const handleFocusPortfolioHolding = useCallback(
@@ -7729,10 +7680,6 @@ export default function App() {
       '--shooting-star-opacity': format(shootingStar.opacity),
     };
   }, [shootingStar]);
-  const otherPortfolioEntries = useMemo(
-    () => portfolioEntries.filter((entry) => entry.id !== activePortfolioId),
-    [portfolioEntries, activePortfolioId],
-  );
   const atoms = useMemo(
     () =>
       atomsRef.current.map((atom) => {
@@ -8010,10 +7957,6 @@ export default function App() {
                     rotationRef={rotationRef}
                     motionPreferenceRef={motionPreferenceRef}
                     bondLength={BOND_LENGTH}
-                    transitionRef={transitionRef}
-                    portfolioPreviewEntries={otherPortfolioEntries}
-                    onTransitionPhaseChange={handlePortfolioPreviewPhaseChange}
-                    onPortfolioPreviewSelect={dispatchPortfolioPreviewSelect}
                     onAtomPointerDown={handleNodePointerDown}
                     onAtomPointerEnter={handleNodeEnter}
                     onAtomPointerMove={handleNodeMove}
@@ -8039,7 +7982,7 @@ export default function App() {
                   onPointerLeave={handleNodeLeave}
                   onKeyboardSelect={handleNodeKeyboardSelect}
                 />
-                {portfolioEntries.length && !ENABLE_WEBGL_SCENE_PREVIEW ? (
+                {portfolioEntries.length ? (
                   <div className="portfolio-preview-layer">
                     {portfolioEntries
                       .slice(0, PORTFOLIO_PREVIEW_SLOTS.length)
@@ -8080,7 +8023,7 @@ export default function App() {
           text={text}
           onClose={() => {
             noteInteraction();
-            dispatchAtomClose();
+            setSelectedAtomId(null);
           }}
         />
       ) : null}

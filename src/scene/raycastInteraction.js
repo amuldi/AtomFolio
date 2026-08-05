@@ -23,16 +23,6 @@ export function createCenterHitMesh() {
   return mesh;
 }
 
-// A generously large flat hit circle for a distant "other portfolio" preview cluster — these
-// are small and far away, so the click target needs a lot of forgiveness relative to how big
-// the visual actually reads on screen.
-export function createPortfolioPreviewHitMesh(entryId, radius) {
-  const geometry = new THREE.CircleGeometry(radius, 16);
-  const mesh = new THREE.Mesh(geometry, createHitTargetMaterial());
-  mesh.userData.previewId = entryId;
-  return mesh;
-}
-
 function billboardToCamera(mesh, camera) {
   mesh.quaternion.copy(camera.quaternion);
 }
@@ -58,7 +48,7 @@ function pointerToNdc(event, canvas) {
   );
 }
 
-// Returns { atomId } | { center: true } | { previewId } | null.
+// Returns { atomId } | { center: true } | null.
 export function pickAtPointer(event, canvas, camera, raycaster, hitMeshes) {
   const ndc = pointerToNdc(event, canvas);
   if (!ndc) {
@@ -79,10 +69,6 @@ export function pickAtPointer(event, canvas, camera, raycaster, hitMeshes) {
 
   if (hit.userData.atomId) {
     return { atomId: hit.userData.atomId };
-  }
-
-  if (hit.userData.previewId) {
-    return { previewId: hit.userData.previewId };
   }
 
   return null;

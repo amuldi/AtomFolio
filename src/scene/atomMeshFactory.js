@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { jitter } from '../utils/math.js';
-import { buildBlotPoints } from '../utils/scene.js';
+import { buildLoopPoints, buildBlotPoints } from '../utils/scene.js';
 import {
   createBondMaterial,
+  createNodeFillMaterial,
   createNodeOutlineMaterial,
-  createNodeVolumeMaterial,
   createDustMaterial,
 } from './materials.js';
 
@@ -14,44 +14,20 @@ function pointsToVector3Array(points, z = 0) {
   return points.map((point) => new THREE.Vector3(point.x, point.y, z));
 }
 
-// A low-poly icosahedron (12 vertices, 30 edges) with every vertex bumped in/out along its own
-// direction from center by a seeded jitter — an irregular hand-cut "gem" instead of a perfect
-// geodesic sphere. A single coherent 3D mesh, not several independent flat loops: its edges are
-// spread across the whole real surface, so there's no angle where it can degenerate into a flat
-// sliver, and no risk of several overlapping wireframes cluttering the view or z-fighting when
-// the camera gets close — both of which were real problems with the previous "several tilted
-// rings" design (verified live: a box-shaped artifact from one ring going edge-on, and visible
-// flicker/clutter up close from the layered lines).
-function buildWobbledIcosphereGeometry(radius, seed) {
-  const geometry = new THREE.IcosahedronGeometry(radius, 0);
-  const position = geometry.attributes.position;
-  const vertex = new THREE.Vector3();
-  for (let i = 0; i < position.count; i += 1) {
-    vertex.fromBufferAttribute(position, i);
-    vertex.multiplyScalar(1 + jitter(seed + i * 13.7, 0.16));
-    position.setXYZ(i, vertex.x, vertex.y, vertex.z);
-  }
-  geometry.computeVertexNormals();
-  return geometry;
-}
+function buildLoopMesh(radius, seed) {
+  const points = buildLoopPoints(radius, seed);
+  const vectors = pointsToVector3Array(points);
+  vectors.push(vectors[0].clone());
 
-// A node (atom or nucleus): a softly lit "gem" mesh, read via the scene's hemisphere/key lights,
-// plus its own edge wireframe for the sketchy line texture. Exported so portfolioPreview.js's
-// distant clusters can build their nodes the same way, rather than the flat 2D loop shapes it
-// used to use — those looked visibly inconsistent with the main scene and, up close during the
-// fly-to transition, read as flat, edgeless blobs rather than a coherent 3D form.
-export function buildVolumetricNode(radius, seed) {
+  const shape = new THREE.Shape(points.map((point) => new THREE.Vector2(point.x, point.y)));
+  const fillGeometry = new THREE.ShapeGeometry(shape);
+  const fill = new THREE.Mesh(fillGeometry, createNodeFillMaterial());
+
+  const outlineGeometry = new THREE.BufferGeometry().setFromPoints(vectors);
+  const outline = new THREE.Line(outlineGeometry, createNodeOutlineMaterial());
+
   const group = new THREE.Group();
-
-  const volume = new THREE.Mesh(buildWobbledIcosphereGeometry(radius * 0.86, seed), createNodeVolumeMaterial());
-  group.add(volume);
-
-  // Edges are built from a very slightly larger copy of the same shape, not the fill geometry
-  // itself — coincident geometry z-fights/flickers, especially once the camera is close.
-  const edgeGeometry = buildWobbledIcosphereGeometry(radius * 0.875, seed);
-  const outline = new THREE.LineSegments(new THREE.EdgesGeometry(edgeGeometry), createNodeOutlineMaterial());
-  group.add(outline);
-
+  group.add(fill, outline);
   return group;
 }
 
@@ -101,7 +77,8 @@ export function createAtomMesh(atom, bondLength) {
 
   const nodeGroup = new THREE.Group();
   nodeGroup.position.copy(localPosition);
-  nodeGroup.add(buildVolumetricNode(atom.node, atom.seed + 201));
+  nodeGroup.add(buildLoopMesh(atom.node, atom.seed + 201));
+  nodeGroup.add(buildLoopMesh(atom.node * 0.84, atom.seed + 301));
   group.add(nodeGroup);
 
   group.userData.atomId = atom.id;
@@ -120,6 +97,10 @@ export function createNucleusMesh() {
     [10.7, 613],
     [7.9, 727],
   ];
+  const loopSeeds = [
+    [14.8, 811],
+    [12.9, 883],
+  ];
 
   for (const [radius, seed] of blotSeeds) {
     const points = pointsToVector3Array(buildBlotPoints(radius, seed));
@@ -128,7 +109,9 @@ export function createNucleusMesh() {
     group.add(new THREE.Line(geometry, createNodeOutlineMaterial()));
   }
 
-  group.add(buildVolumetricNode(14.8, 811));
+  for (const [radius, seed] of loopSeeds) {
+    group.add(buildLoopMesh(radius, seed));
+  }
 
   return group;
 }

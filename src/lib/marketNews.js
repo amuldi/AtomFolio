@@ -193,6 +193,123 @@ async function fetchText(url, { signal, encoding = 'utf-8' } = {}) {
   }
 }
 
+const OG_IMAGE_TIMEOUT_MS = 4000;
+const OG_IMAGE_ENRICH_LIMIT = 6;
+const OG_IMAGE_PATTERN =
+  /<meta\b[^>]*(?:property=["']og:image["'][^>]*content=["']([^"']+)["']|content=["']([^"']+)["'][^>]*property=["']og:image["'])[^>]*>/i;
+// finance.naver.com's article links are a JS bounce page (`top.location.href='...'`), not a real
+// HTTP redirect — `fetch(..., { redirect: 'follow' })` can't follow that, so it has to be
+// pattern-matched out of the tiny bounce-page body and re-fetched once.
+const JS_REDIRECT_PATTERN = /location(?:\.href)?\s*=\s*['"]([^'"]+)['"]/i;
+
+async function fetchHtml(url, signal) {
+  const timeout = withTimeout(signal, OG_IMAGE_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      signal: timeout.signal,
+      redirect: 'follow',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 AtomFolio/1.0',
+        Accept: 'text/html',
+      },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    // og:image (or a JS redirect target) is always near the top of the page — reading the whole
+    // body would waste bandwidth on a 6-request-per-response enrichment step that's meant to
+    // stay lightweight.
+    const reader = response.body?.getReader?.();
+    if (!reader) {
+      return await response.text();
+    }
+
+    const decoder = new TextDecoder('utf-8');
+    let html = '';
+    while (html.length < 60000) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      html += decoder.decode(value, { stream: true });
+      if (OG_IMAGE_PATTERN.test(html) || JS_REDIRECT_PATTERN.test(html)) {
+        break;
+      }
+    }
+    reader.cancel?.().catch(() => {});
+    return html;
+  } finally {
+    timeout.cleanup();
+  }
+}
+
+async function fetchOgImageUrl(link, signal) {
+  try {
+    let html = await fetchHtml(link, signal);
+
+    if (html == null) {
+      return null;
+    }
+
+    if (!OG_IMAGE_PATTERN.test(html)) {
+      const redirectTarget = safeExternalLink(stripHtml(html.match(JS_REDIRECT_PATTERN)?.[1] ?? ''), link);
+      if (redirectTarget && redirectTarget !== link) {
+        html = (await fetchHtml(redirectTarget, signal)) ?? html;
+      }
+    }
+
+    const match = html.match(OG_IMAGE_PATTERN);
+    const rawUrl = stripHtml(match?.[1] ?? match?.[2] ?? '');
+
+    // safeExternalLink(value, baseUrl) resolves an *empty* value to baseUrl itself (that's how
+    // `new URL('', base)` behaves) rather than failing — without this guard, a page with no
+    // og:image tag would silently "succeed" with the article's own link as its thumbnail.
+    if (!rawUrl) {
+      return null;
+    }
+
+    return safeExternalLink(rawUrl, link) || null;
+  } catch {
+    return null;
+  }
+}
+
+// Only the top OG_IMAGE_ENRICH_LIMIT items still missing a thumbnail get this treatment — an
+// extra per-article page fetch for every item in the list would noticeably slow the response, so
+// this is deliberately bounded. Runs as Promise.allSettled: any individual article fetch failing
+// (dead link, slow site, blocked scrape) just leaves that item's thumbnailUrl null rather than
+// failing the whole news response.
+async function enrichWithOgImages(items, { signal } = {}) {
+  const candidates = items.filter((item) => !item.thumbnailUrl && item.link).slice(0, OG_IMAGE_ENRICH_LIMIT);
+
+  if (!candidates.length) {
+    return items;
+  }
+
+  const results = await Promise.allSettled(
+    candidates.map((item) => fetchOgImageUrl(item.link, signal)),
+  );
+  const thumbnailByLink = new Map();
+
+  candidates.forEach((item, index) => {
+    const result = results[index];
+    if (result.status === 'fulfilled' && result.value) {
+      thumbnailByLink.set(item.link, result.value);
+    }
+  });
+
+  if (!thumbnailByLink.size) {
+    return items;
+  }
+
+  return items.map((item) =>
+    thumbnailByLink.has(item.link) ? { ...item, thumbnailUrl: thumbnailByLink.get(item.link) } : item,
+  );
+}
+
 async function fetchWithTimeout(url, options = {}) {
   const timeout = withTimeout(options.signal);
 
@@ -206,7 +323,7 @@ async function fetchWithTimeout(url, options = {}) {
   }
 }
 
-function uniqueNewsItems(items, limit = 12) {
+export function uniqueNewsItems(items, limit = 12) {
   const seen = new Set();
   const result = [];
 
@@ -223,6 +340,7 @@ function uniqueNewsItems(items, limit = 12) {
       link,
       id: item.id || `${link}-${result.length}`,
       source: normalizeNewsSource(item.source),
+      thumbnailUrl: item.thumbnailUrl ?? null,
     });
 
     if (result.length >= limit) {
@@ -262,12 +380,36 @@ function parseNaverFinanceItems(html, limit = 12) {
       description,
       source: source || '주식 뉴스',
       publishedAt: parsePublishedAt(dateText),
+      thumbnailUrl: null,
     });
 
     match = articlePattern.exec(htmlText);
   }
 
   return uniqueNewsItems(items, limit);
+}
+
+// Naver's search-results HTML embeds a real per-article thumbnail (a search.pstatic.net proxy
+// URL, already resized) right next to the headline — width="104" is specifically the article
+// thumbnail size; width="24" images nearby are just the press outlet's tiny logo icon, not a
+// thumbnail, so they're deliberately excluded.
+function extractNaverThumbnailUrl(block) {
+  const imgTags = block.match(/<img\b[^>]*>/gi) ?? [];
+
+  for (const imgTag of imgTags) {
+    if (!/width=["']104["']/i.test(imgTag)) {
+      continue;
+    }
+
+    const src = imgTag.match(/\bsrc=["']([^"']+)["']/i)?.[1];
+    const resolved = safeExternalLink(stripHtml(src ?? ''));
+
+    if (resolved) {
+      return resolved;
+    }
+  }
+
+  return null;
 }
 
 function parseNaverSearchItems(html, limit = 12) {
@@ -294,6 +436,7 @@ function parseNaverSearchItems(html, limit = 12) {
       description: stripHtml(block.match(descPattern)?.[1] ?? ''),
       source: stripHtml(block.match(sourcePattern)?.[1] ?? '') || '주식 뉴스',
       publishedAt: parsePublishedAt(block.match(timePattern)?.[1] ?? ''),
+      thumbnailUrl: extractNaverThumbnailUrl(block),
     });
 
     match = legacyTitlePattern.exec(htmlText);
@@ -319,6 +462,7 @@ function parseNaverSearchItems(html, limit = 12) {
       description: stripHtml(block.match(modernBodyPattern)?.[1] ?? ''),
       source: '주식 뉴스',
       publishedAt: parsePublishedAt(block.match(modernTimePattern)?.[1] ?? ''),
+      thumbnailUrl: extractNaverThumbnailUrl(block),
     });
 
     match = modernTitlePattern.exec(htmlText);
@@ -402,7 +546,11 @@ function todayNewsItems(items, limit = 12) {
   );
   const datedItems = uniqueNewsItems([...todayItems, ...undatedItems], limit);
 
-  return datedItems.length ? datedItems : latestStockNewsItems(items, limit);
+  // Early in the Korea trading day (or on a quiet news day) same-calendar-day articles alone can
+  // be thin — once the strict "today" set falls short of a full page, pad it out with the next
+  // most recent stock-related items regardless of date rather than leaving the panel looking
+  // sparse. Today's own items still sort first, since latestStockNewsItems orders by recency.
+  return datedItems.length >= limit ? datedItems : latestStockNewsItems(items, limit);
 }
 
 function parseRssItems(xml, limit = 10) {
@@ -425,12 +573,13 @@ function parseRssItems(xml, limit = 10) {
         description,
         source: source || '뉴스',
         publishedAt: Number.isFinite(publishedAt) ? publishedAt : null,
+        thumbnailUrl: null,
       };
     })
     .filter((item) => item.title && item.link);
 }
 
-export async function fetchMarketNewsFromProviders({ query, tickers = [], language = 'ko', mode = 'today', signal, refreshKey } = {}) {
+async function fetchMarketNewsPayload({ query, tickers = [], language = 'ko', mode = 'today', signal, refreshKey } = {}) {
   const normalizedLanguage = normalizeLanguage(language);
   const cleanQuery = normalizeQuery(query);
   const cacheBust = refreshKey || Date.now();
@@ -531,6 +680,22 @@ export async function fetchMarketNewsFromProviders({ query, tickers = [], langua
   }
 
   return primaryPayload;
+}
+
+// Public entry point: runs whichever provider chain above succeeds, then makes one bounded
+// best-effort pass to backfill thumbnails for items that still don't have one (see
+// enrichWithOgImages) before handing the payload back to the server route / direct caller.
+export async function fetchMarketNewsFromProviders(options = {}) {
+  const payload = await fetchMarketNewsPayload(options);
+
+  if (!payload?.items?.length) {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    items: await enrichWithOgImages(payload.items, { signal: options.signal }),
+  };
 }
 export async function fetchMarketNews({ query, tickers, language, mode, refreshKey, signal } = {}) {
   if (typeof window !== 'undefined') {

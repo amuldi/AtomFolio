@@ -49,26 +49,3 @@ export function setAtomLabelSelected(labelObject, isSelected) {
     button.setAttribute('aria-pressed', String(isSelected));
   }
 }
-
-// Distant "other portfolio" preview label — just a name, no return value, plus the same
-// visually-hidden-but-focusable button pattern for keyboard access as the main atom labels.
-export function createPortfolioPreviewLabelObject(entry, { onSelect }) {
-  const container = document.createElement('div');
-  container.className = 'atom-webgl-preview-label';
-
-  const nameEl = document.createElement('span');
-  nameEl.className = 'atom-webgl-preview-label__name';
-  nameEl.textContent = entry.fileName ?? '';
-  container.appendChild(nameEl);
-
-  const focusButton = document.createElement('button');
-  focusButton.type = 'button';
-  focusButton.className = 'atom-webgl-focus-target';
-  focusButton.setAttribute('aria-label', entry.fileName ?? '');
-  focusButton.addEventListener('click', () => onSelect(entry.id));
-  container.appendChild(focusButton);
-
-  const object = new CSS2DObject(container);
-  object.userData.entryId = entry.id;
-  return object;
-}
