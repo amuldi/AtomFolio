@@ -1,0 +1,38 @@
+{
+  "name": "atomfolio-menubar",
+  "version": "0.1.0",
+  "description": "AtomFolio menu bar companion — portfolio total and holding news at a glance.",
+  "private": true,
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "ATOMFOLIO_API_BASE_URL=http://localhost:8787 electron .",
+    "build:mac": "electron-builder --mac"
+  },
+  "devDependencies": {
+    "electron": "^32.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.atomfolio.menubar",
+    "productName": "AtomFolio",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.finance",
+      "icon": "assets/icon.icns",
+      "target": [
+        {
+          "target": "dir",
+          "arch": ["arm64", "x64"]
+        }
+      ]
+    }
+  }
+}
