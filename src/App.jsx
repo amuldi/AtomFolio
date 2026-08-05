@@ -3562,21 +3562,48 @@ const NEWS_AUTO_REFRESH_MS = 90 * 1000;
 const NEWS_NEW_BADGE_VISIBLE_MS = 8000;
 const NEWS_PAGE_SIZE = 20;
 
+// MarketNewsPanel unmounts every time the drawer switches to a different tool tab (see
+// ToolSideDrawer's resolvedTool.key === 'news' gate) — plain useState would lose everything on
+// that unmount, so tabbing back to 뉴스 always looked like a fresh reload even seconds later. This
+// module-level object survives across mounts (reset on a full page reload, which is fine/expected)
+// so a remount can restore what was already loaded instead of starting over.
+const newsPanelCache = {
+  hasLoadedOnce: false,
+  language: null,
+  query: '',
+  submittedQuery: '',
+  news: null,
+  seenArticleIds: new Set(),
+};
+
 function MarketNewsPanel({ language }) {
   const requestIdRef = useRef(0);
   const activeNewsAbortRef = useRef(null);
-  const seenArticleIdsRef = useRef(new Set());
+  const seenArticleIdsRef = useRef(newsPanelCache.seenArticleIds);
   const newBadgeTimeoutRef = useRef(null);
-  const [query, setQuery] = useState('');
-  const [submittedQuery, setSubmittedQuery] = useState('');
-  const [news, setNews] = useState(null);
-  const [status, setStatus] = useState('idle');
+  const [query, setQuery] = useState(newsPanelCache.query);
+  const [submittedQuery, setSubmittedQuery] = useState(newsPanelCache.submittedQuery);
+  const [news, setNews] = useState(newsPanelCache.news);
+  const [status, setStatus] = useState(newsPanelCache.news ? 'ready' : 'idle');
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [newArticleIds, setNewArticleIds] = useState(() => new Set());
 
+  // Keep the cross-mount cache in sync with whatever's currently on screen — a plain effect per
+  // field rather than threading cache writes through every setQuery/setSubmittedQuery/setNews
+  // call site.
+  useEffect(() => {
+    newsPanelCache.query = query;
+  }, [query]);
+  useEffect(() => {
+    newsPanelCache.submittedQuery = submittedQuery;
+  }, [submittedQuery]);
+  useEffect(() => {
+    newsPanelCache.news = news;
+  }, [news]);
+
   const loadNews = useCallback(
-    async (nextQuery = '', { silent = false, page = 1, append = false } = {}) => {
+    async (nextQuery = '', { silent = false, page = 1, append = false, pageSize = NEWS_PAGE_SIZE } = {}) => {
       const requestId = requestIdRef.current + 1;
       requestIdRef.current = requestId;
 
@@ -3604,7 +3631,7 @@ function MarketNewsPanel({ language }) {
           mode: cleanQuery ? 'search' : 'today',
           refreshKey: append ? undefined : `${Date.now()}-${requestId}`,
           page,
-          pageSize: NEWS_PAGE_SIZE,
+          pageSize,
           signal: controller.signal,
         });
 
@@ -3672,10 +3699,31 @@ function MarketNewsPanel({ language }) {
   );
 
   useEffect(() => {
-    setSubmittedQuery('');
-    seenArticleIdsRef.current = new Set();
-    setNewArticleIds(new Set());
-    loadNews('');
+    // First-ever mount, or the UI language changed since the cache was built (cached articles
+    // would be in the wrong language) — do the original full reset + fresh load. Otherwise this
+    // is a remount after tabbing away and back: the cached state above already restored what was
+    // on screen, so just refresh it quietly in the background instead of blanking the panel.
+    const needsFreshLoad = !newsPanelCache.hasLoadedOnce || newsPanelCache.language !== language;
+
+    if (needsFreshLoad) {
+      newsPanelCache.hasLoadedOnce = true;
+      newsPanelCache.language = language;
+      setQuery('');
+      setSubmittedQuery('');
+      seenArticleIdsRef.current = new Set();
+      newsPanelCache.seenArticleIds = seenArticleIdsRef.current;
+      setNewArticleIds(new Set());
+      loadNews('');
+    } else {
+      // Re-fetch enough items to cover whatever was already showing (including anything loaded
+      // via "더 보기") rather than a plain page-1 refresh, which would otherwise silently prune
+      // the list back down to NEWS_PAGE_SIZE the moment this background refresh lands.
+      const previousItemCount = newsPanelCache.news?.items?.length ?? NEWS_PAGE_SIZE;
+      void loadNews(newsPanelCache.submittedQuery, {
+        silent: true,
+        pageSize: Math.max(NEWS_PAGE_SIZE, previousItemCount),
+      });
+    }
 
     return () => {
       requestIdRef.current += 1;
@@ -3686,18 +3734,24 @@ function MarketNewsPanel({ language }) {
 
   // Auto-refresh: only while this panel is mounted (i.e. actually open — see ToolSideDrawer's
   // resolvedTool.key === 'news' gate) and the tab is in the foreground. Background tabs pause
-  // entirely rather than firing polls that'll just be wasted work. Re-fetches page 1 only —
-  // any pages the user already loaded via "더 보기" stay as they were rather than being reset.
+  // entirely rather than firing polls that'll just be wasted work. Re-fetches enough items to
+  // cover whatever's already showing (see the pageSize note on the remount effect above) so
+  // anything loaded via "더 보기" survives the refresh instead of being silently pruned back to
+  // one page.
   useEffect(() => {
     const tick = () => {
       if (document.visibilityState === 'visible') {
-        void loadNews(submittedQuery, { silent: true });
+        const previousItemCount = news?.items?.length ?? NEWS_PAGE_SIZE;
+        void loadNews(submittedQuery, {
+          silent: true,
+          pageSize: Math.max(NEWS_PAGE_SIZE, previousItemCount),
+        });
       }
     };
 
     const intervalId = window.setInterval(tick, NEWS_AUTO_REFRESH_MS);
     return () => window.clearInterval(intervalId);
-  }, [loadNews, submittedQuery]);
+  }, [loadNews, submittedQuery, news?.items?.length]);
 
   const handleSearch = useCallback(
     (event) => {
