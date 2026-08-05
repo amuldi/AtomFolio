@@ -1,4 +1,16 @@
 const root = document.getElementById('root');
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+// Persists across re-renders (render() rebuilds the whole DOM on every state push, e.g. every
+// poll) so a background refresh doesn't snap the orbit back to 0deg or drop the user's selection.
+let rotationDeg = 0;
+let selectedHoldingId = null;
+let atomFrameId = null;
+let isDraggingAtom = false;
+// True once a pointerdown-then-move has actually rotated the ring past a small threshold —
+// distinct from isDraggingAtom (true for the whole press, including a plain tap) so a drag that
+// happens to end over a node doesn't get misread as a click on that node.
+let dragMoved = false;
 
 function formatCurrency(value) {
   if (!Number.isFinite(value)) {
@@ -33,6 +45,10 @@ function formatTime(value) {
   }).format(new Date(value));
 }
 
+function toneClass(value) {
+  return Number(value) > 0 ? 'is-profit' : Number(value) < 0 ? 'is-loss' : '';
+}
+
 function el(tag, className, children) {
   const node = document.createElement(tag);
   if (className) {
@@ -42,6 +58,14 @@ function el(tag, className, children) {
     if (child != null) {
       node.append(child);
     }
+  }
+  return node;
+}
+
+function svgEl(tag, attrs) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [key, value] of Object.entries(attrs ?? {})) {
+    node.setAttribute(key, String(value));
   }
   return node;
 }
@@ -92,6 +116,198 @@ function renderConnect(state) {
   return container;
 }
 
+// The atom stage: a nucleus (total portfolio) with each holding orbiting it as a node, sized by
+// portfolio weight and tinted by return. Drag horizontally to rotate the ring — the same "spin to
+// browse" gesture as the web app's atom scene, scaled down to a menu bar popover. Clicking a node
+// pins its detail in the readout below; clicking the nucleus (or nothing) returns to the total.
+function renderAtomStage(state) {
+  const holdings = Array.isArray(state.holdings) ? state.holdings : [];
+  const totals = state.totals;
+
+  const stage = el('div', 'atom-stage', []);
+  const svg = svgEl('svg', {
+    viewBox: '0 0 320 200',
+    class: 'atom-stage__svg',
+    role: 'img',
+    'aria-label': '보유 종목 궤도',
+  });
+
+  const cx = 160;
+  const cy = 100;
+  const rx = 122;
+  const ry = 62;
+
+  const orbitGroup = svgEl('g', { class: 'atom-orbit-group' });
+  orbitGroup.style.setProperty('--rotate', `${rotationDeg}deg`);
+  orbitGroup.style.transformOrigin = `${cx}px ${cy}px`;
+
+  // Faint orbit path purely for visual grounding — not interactive.
+  orbitGroup.append(
+    svgEl('ellipse', {
+      cx,
+      cy,
+      rx,
+      ry,
+      class: 'atom-orbit-ring',
+    }),
+  );
+
+  const weights = holdings.map((holding) => Number(holding.weightPercent) || 0);
+  const maxWeight = Math.max(1, ...weights);
+
+  holdings.forEach((holding, index) => {
+    const angle = (index / Math.max(1, holdings.length)) * Math.PI * 2;
+    const nx = cx + Math.cos(angle) * rx;
+    const ny = cy + Math.sin(angle) * ry;
+    const weightRatio = (Number(holding.weightPercent) || 0) / maxWeight;
+    const radius = 4.5 + weightRatio * 5.5;
+
+    const node = svgEl('circle', {
+      cx: nx,
+      cy: ny,
+      r: radius,
+      class: `atom-node ${toneClass(holding.returnRate)}${
+        holding.id === selectedHoldingId ? ' is-selected' : ''
+      }`,
+      tabindex: '0',
+      role: 'button',
+      'aria-label': holding.label || holding.code || '종목',
+    });
+    node.dataset.holdingId = holding.id ?? '';
+    const title = svgEl('title', {});
+    title.textContent = holding.label || holding.code || '';
+    node.append(title);
+
+    node.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (dragMoved) {
+        return;
+      }
+      selectedHoldingId = selectedHoldingId === holding.id ? null : holding.id;
+      render(state);
+    });
+
+    orbitGroup.append(node);
+  });
+
+  svg.append(orbitGroup);
+
+  const nucleus = svgEl('circle', {
+    cx,
+    cy,
+    r: 16,
+    class: `atom-nucleus ${toneClass(totals?.totalReturnRate)}`,
+    role: 'button',
+    'aria-label': '포트폴리오 총액',
+  });
+  nucleus.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (dragMoved) {
+      return;
+    }
+    selectedHoldingId = null;
+    render(state);
+  });
+  svg.append(nucleus);
+
+  stage.append(svg);
+  wireAtomDrag(stage, orbitGroup);
+
+  const selectedHolding = holdings.find((holding) => holding.id === selectedHoldingId) ?? null;
+  const readout = renderAtomReadout(selectedHolding, totals);
+
+  const wrapper = el('div', 'atom-section', [stage, readout]);
+  return wrapper;
+}
+
+function renderAtomReadout(holding, totals) {
+  if (holding) {
+    return el('div', 'atom-readout', [
+      el('div', 'atom-readout__label', [holding.label || holding.code || '종목']),
+      el('div', 'atom-readout__value', [formatCurrency(holding.marketValue)]),
+      el('div', 'atom-readout__row', [
+        Number.isFinite(holding.returnRate)
+          ? el('span', `atom-readout__chip ${toneClass(holding.returnRate)}`.trim(), [
+              `${formatCurrency(holding.profitAmount)} · ${formatPercent(holding.returnRate)}`,
+            ])
+          : null,
+        Number.isFinite(holding.weightPercent)
+          ? el('span', 'atom-readout__note', [`비중 ${holding.weightPercent.toFixed(1)}%`])
+          : null,
+      ]),
+    ]);
+  }
+
+  const returnRate = totals?.totalReturnRate;
+  const profitAmount = totals?.totalProfitAmount;
+
+  return el('div', 'atom-readout', [
+    el('div', 'atom-readout__label', ['포트폴리오 총액']),
+    el('div', 'atom-readout__value', [totals ? formatCurrency(totals.totalMarketValue) : '—']),
+    el('div', 'atom-readout__row', [
+      totals && Number.isFinite(returnRate)
+        ? el('span', `atom-readout__chip ${toneClass(returnRate)}`.trim(), [
+            `${formatCurrency(profitAmount)} · ${formatPercent(returnRate)}`,
+          ])
+        : null,
+      totals ? el('span', 'atom-readout__note', [`${totals.holdingsCount}개 종목`]) : null,
+    ]),
+  ]);
+}
+
+// Pointer-drag rotates the orbit group; releasing lets a slow idle spin resume from wherever the
+// user left it (never snaps back to 0), matching the "rotate to browse" feel of the web app scene.
+function wireAtomDrag(stage, orbitGroup) {
+  let dragStartX = 0;
+  let dragStartRotation = rotationDeg;
+
+  const applyRotation = () => {
+    orbitGroup.style.setProperty('--rotate', `${rotationDeg}deg`);
+  };
+
+  const handlePointerMove = (event) => {
+    const deltaX = event.clientX - dragStartX;
+    if (Math.abs(deltaX) > 3) {
+      dragMoved = true;
+    }
+    rotationDeg = dragStartRotation + deltaX * 0.6;
+    applyRotation();
+  };
+
+  const handlePointerUp = () => {
+    isDraggingAtom = false;
+    stage.classList.remove('is-dragging');
+    window.removeEventListener('pointermove', handlePointerMove);
+    window.removeEventListener('pointerup', handlePointerUp);
+  };
+
+  stage.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) {
+      return;
+    }
+    isDraggingAtom = true;
+    dragMoved = false;
+    dragStartX = event.clientX;
+    dragStartRotation = rotationDeg;
+    stage.classList.add('is-dragging');
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp, { once: true });
+  });
+
+  if (atomFrameId != null) {
+    cancelAnimationFrame(atomFrameId);
+  }
+
+  const idleSpin = () => {
+    if (!isDraggingAtom) {
+      rotationDeg += 0.03;
+      applyRotation();
+    }
+    atomFrameId = requestAnimationFrame(idleSpin);
+  };
+  atomFrameId = requestAnimationFrame(idleSpin);
+}
+
 function renderConnected(state) {
   const fragment = document.createDocumentFragment();
 
@@ -107,24 +323,7 @@ function renderConnected(state) {
     ]),
   ]);
   fragment.append(header);
-
-  const totals = state.totals;
-  const returnRate = totals?.totalReturnRate;
-  const profitAmount = totals?.totalProfitAmount;
-  const tone = Number(returnRate) > 0 ? 'is-profit' : Number(returnRate) < 0 ? 'is-loss' : '';
-
-  const totalsBlock = el('div', 'totals', [
-    el('div', 'totals__value', [totals ? formatCurrency(totals.totalMarketValue) : '—']),
-    el('div', 'totals__row', [
-      totals && Number.isFinite(returnRate)
-        ? el('span', `totals__chip ${tone}`.trim(), [
-            `${formatCurrency(profitAmount)} · ${formatPercent(returnRate)}`,
-          ])
-        : null,
-      totals ? el('span', 'totals__note', [`${totals.holdingsCount}개 종목`]) : null,
-    ]),
-  ]);
-  fragment.append(totalsBlock);
+  fragment.append(renderAtomStage(state));
 
   if (state.lastError) {
     fragment.append(el('div', 'error-banner', ['업데이트에 실패해 이전 데이터를 표시하고 있습니다.']));
@@ -169,6 +368,10 @@ function render(state) {
   root.innerHTML = '';
 
   if (!state?.connected) {
+    if (atomFrameId != null) {
+      cancelAnimationFrame(atomFrameId);
+      atomFrameId = null;
+    }
     root.append(renderConnect(state));
     return;
   }

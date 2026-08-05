@@ -15,6 +15,27 @@ export function summarizeWorkspacePortfolios(portfolios = []) {
   };
 }
 
+// Per-holding detail for the popover's atom view — the biggest positions by weight, largest
+// first, since only a handful of orbiting nodes fit legibly in a 340px-wide window.
+export function summarizeWorkspaceHoldings(portfolios = [], limit = 8) {
+  const allItems = portfolios.flatMap((entry) => (Array.isArray(entry.items) ? entry.items : []));
+  const summary = createPortfolioAnalyticsSummary(allItems, allItems);
+
+  return [...summary.positions]
+    .filter((position) => Number.isFinite(position.marketValue) && position.marketValue > 0)
+    .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))
+    .slice(0, limit)
+    .map((position) => ({
+      id: position.id,
+      label: position.label,
+      code: position.code,
+      marketValue: position.marketValue,
+      profitAmount: position.profitAmount,
+      returnRate: position.returnRate,
+      weightPercent: position.weightPercent,
+    }));
+}
+
 export function collectWorkspaceTickers(portfolios = [], limit = 5) {
   const tickers = [];
   const seen = new Set();

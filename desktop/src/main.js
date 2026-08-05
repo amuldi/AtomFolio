@@ -3,15 +3,19 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, saveConfig, rememberSeenArticleIds } from './lib/store.mjs';
 import { createApiClient } from './lib/api.mjs';
-import { summarizeWorkspacePortfolios, collectWorkspaceTickers } from './lib/portfolioTotals.mjs';
+import {
+  summarizeWorkspacePortfolios,
+  summarizeWorkspaceHoldings,
+  collectWorkspaceTickers,
+} from './lib/portfolioTotals.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Polling never runs faster than this even if a config file is hand-edited — protects the shared
 // news/portfolio API from a misconfigured client.
 const MIN_POLL_INTERVAL_SEC = 60;
-const POPOVER_WIDTH = 340;
-const POPOVER_HEIGHT = 480;
+const POPOVER_WIDTH = 360;
+const POPOVER_HEIGHT = 600;
 
 let tray = null;
 let popover = null;
@@ -27,6 +31,7 @@ let state = {
   lastError: null,
   lastUpdatedAt: null,
   totals: null,
+  holdings: [],
   news: [],
 };
 
@@ -135,7 +140,7 @@ async function refresh({ silent = false } = {}) {
   const config = loadConfig();
 
   if (!config.workspaceId) {
-    setState({ connected: false, loading: false, totals: null, news: [], lastError: null });
+    setState({ connected: false, loading: false, totals: null, holdings: [], news: [], lastError: null });
     return;
   }
 
@@ -149,6 +154,7 @@ async function refresh({ silent = false } = {}) {
     const portfolioPayload = await api.fetchPortfolios();
     const portfolios = portfolioPayload?.portfolios ?? [];
     const totals = summarizeWorkspacePortfolios(portfolios);
+    const holdings = summarizeWorkspaceHoldings(portfolios);
     const tickers = collectWorkspaceTickers(portfolios);
 
     let newsItems = [];
@@ -197,6 +203,7 @@ async function refresh({ silent = false } = {}) {
       lastError: null,
       lastUpdatedAt: Date.now(),
       totals,
+      holdings,
       news: decoratedNews,
     });
   } catch (error) {
@@ -248,7 +255,7 @@ function registerIpcHandlers() {
       pollTimer = null;
     }
 
-    setState({ connected: false, totals: null, news: [], lastError: null });
+    setState({ connected: false, totals: null, holdings: [], news: [], lastError: null });
     return { ok: true };
   });
 

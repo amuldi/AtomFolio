@@ -20,8 +20,8 @@
 
 html,
 body {
-  width: 340px;
-  height: 480px;
+  width: 360px;
+  height: 600px;
   overflow: hidden;
   background: transparent;
   font-family:
@@ -86,28 +86,117 @@ body {
   color: var(--ink-dim);
 }
 
-/* ---------- Totals ---------- */
+/* ---------- Atom stage ---------- */
 
-.totals {
-  padding: 4px 16px 14px;
+.atom-section {
   flex: 0 0 auto;
+  padding: 2px 8px 12px;
 }
 
-.totals__value {
-  font-size: 28px;
+.atom-stage {
+  height: 168px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.atom-stage.is-dragging {
+  cursor: grabbing;
+}
+
+.atom-stage__svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.atom-orbit-ring {
+  fill: none;
+  stroke: var(--hairline);
+  stroke-width: 1;
+}
+
+.atom-orbit-group {
+  transform: rotate(var(--rotate));
+}
+
+.atom-node {
+  fill: rgba(250, 246, 240, 0.5);
+  stroke: none;
+  cursor: pointer;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 160ms var(--ease), fill 160ms var(--ease);
+}
+
+.atom-node:hover {
+  transform: scale(1.3);
+}
+
+.atom-node.is-profit {
+  fill: var(--profit);
+}
+
+.atom-node.is-loss {
+  fill: var(--loss);
+}
+
+.atom-node.is-selected {
+  transform: scale(1.4);
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+.atom-nucleus {
+  fill: var(--ink);
+  stroke: rgba(255, 255, 255, 0.14);
+  stroke-width: 6;
+  cursor: pointer;
+  transition: transform 160ms var(--ease);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.atom-nucleus:hover {
+  transform: scale(1.06);
+}
+
+.atom-nucleus.is-profit {
+  stroke: var(--profit-bg);
+}
+
+.atom-nucleus.is-loss {
+  stroke: var(--loss-bg);
+}
+
+.atom-readout {
+  padding: 8px 8px 0;
+  min-height: 62px;
+}
+
+.atom-readout__label {
+  font-size: 11px;
+  font-weight: 620;
+  color: var(--ink-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.atom-readout__value {
+  margin-top: 2px;
+  font-size: 24px;
   font-weight: 660;
   letter-spacing: -0.02em;
-  line-height: 1.15;
+  line-height: 1.2;
 }
 
-.totals__row {
+.atom-readout__row {
   margin-top: 6px;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.totals__chip {
+.atom-readout__chip {
   display: inline-flex;
   align-items: center;
   padding: 3px 9px;
@@ -118,17 +207,17 @@ body {
   color: var(--ink-dim);
 }
 
-.totals__chip.is-profit {
+.atom-readout__chip.is-profit {
   background: var(--profit-bg);
   color: var(--profit);
 }
 
-.totals__chip.is-loss {
+.atom-readout__chip.is-loss {
   background: var(--loss-bg);
   color: var(--loss);
 }
 
-.totals__note {
+.atom-readout__note {
   font-size: 11.5px;
   color: var(--ink-faint);
 }
