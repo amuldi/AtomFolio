@@ -35,7 +35,6 @@
   --ui-layer-dock: 8;
   --ui-layer-dock-active: 12;
   --ui-layer-panel: 14;
-  --ui-layer-settings: 18;
   --ui-layer-upload: 22;
   --ui-layer-allocation: 23;
   --ui-layer-tooltip: 26;
@@ -373,18 +372,6 @@ body::after {
   font-feature-settings:
     'kern' 1,
     'liga' 1;
-}
-
-.settings-anchor {
-  position: fixed;
-  left: 0;
-  top: 0;
-  z-index: var(--ui-layer-settings);
-  display: flex;
-  align-items: flex-start;
-  pointer-events: auto;
-  will-change: transform;
-  contain: layout style;
 }
 
 .upload-anchor {
@@ -2499,45 +2486,11 @@ body::after {
   pointer-events: none;
 }
 
-.settings-wrap {
-  position: relative;
-  z-index: 1;
-}
-
-.settings-gear {
-  width: 4.45rem;
-  height: 4.45rem;
-  padding: 0;
-  border: none;
-  background: transparent;
-  cursor: grab;
-  touch-action: none;
-  filter: drop-shadow(0 0 15px rgba(248, 235, 212, 0.12));
-  transition:
-    transform 180ms ease,
-    opacity 180ms ease,
-    filter 240ms ease;
-}
-
-.settings-gear:hover,
-.settings-gear:focus-visible {
-  transform: scale(1.05);
-  filter: drop-shadow(0 0 22px rgba(247, 233, 208, 0.22));
-  outline: none;
-}
-
-.settings-anchor.is-dragging .settings-gear {
-  cursor: grabbing;
-  transform: scale(1.04);
-  filter: drop-shadow(0 0 24px rgba(247, 233, 208, 0.26));
-}
-
 .settings-gear__icon {
   width: 100%;
   height: 100%;
   overflow: visible;
   transform-origin: 50% 50%;
-  animation: gearSpin 24s linear infinite;
 }
 
 .settings-gear__outline-soft,
@@ -2562,59 +2515,9 @@ body::after {
   stroke-width: 1.96;
 }
 
-.settings-panel {
-  position: absolute;
-  top: 0.1rem;
-  right: calc(100% + 0.5rem);
-  min-width: 15.4rem;
-  width: min(17.8rem, calc(100vw - 2rem));
-  max-width: min(17.8rem, calc(100vw - 2rem));
-  max-height: calc(100vh - 2rem);
-  padding: 1rem 1rem 0.9rem;
-  box-sizing: border-box;
-  overflow-y: auto;
-  border: none;
-  border-radius: 20px;
-  background: rgba(8, 8, 8, 0.88);
-  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.48);
-  backdrop-filter: blur(20px);
-  isolation: isolate;
-  animation: settingsPanelIn 180ms cubic-bezier(0.2, 0.8, 0.4, 1) backwards;
-}
-
-@keyframes settingsPanelIn {
-  from {
-    opacity: 0;
-    transform: translate3d(6px, 0, 0) scale(0.97);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-}
-
-@keyframes settingsPanelInFlipped {
-  from {
-    opacity: 0;
-    transform: translate3d(-6px, 0, 0) scale(0.97);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-}
-
-.settings-anchor.is-flipped .settings-panel {
-  right: auto;
-  left: calc(100% + 0.5rem);
-  animation-name: settingsPanelInFlipped;
-}
-
-.settings-panel::before,
-.settings-panel::after {
-  content: none;
+.tool-drawer__settings {
+  display: grid;
+  gap: 0.2rem;
 }
 
 .settings-panel__section {
@@ -3317,7 +3220,8 @@ body::after {
 .tool-drawer__button .account-dock__icon,
 .tool-drawer__button .manual-dock__icon,
 .tool-drawer__button .news-dock__icon,
-.tool-drawer__button .twin-dock__icon {
+.tool-drawer__button .twin-dock__icon,
+.tool-drawer__button .settings-gear__icon {
   position: relative;
   z-index: 1;
   width: 3.2rem;
@@ -3330,7 +3234,8 @@ body::after {
 .tool-drawer__button.is-active .account-dock__icon,
 .tool-drawer__button.is-active .manual-dock__icon,
 .tool-drawer__button.is-active .news-dock__icon,
-.tool-drawer__button.is-active .twin-dock__icon {
+.tool-drawer__button.is-active .twin-dock__icon,
+.tool-drawer__button.is-active .settings-gear__icon {
   filter:
     drop-shadow(0 0 9px rgba(255, 247, 232, 0.42))
     drop-shadow(0 0 18px rgba(255, 247, 232, 0.24));
@@ -4720,6 +4625,12 @@ body::after {
   display: grid;
   gap: 0.46rem;
   min-width: 0;
+  opacity: 1;
+  transition: opacity 160ms ease;
+}
+
+.tool-drawer__news-list.is-loading {
+  opacity: 0.55;
 }
 
 .tool-drawer__news-card {
@@ -4815,29 +4726,51 @@ body::after {
   white-space: nowrap;
 }
 
-.tool-drawer__news-more {
-  width: 100%;
+.tool-drawer__news-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
   margin-top: 0.3rem;
-  padding: 0.5rem;
+}
+
+.tool-drawer__news-page {
+  min-width: 1.9rem;
+  height: 1.9rem;
+  padding: 0 0.4rem;
   border: 1px solid rgba(255, 242, 216, 0.08);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.03);
   color: rgba(255, 247, 232, 0.72);
   font-family: var(--ui-font);
-  font-size: 0.66rem;
+  font-size: 0.64rem;
   font-weight: 680;
   letter-spacing: 0;
   cursor: pointer;
-  transition: background-color 140ms cubic-bezier(0.2, 0.8, 0.4, 1), border-color 140ms cubic-bezier(0.2, 0.8, 0.4, 1);
+  transition:
+    background-color 140ms cubic-bezier(0.2, 0.8, 0.4, 1),
+    border-color 140ms cubic-bezier(0.2, 0.8, 0.4, 1),
+    color 140ms cubic-bezier(0.2, 0.8, 0.4, 1);
 }
 
-.tool-drawer__news-more:hover:not(:disabled) {
+.tool-drawer__news-page--nav {
+  font-size: 0.74rem;
+}
+
+.tool-drawer__news-page:hover:not(:disabled):not(.is-active) {
   border-color: rgba(255, 247, 232, 0.24);
   background: rgba(255, 248, 233, 0.075);
 }
 
-.tool-drawer__news-more:disabled {
-  opacity: 0.5;
+.tool-drawer__news-page.is-active {
+  border-color: rgba(255, 247, 232, 0.32);
+  background: rgba(255, 248, 233, 0.14);
+  color: rgba(255, 247, 232, 0.96);
+}
+
+.tool-drawer__news-page:disabled {
+  opacity: 0.35;
   cursor: default;
 }
 
@@ -6028,16 +5961,6 @@ body::after {
   }
 }
 
-@keyframes gearSpin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .control-note,
 .control-error {
   margin: 0;
@@ -6999,12 +6922,6 @@ body::after {
     width: 84%;
   }
 
-  .settings-panel {
-    min-width: 14.2rem;
-    width: min(16.6rem, calc(100vw - 1.8rem));
-    max-width: min(16.6rem, calc(100vw - 1.8rem));
-  }
-
   .allocation-widget {
     --allocation-panel-width: min(12.8rem, calc(100vw - 2rem));
   }
@@ -7045,18 +6962,6 @@ body::after {
     top: 0.9rem;
     min-width: 13.5rem;
     padding: 0.72rem 0.8rem;
-  }
-
-  .settings-gear {
-    width: 3.7rem;
-    height: 3.7rem;
-  }
-
-  .settings-panel {
-    min-width: min(13.6rem, calc(100vw - 1.4rem));
-    width: min(13.6rem, calc(100vw - 1.4rem));
-    max-width: min(13.6rem, calc(100vw - 1.4rem));
-    padding: 0.72rem 0.8rem 0.78rem;
   }
 
   .settings-panel__section + .settings-panel__section {
@@ -7179,7 +7084,8 @@ body::after {
   .tool-drawer__button .account-dock__icon,
   .tool-drawer__button .manual-dock__icon,
   .tool-drawer__button .news-dock__icon,
-  .tool-drawer__button .twin-dock__icon {
+  .tool-drawer__button .twin-dock__icon,
+  .tool-drawer__button .settings-gear__icon {
     width: 3.08rem;
     height: 3.08rem;
   }
@@ -7487,12 +7393,10 @@ body::after {
   .portfolio-preview,
   .portfolio-preview::before,
   .portfolio-preview__svg,
-  .settings-gear__icon,
   .upload-plus--large:not(.is-loading),
   .hover-card,
   .upload-file-chip,
   .upload-file-name-tooltip,
-  .settings-panel,
   .allocation-panel,
   .twin-panel,
   .tool-drawer,

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import {
   applyMarketScenario,
   createPortfolioTwin,
@@ -38,9 +38,9 @@ const TARGET_PLACEHOLDERS = {
   other: '10',
 };
 const INVESTMENT_RETURN_PRESETS = [
-  { key: 'stable', label: '안정적으로', scenarioLabel: '안정', rate: 4 },
-  { key: 'balanced', label: '적당히', scenarioLabel: '기본', rate: 7 },
-  { key: 'aggressive', label: '공격적으로', scenarioLabel: '공격', rate: 10 },
+  { key: 'stable', label: '안정적', sentenceLabel: '안정적으로', scenarioLabel: '안정', rate: 4 },
+  { key: 'balanced', label: '중간', sentenceLabel: '적당히', scenarioLabel: '기본', rate: 7 },
+  { key: 'aggressive', label: '공격적', sentenceLabel: '공격적으로', scenarioLabel: '공격', rate: 10 },
 ];
 const MONTHLY_CONTRIBUTION_PRESETS = [
   { key: '100000', label: '10만 원', value: 100000 },
@@ -216,7 +216,7 @@ function TwinOverview({ twin, activeResult }) {
   );
 }
 
-export default function DigitalTwinPanel({
+function DigitalTwinPanel({
   items = [],
   timelineItems = [],
   className = '',
@@ -299,7 +299,7 @@ export default function DigitalTwinPanel({
   const hasStartingValue = investmentTwin.totalValue > 0;
   const resultSentence = `${hasStartingValue ? '현재 포트폴리오에 ' : ''}매월 ${formatKoreanWonShort(
     monthlyContribution,
-  )}씩 ${formatDuration(investmentMonths)} 동안 ${selectedReturnPreset.label} 투자하면 예상 금액은 약 ${formatKoreanWonShort(
+  )}씩 ${formatDuration(investmentMonths)} 동안 ${selectedReturnPreset.sentenceLabel} 투자하면 예상 금액은 약 ${formatKoreanWonShort(
     projectedValue,
   )}입니다.`;
 
@@ -562,3 +562,5 @@ export default function DigitalTwinPanel({
     </aside>
   );
 }
+
+export default memo(DigitalTwinPanel);

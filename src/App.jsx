@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { createPortfolioHeatmap } from './lib/portfolioHeatmap.js';
 import { createPortfolioAllocation } from './lib/portfolioAllocation.js';
@@ -31,10 +31,7 @@ import {
   isGuestPortfolioWorkspaceId,
   listServerPortfolios,
   readStoredOption,
-  readStoredPosition,
   setPortfolioWorkspaceId,
-  writeStoredPosition,
-  clearStoredPosition,
   saveServerImportHistory,
 } from './utils/storage.js';
 import {
@@ -99,7 +96,6 @@ const STORAGE_KEYS = {
   autoSave: 'atom-sketch-auto-save',
   dailySnapshots: 'atom-sketch-daily-snapshots',
   portfolioData: 'atom-sketch-portfolio-data-v1',
-  settingsDockPosition: 'atom-sketch-settings-dock-position',
   toolTriggerPosition: 'atom-sketch-tool-trigger-position',
   groupDockPosition: 'atom-sketch-group-dock-position',
   heatmapDockPosition: 'atom-sketch-heatmap-dock-position',
@@ -107,7 +103,6 @@ const STORAGE_KEYS = {
   allocationDockPosition: 'atom-sketch-allocation-dock-position',
   twinDockPosition: 'atom-sketch-twin-dock-position',
 };
-const MOBILE_BREAKPOINT = 560;
 const SHOOTING_STAR_INTERVAL_MS = 30000;
 const SHOOTING_STAR_CLEAR_BUFFER_MS = 420;
 const SCENE_FRAME_INTERVAL_MS = 1000 / 30;
@@ -996,396 +991,6 @@ function sceneFrameIntervalFor(atomCount, reducedMotion, isDragging = false) {
   return atomCount > LARGE_SCENE_ATOM_THRESHOLD
     ? LARGE_SCENE_FRAME_INTERVAL_MS
     : SCENE_FRAME_INTERVAL_MS;
-}
-
-function uiInsetFor(width) {
-  if (width <= MOBILE_BREAKPOINT) {
-    return 14.4;
-  }
-
-  return clamp(width * 0.022, 16, 28.8);
-}
-
-function gearSizeFor(width) {
-  return (width <= MOBILE_BREAKPOINT ? 3.7 : 4.45) * 16;
-}
-
-function floatingPanelSideFor(positionX, dockSize, viewportWidth) {
-  if (typeof positionX !== 'number') {
-    return 'right';
-  }
-
-  const resolvedViewportWidth =
-    typeof viewportWidth === 'number'
-      ? viewportWidth
-      : typeof window !== 'undefined'
-        ? window.innerWidth
-        : 0;
-
-  if (!resolvedViewportWidth) {
-    return 'right';
-  }
-
-  return positionX + dockSize * 0.5 >= resolvedViewportWidth * 0.5 ? 'left' : 'right';
-}
-
-function useFloatingHandle({
-  initialPosition,
-  fallbackSize,
-  measureBounds,
-  onInteract,
-  onPress,
-  resetSignal,
-  followAnchor = true,
-  continuousFollow = false,
-  storageKey = null,
-}) {
-  const containerRef = useRef(null);
-  const hasUserMovedRef = useRef(false);
-  const snapContextRef = useRef({
-    clearPress: null,
-    clampPosition: null,
-    initialPosition: null,
-  });
-  const pressRef = useRef({
-    pointerId: null,
-    startX: 0,
-    startY: 0,
-    originX: 0,
-    originY: 0,
-    lastX: 0,
-    lastY: 0,
-    pressAt: 0,
-    dragStarted: false,
-    action: 'toggle',
-    holdTimer: null,
-  });
-  const [dragging, setDragging] = useState(false);
-  const [position, setPosition] = useState(() => {
-    if (typeof window === 'undefined') {
-      return { x: 0, y: 0 };
-    }
-
-    const storedPosition = readStoredPosition(storageKey);
-    if (storedPosition) {
-      hasUserMovedRef.current = true;
-      return storedPosition;
-    }
-
-    return initialPosition(window);
-  });
-
-  const clampPosition = (nextX, nextY) => {
-    if (typeof window === 'undefined') {
-      return { x: nextX, y: nextY };
-    }
-
-    const margin = uiInsetFor(window.innerWidth);
-    const fallback = fallbackSize(window.innerWidth);
-    const measuredBounds = measureBounds?.({
-      container: containerRef.current,
-      fallback,
-      viewportWidth: window.innerWidth,
-      viewportHeight: window.innerHeight,
-      nextX,
-      nextY,
-    });
-    const width =
-      measuredBounds?.width ?? containerRef.current?.offsetWidth ?? fallback.width;
-    const height =
-      measuredBounds?.height ?? containerRef.current?.offsetHeight ?? fallback.height;
-    const offsetX = measuredBounds?.offsetX ?? 0;
-    const offsetY = measuredBounds?.offsetY ?? 0;
-
-    return {
-      x: clamp(
-        nextX,
-        margin - offsetX,
-        Math.max(margin - offsetX, window.innerWidth - width - margin - offsetX),
-      ),
-      y: clamp(
-        nextY,
-        margin - offsetY,
-        Math.max(margin - offsetY, window.innerHeight - height - margin - offsetY),
-      ),
-    };
-  };
-
-  const reusePositionIfUnchanged = (current, next) =>
-    Math.abs(current.x - next.x) < 0.01 && Math.abs(current.y - next.y) < 0.01
-      ? current
-      : next;
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return undefined;
-    }
-
-    let frameId = 0;
-    let cancelled = false;
-    let remainingFrames = 0;
-
-    const syncPosition = () => {
-      if (cancelled) {
-        return;
-      }
-
-      setPosition((current) => {
-        if (hasUserMovedRef.current) {
-          return reusePositionIfUnchanged(current, clampPosition(current.x, current.y));
-        }
-
-        if (!followAnchor) {
-          return reusePositionIfUnchanged(current, clampPosition(current.x, current.y));
-        }
-
-        const anchored = initialPosition(window);
-        return reusePositionIfUnchanged(current, clampPosition(anchored.x, anchored.y));
-      });
-
-      remainingFrames -= 1;
-      if (
-        followAnchor &&
-        !hasUserMovedRef.current &&
-        remainingFrames > 0
-      ) {
-        frameId = window.requestAnimationFrame(syncPosition);
-        return;
-      }
-
-      frameId = 0;
-    };
-
-    const scheduleSync = (frames = continuousFollow ? 120 : 18) => {
-      remainingFrames = Math.max(remainingFrames, frames);
-      if (!frameId) {
-        frameId = window.requestAnimationFrame(syncPosition);
-      }
-    };
-
-    const handleResize = () => scheduleSync();
-
-    scheduleSync();
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      cancelled = true;
-      window.removeEventListener('resize', handleResize);
-      if (frameId) {
-        window.cancelAnimationFrame(frameId);
-      }
-    };
-  }, [continuousFollow, fallbackSize, followAnchor, initialPosition, measureBounds]);
-
-  const beginDrag = () => {
-    if (pressRef.current.pointerId === null) {
-      return;
-    }
-
-    window.clearTimeout(pressRef.current.holdTimer);
-    pressRef.current.holdTimer = null;
-    pressRef.current.dragStarted = true;
-    hasUserMovedRef.current = true;
-    setDragging(true);
-    document.body.style.cursor = 'grabbing';
-    setPosition(
-      clampPosition(
-        pressRef.current.originX + (pressRef.current.lastX - pressRef.current.startX),
-        pressRef.current.originY + (pressRef.current.lastY - pressRef.current.startY),
-      ),
-    );
-  };
-
-  const clearPress = () => {
-    window.clearTimeout(pressRef.current.holdTimer);
-    pressRef.current.pointerId = null;
-    pressRef.current.dragStarted = false;
-    pressRef.current.action = 'toggle';
-    pressRef.current.holdTimer = null;
-    setDragging(false);
-    document.body.style.cursor = '';
-  };
-
-  snapContextRef.current.clearPress = clearPress;
-  snapContextRef.current.clampPosition = clampPosition;
-  snapContextRef.current.initialPosition = initialPosition;
-
-  const snapToInitial = useCallback(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    snapContextRef.current.clearPress?.();
-    hasUserMovedRef.current = false;
-    clearStoredPosition(storageKey);
-    const anchored = snapContextRef.current.initialPosition?.(window) ?? { x: 0, y: 0 };
-    setPosition(snapContextRef.current.clampPosition?.(anchored.x, anchored.y) ?? anchored);
-  }, [storageKey]);
-
-  useEffect(() => {
-    if (!resetSignal || typeof window === 'undefined') {
-      return;
-    }
-
-    snapToInitial();
-  }, [resetSignal, snapToInitial]);
-
-  useEffect(() => {
-    if (
-      typeof window === 'undefined' ||
-      !storageKey ||
-      dragging ||
-      !hasUserMovedRef.current
-    ) {
-      return;
-    }
-
-    writeStoredPosition(storageKey, position);
-  }, [dragging, position, storageKey]);
-
-  useEffect(() => {
-    const handleWindowPointerMove = (event) => {
-      if (pressRef.current.pointerId !== event.pointerId) {
-        return;
-      }
-
-      pressRef.current.lastX = event.clientX;
-      pressRef.current.lastY = event.clientY;
-      const deltaX = event.clientX - pressRef.current.startX;
-      const deltaY = event.clientY - pressRef.current.startY;
-      const distanceSquared = deltaX * deltaX + deltaY * deltaY;
-      const action = pressRef.current.action;
-      const dragDistanceThreshold = action === 'toggle' ? 36 : 9;
-      const shouldStartDrag =
-        distanceSquared > dragDistanceThreshold ||
-        (action !== 'toggle' && performance.now() - pressRef.current.pressAt > 90);
-
-      if (!pressRef.current.dragStarted) {
-        if (shouldStartDrag) {
-          beginDrag();
-        } else {
-          return;
-        }
-      }
-
-      event.preventDefault();
-      onInteract?.();
-      setPosition(
-        clampPosition(
-          pressRef.current.originX + deltaX,
-          pressRef.current.originY + deltaY,
-        ),
-      );
-    };
-
-    const handleWindowPointerUp = (event) => {
-      if (pressRef.current.pointerId !== event.pointerId) {
-        return;
-      }
-
-      const deltaX = event.clientX - pressRef.current.startX;
-      const deltaY = event.clientY - pressRef.current.startY;
-      const wasDrag = pressRef.current.dragStarted;
-      const wasClick = !wasDrag && deltaX * deltaX + deltaY * deltaY < 100;
-      const action = pressRef.current.action;
-
-      clearPress();
-
-      if (wasDrag) {
-        event.preventDefault();
-        return;
-      }
-
-      if (wasClick && action === 'toggle') {
-        onInteract?.();
-        onPress?.();
-      }
-    };
-
-    const handleWindowPointerCancel = (event) => {
-      if (pressRef.current.pointerId !== event.pointerId) {
-        return;
-      }
-
-      clearPress();
-    };
-
-    window.addEventListener('pointermove', handleWindowPointerMove, {
-      passive: false,
-    });
-    window.addEventListener('pointerup', handleWindowPointerUp);
-    window.addEventListener('pointercancel', handleWindowPointerCancel);
-
-    return () => {
-      window.removeEventListener('pointermove', handleWindowPointerMove);
-      window.removeEventListener('pointerup', handleWindowPointerUp);
-      window.removeEventListener('pointercancel', handleWindowPointerCancel);
-      window.clearTimeout(pressRef.current.holdTimer);
-    };
-  }, [onInteract, onPress]);
-
-  const startPress = (event, action, options = {}) => {
-    const {
-      capture = false,
-      preventDefault = false,
-      stopPropagation = false,
-      holdDelay = 90,
-    } = options;
-
-    if (preventDefault) {
-      event.preventDefault();
-    }
-
-    if (stopPropagation) {
-      event.stopPropagation();
-    }
-
-    onInteract?.();
-    if (capture) {
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-    }
-    pressRef.current.pointerId = event.pointerId;
-    pressRef.current.startX = event.clientX;
-    pressRef.current.startY = event.clientY;
-    pressRef.current.originX = position.x;
-    pressRef.current.originY = position.y;
-    pressRef.current.lastX = event.clientX;
-    pressRef.current.lastY = event.clientY;
-    pressRef.current.pressAt = performance.now();
-    pressRef.current.dragStarted = false;
-    pressRef.current.action = action;
-    pressRef.current.holdTimer =
-      Number.isFinite(holdDelay) && holdDelay >= 0
-        ? window.setTimeout(beginDrag, holdDelay)
-        : null;
-  };
-
-  const handlePointerDown = (event) => {
-    startPress(event, 'toggle', {
-      capture: true,
-      preventDefault: true,
-      stopPropagation: true,
-      holdDelay: null,
-    });
-  };
-
-  const handleDragPointerDown = (event) => {
-    startPress(event, 'drag', {
-      capture: false,
-      preventDefault: false,
-      stopPropagation: true,
-      holdDelay: 90,
-    });
-  };
-
-  return {
-    containerRef,
-    dragging,
-    position,
-    handlePointerDown,
-    handleDragPointerDown,
-    snapToInitial,
-  };
 }
 
 function format(value) {
@@ -2396,6 +2001,36 @@ function liveQuoteMatchesLookup(quote, lookup) {
   return returnedSymbol === requestedTicker;
 }
 
+const LIVE_QUOTE_FETCH_CONCURRENCY = 6;
+const LIVE_QUOTE_REFRESH_MS = 90 * 1000;
+// Bounds each background refresh burst well under the server's 30-requests/60s market-live rate
+// limit (see server/apiHandlers.mjs RATE_LIMITS) even with the concurrency above, leaving headroom
+// for whatever else (manual ticker search, financials lookups) shares that same per-user budget.
+const LIVE_QUOTE_REFRESH_MAX_ITEMS = 20;
+
+// Runs `worker` over `items` with at most `limit` requests in flight at once — a portfolio's
+// worth of quote lookups used to go out one at a time (a 20-holding portfolio meant 20 sequential
+// round-trips, each waiting on the last), which is what made live-quote backfill and refresh feel
+// slow. A shared cursor lets `limit` workers keep pulling the next item until the list is drained.
+async function mapWithConcurrency(items, limit, worker) {
+  const results = new Array(items.length);
+  let cursor = 0;
+
+  async function runWorker() {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await worker(items[index], index);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, () => runWorker()),
+  );
+
+  return results;
+}
+
 async function enrichPortfolioItemsWithLiveQuotes(items) {
   if (!Array.isArray(items) || !items.length) {
     return items;
@@ -2416,7 +2051,7 @@ async function enrichPortfolioItemsWithLiveQuotes(items) {
 
   const quoteByKey = new Map();
 
-  for (const lookup of lookups.slice(0, 80)) {
+  await mapWithConcurrency(lookups.slice(0, 80), LIVE_QUOTE_FETCH_CONCURRENCY, async (lookup) => {
     try {
       const quote = await fetchLiveMarketData({
         ticker: lookup.ticker,
@@ -2428,7 +2063,7 @@ async function enrichPortfolioItemsWithLiveQuotes(items) {
     } catch {
       // Leave the uploaded value as-is when every live provider fails.
     }
-  }
+  });
 
   return items.map((item) => {
     const lookup = liveQuoteLookupForItem(item);
@@ -3576,16 +3211,16 @@ const newsPanelCache = {
   seenArticleIds: new Set(),
 };
 
-function MarketNewsPanel({ language }) {
+const MarketNewsPanel = memo(function MarketNewsPanel({ language }) {
   const requestIdRef = useRef(0);
   const activeNewsAbortRef = useRef(null);
   const seenArticleIdsRef = useRef(newsPanelCache.seenArticleIds);
   const newBadgeTimeoutRef = useRef(null);
+  const rootRef = useRef(null);
   const [query, setQuery] = useState(newsPanelCache.query);
   const [submittedQuery, setSubmittedQuery] = useState(newsPanelCache.submittedQuery);
   const [news, setNews] = useState(newsPanelCache.news);
   const [status, setStatus] = useState(newsPanelCache.news ? 'ready' : 'idle');
-  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [newArticleIds, setNewArticleIds] = useState(() => new Set());
 
@@ -3603,23 +3238,20 @@ function MarketNewsPanel({ language }) {
   }, [news]);
 
   const loadNews = useCallback(
-    async (nextQuery = '', { silent = false, page = 1, append = false, pageSize = NEWS_PAGE_SIZE } = {}) => {
+    async (
+      nextQuery = '',
+      { silent = false, page = 1, pageSize = NEWS_PAGE_SIZE, forceRefresh = false } = {},
+    ) => {
       const requestId = requestIdRef.current + 1;
       requestIdRef.current = requestId;
 
-      if (!append) {
-        activeNewsAbortRef.current?.abort();
-      }
+      activeNewsAbortRef.current?.abort();
 
       const controller = new AbortController();
-      if (!append) {
-        activeNewsAbortRef.current = controller;
-      }
+      activeNewsAbortRef.current = controller;
       const cleanQuery = String(nextQuery ?? '').trim();
 
-      if (append) {
-        setLoadingMore(true);
-      } else if (!silent) {
+      if (!silent) {
         setStatus('loading');
         setError('');
       }
@@ -3629,7 +3261,10 @@ function MarketNewsPanel({ language }) {
           query: cleanQuery,
           language,
           mode: cleanQuery ? 'search' : 'today',
-          refreshKey: append ? undefined : `${Date.now()}-${requestId}`,
+          // Only an explicit refresh bypasses the server's cached pool — page navigation and the
+          // 90s auto-refresh tick reuse it, which is what keeps those near-instant instead of
+          // re-triggering a ~3.5s full Naver/Bing/OG-image scrape on every click or tick.
+          refreshKey: forceRefresh ? `${Date.now()}-${requestId}` : undefined,
           page,
           pageSize,
           signal: controller.signal,
@@ -3639,22 +3274,22 @@ function MarketNewsPanel({ language }) {
           return;
         }
 
-        if (append) {
-          setNews((previous) => ({
-            ...payload,
-            items: [...(previous?.items ?? []), ...(payload.items ?? [])],
-          }));
-          setLoadingMore(false);
-          return;
-        }
-
+        // NEW badges only make sense on a background auto-refresh of a page that already has a
+        // prior snapshot to compare against — a page the reader is navigating to for the first
+        // time isn't "new content arriving", it's just content they haven't looked at yet. The
+        // `seenIds.size` check additionally guards against React StrictMode's double-invoked
+        // mount effect: the second invocation can see the cache's `hasLoadedOnce` flag already
+        // set (from the first invocation's synchronous portion) and take the silent-refresh
+        // branch before any response has actually populated seenIds yet, which would otherwise
+        // badge the very first load's entire list as "new".
         const seenIds = seenArticleIdsRef.current;
-        const isFirstLoadForThisQuery = seenIds.size === 0;
-        const freshIds = new Set(
-          (payload.items ?? [])
-            .filter((article) => article.id && !seenIds.has(article.id))
-            .map((article) => article.id),
-        );
+        const freshIds = silent && seenIds.size > 0
+          ? new Set(
+              (payload.items ?? [])
+                .filter((article) => article.id && !seenIds.has(article.id))
+                .map((article) => article.id),
+            )
+          : new Set();
         for (const article of payload.items ?? []) {
           if (article.id) {
             seenIds.add(article.id);
@@ -3665,9 +3300,7 @@ function MarketNewsPanel({ language }) {
         setStatus('ready');
         setError('');
 
-        // Badges only make sense once there's a prior snapshot to compare against — the very
-        // first load of a query shouldn't paint its whole result list as "new".
-        if (!isFirstLoadForThisQuery && freshIds.size) {
+        if (freshIds.size) {
           window.clearTimeout(newBadgeTimeoutRef.current);
           setNewArticleIds(freshIds);
           newBadgeTimeoutRef.current = window.setTimeout(() => {
@@ -3676,11 +3309,6 @@ function MarketNewsPanel({ language }) {
         }
       } catch {
         if (requestIdRef.current !== requestId || controller.signal.aborted) {
-          return;
-        }
-
-        if (append) {
-          setLoadingMore(false);
           return;
         }
 
@@ -3715,13 +3343,11 @@ function MarketNewsPanel({ language }) {
       setNewArticleIds(new Set());
       loadNews('');
     } else {
-      // Re-fetch enough items to cover whatever was already showing (including anything loaded
-      // via "더 보기") rather than a plain page-1 refresh, which would otherwise silently prune
-      // the list back down to NEWS_PAGE_SIZE the moment this background refresh lands.
-      const previousItemCount = newsPanelCache.news?.items?.length ?? NEWS_PAGE_SIZE;
+      // Re-fetch whichever page was already showing (a cache-served slice, not a fresh scrape)
+      // so tabbing back in doesn't reset pagination back to page 1.
       void loadNews(newsPanelCache.submittedQuery, {
         silent: true,
-        pageSize: Math.max(NEWS_PAGE_SIZE, previousItemCount),
+        page: newsPanelCache.news?.page ?? 1,
       });
     }
 
@@ -3734,24 +3360,19 @@ function MarketNewsPanel({ language }) {
 
   // Auto-refresh: only while this panel is mounted (i.e. actually open — see ToolSideDrawer's
   // resolvedTool.key === 'news' gate) and the tab is in the foreground. Background tabs pause
-  // entirely rather than firing polls that'll just be wasted work. Re-fetches enough items to
-  // cover whatever's already showing (see the pageSize note on the remount effect above) so
-  // anything loaded via "더 보기" survives the refresh instead of being silently pruned back to
-  // one page.
+  // entirely rather than firing polls that'll just be wasted work. Re-fetches whichever page is
+  // currently on screen — silent, so no refreshKey, so this reads the server's cached pool
+  // instead of re-triggering a full scrape every 90s.
   useEffect(() => {
     const tick = () => {
       if (document.visibilityState === 'visible') {
-        const previousItemCount = news?.items?.length ?? NEWS_PAGE_SIZE;
-        void loadNews(submittedQuery, {
-          silent: true,
-          pageSize: Math.max(NEWS_PAGE_SIZE, previousItemCount),
-        });
+        void loadNews(submittedQuery, { silent: true, page: news?.page ?? 1 });
       }
     };
 
     const intervalId = window.setInterval(tick, NEWS_AUTO_REFRESH_MS);
     return () => window.clearInterval(intervalId);
-  }, [loadNews, submittedQuery, news?.items?.length]);
+  }, [loadNews, submittedQuery, news?.page]);
 
   const handleSearch = useCallback(
     (event) => {
@@ -3766,13 +3387,21 @@ function MarketNewsPanel({ language }) {
   );
 
   const handleRefresh = useCallback(() => {
-    loadNews(submittedQuery);
-  }, [loadNews, submittedQuery]);
+    loadNews(submittedQuery, { page: news?.page ?? 1, forceRefresh: true });
+  }, [loadNews, submittedQuery, news?.page]);
 
-  const handleLoadMore = useCallback(() => {
-    const nextPage = (news?.page ?? 1) + 1;
-    loadNews(submittedQuery, { page: nextPage, append: true });
-  }, [loadNews, news?.page, submittedQuery]);
+  const handleGoToPage = useCallback(
+    (pageNumber) => {
+      const totalPages = Math.max(1, Math.ceil((news?.totalCount ?? 0) / (news?.pageSize ?? NEWS_PAGE_SIZE)));
+      const clampedPage = Math.min(Math.max(1, pageNumber), totalPages);
+      if (clampedPage === (news?.page ?? 1)) {
+        return;
+      }
+      loadNews(submittedQuery, { page: clampedPage });
+      rootRef.current?.closest('.tool-drawer__body')?.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    [loadNews, news?.page, news?.pageSize, news?.totalCount, submittedQuery],
+  );
 
   const newsItems = news?.items ?? [];
   const isSearchMode = Boolean(submittedQuery || news?.mode === 'search');
@@ -3782,9 +3411,13 @@ function MarketNewsPanel({ language }) {
   const emptyCopy = isSearchMode
     ? language === 'en' ? 'No matching news.' : '검색 결과가 없습니다.'
     : language === 'en' ? 'No recent stock news found.' : '최신 주식 뉴스를 찾지 못했습니다.';
+  const currentPage = news?.page ?? 1;
+  const pageSize = news?.pageSize ?? NEWS_PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil((news?.totalCount ?? 0) / pageSize));
+  const pageNumbers = Array.from({ length: totalPages }, (_, index) => index + 1);
 
   return (
-    <div className="tool-drawer__news">
+    <div className="tool-drawer__news" ref={rootRef}>
       <form className="tool-drawer__news-search" onSubmit={handleSearch}>
         <input
           type="text"
@@ -3816,7 +3449,7 @@ function MarketNewsPanel({ language }) {
         <p className="tool-drawer__empty">{emptyCopy}</p>
       ) : null}
 
-      <div className="tool-drawer__news-list">
+      <div className={`tool-drawer__news-list${status === 'loading' ? ' is-loading' : ''}`}>
         {newsItems.map((article) => {
           const sourceLabel = /naver|네이버/i.test(article.source ?? '')
             ? language === 'en' ? 'Market news' : '주식 뉴스'
@@ -3859,21 +3492,43 @@ function MarketNewsPanel({ language }) {
         })}
       </div>
 
-      {news?.hasMore ? (
-        <button
-          type="button"
-          className="tool-drawer__news-more"
-          onClick={handleLoadMore}
-          disabled={loadingMore}
-        >
-          {loadingMore
-            ? language === 'en' ? 'Loading…' : '불러오는 중…'
-            : language === 'en' ? 'Load more' : '더 보기'}
-        </button>
+      {totalPages > 1 ? (
+        <nav className="tool-drawer__news-pagination" aria-label={language === 'en' ? 'News pages' : '뉴스 페이지'}>
+          <button
+            type="button"
+            className="tool-drawer__news-page tool-drawer__news-page--nav"
+            onClick={() => handleGoToPage(currentPage - 1)}
+            disabled={currentPage <= 1 || status === 'loading'}
+            aria-label={language === 'en' ? 'Previous page' : '이전 페이지'}
+          >
+            ‹
+          </button>
+          {pageNumbers.map((pageNumber) => (
+            <button
+              key={pageNumber}
+              type="button"
+              className={`tool-drawer__news-page${pageNumber === currentPage ? ' is-active' : ''}`}
+              onClick={() => handleGoToPage(pageNumber)}
+              disabled={status === 'loading'}
+              aria-current={pageNumber === currentPage ? 'page' : undefined}
+            >
+              {pageNumber}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="tool-drawer__news-page tool-drawer__news-page--nav"
+            onClick={() => handleGoToPage(currentPage + 1)}
+            disabled={currentPage >= totalPages || status === 'loading'}
+            aria-label={language === 'en' ? 'Next page' : '다음 페이지'}
+          >
+            ›
+          </button>
+        </nav>
       ) : null}
     </div>
   );
-}
+});
 function ToolSideDrawer({
   open,
   activeTool,
@@ -3911,6 +3566,7 @@ function ToolSideDrawer({
   fxRates = DEFAULT_DISPLAY_FX_RATES,
   layerStyle,
   onInteract,
+  renderSettingsPanel,
 }) {
   const text = textFor(language);
   const [resizing, setResizing] = useState(false);
@@ -3979,6 +3635,12 @@ function ToolSideDrawer({
       key: 'news',
       label: language === 'en' ? 'Market News' : '시장 뉴스',
       icon: <SketchNewsIcon />,
+      available: true,
+    },
+    {
+      key: 'settings',
+      label: text.settings,
+      icon: <SketchGearIcon />,
       available: true,
     },
   ].filter((tool) => tool.available);
@@ -5585,6 +5247,10 @@ function ToolSideDrawer({
       return <MarketNewsPanel items={items} language={language} />;
     }
 
+    if (resolvedTool.key === 'settings') {
+      return renderSettingsPanel?.();
+    }
+
     return null;
   };
 
@@ -5669,7 +5335,6 @@ export default function App() {
   const shellRef = useRef(null);
   const svgRef = useRef(null);
   const fileInputRef = useRef(null);
-  const settingsRef = useRef(null);
   const atomsRef = useRef(
     generateAtomLayout([], { resolveLabel: resolveAtomStockDisplayName }).map(createAtomState),
   );
@@ -5707,6 +5372,7 @@ export default function App() {
   const portfolioLastSavedAtRef = useRef(restoredPortfolioState.savedAt);
   const [portfolioEntries, setPortfolioEntries] = useState(() => restoredPortfolioState.entries);
   const portfolioEntriesRef = useRef(restoredPortfolioState.entries);
+  const activePortfolioLiveItemsRef = useRef([]);
   const [activePortfolioId, setActivePortfolioId] = useState(
     () => restoredPortfolioState.activePortfolioId,
   );
@@ -5730,7 +5396,6 @@ export default function App() {
   const fileDragCounterRef = useRef(0);
   const [, setPortfolioLoading] = useState(false);
   const [introCenterBurstAt, setIntroCenterBurstAt] = useState(-1);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeFloatingTool, setActiveFloatingTool] = useState(null);
   const [language, setLanguage] = useState(() => {
     if (typeof window === 'undefined') {
@@ -5788,10 +5453,6 @@ export default function App() {
           : FLOATING_TOOL_Z_INDEX[toolKey],
     }),
     [activeFloatingTool],
-  );
-  const interactWithSettingsTool = useCallback(
-    () => interactWithFloatingTool('settings'),
-    [interactWithFloatingTool],
   );
   const interactWithDrawerTool = useCallback(
     () => interactWithFloatingTool('tool-drawer'),
@@ -6059,25 +5720,6 @@ export default function App() {
       }
     });
   }, [portfolioEntries, scheduleLiveQuoteEnrichment, scheduleSecurityMetadataEnrichment]);
-
-  const settingsDock = useFloatingHandle({
-    initialPosition: (win) => {
-      const inset = uiInsetFor(win.innerWidth);
-      const size = gearSizeFor(win.innerWidth);
-      return {
-        x: win.innerWidth - size - inset,
-        y: inset,
-      };
-    },
-    fallbackSize: (width) => {
-      const size = gearSizeFor(width);
-      return { width: size, height: size };
-    },
-    onInteract: interactWithSettingsTool,
-    onPress: () => {
-      setSettingsOpen((current) => !current);
-    },
-  });
 
   const updateHoverInfo = (atomId, clientX, clientY) => {
     const viewportWidth = window.innerWidth;
@@ -6673,25 +6315,6 @@ export default function App() {
   }, [activePortfolioId, autoSaveMode, portfolioEntries]);
 
   useEffect(() => {
-    if (!settingsOpen) {
-      return undefined;
-    }
-
-    const handlePointerDown = (event) => {
-      if (settingsRef.current?.contains(event.target)) {
-        return;
-      }
-
-      setSettingsOpen(false);
-    };
-
-    window.addEventListener('pointerdown', handlePointerDown);
-    return () => {
-      window.removeEventListener('pointerdown', handlePointerDown);
-    };
-  }, [settingsOpen]);
-
-  useEffect(() => {
     const handleKeyDown = (event) => {
       if (
         event.target instanceof HTMLInputElement ||
@@ -6703,9 +6326,6 @@ export default function App() {
       }
 
       if (event.key === 'Escape') {
-        if (settingsOpen) {
-          setSettingsOpen(false);
-        }
         return;
       }
 
@@ -6718,7 +6338,7 @@ export default function App() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [settingsOpen]);
+  }, []);
 
   useEffect(() => {
     if (!portfolioError) {
@@ -6743,6 +6363,38 @@ export default function App() {
     portfolioEntries.find((entry) => entry.id === activePortfolioId) ?? portfolioEntries[0] ?? null;
   const portfolioItems = activePortfolio?.items ?? [];
   const portfolioTimelineItems = activePortfolio?.timelineItems ?? portfolioItems;
+  // Read from a ref inside the interval below rather than depending on portfolioItems/
+  // portfolioTimelineItems directly — those are fresh array references on every render (the atom
+  // scene's RAF loop re-renders far more often than every 90s), so depending on them would reset
+  // the interval before it ever got a chance to fire.
+  activePortfolioLiveItemsRef.current = portfolioTimelineItems.length ? portfolioTimelineItems : portfolioItems;
+
+  // Keeps the holdings on screen genuinely live rather than a one-time backfill: the effect below
+  // (portfolioAutoEnrichmentRef-gated) only ever fetches a quote once per holding, the first time
+  // it's missing a price. This ticks in the background — only while the tab is in the foreground,
+  // same gating as the news panel's auto-refresh — and re-fetches whichever portfolio is currently
+  // on screen, so prices/returns keep moving instead of freezing at import time.
+  useEffect(() => {
+    const portfolioId = activePortfolio?.id;
+    if (!portfolioId) {
+      return undefined;
+    }
+
+    const tick = () => {
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+      const sourceItems = activePortfolioLiveItemsRef.current.slice(0, LIVE_QUOTE_REFRESH_MAX_ITEMS);
+      if (!sourceItems.length) {
+        return;
+      }
+      scheduleLiveQuoteEnrichment(portfolioId, sourceItems);
+    };
+
+    const intervalId = window.setInterval(tick, LIVE_QUOTE_REFRESH_MS);
+    return () => window.clearInterval(intervalId);
+  }, [activePortfolio?.id, scheduleLiveQuoteEnrichment]);
+
   const allPortfolioItems = useMemo(
     () =>
       portfolioEntries.flatMap((entry) =>
@@ -7607,8 +7259,8 @@ export default function App() {
       clearHoveredFileTooltip();
     }
   }, [clearHoveredFileTooltip, hoveredFileEntry, hoveredFileEntryId]);
-  const groupOptions = groupOptionsFor(language);
-  const scoreAxes = scoreAxesFor(language);
+  const groupOptions = useMemo(() => groupOptionsFor(language), [language]);
+  const scoreAxes = useMemo(() => scoreAxesFor(language), [language]);
   const displayFxRates = useMemo(() => buildDisplayFxRates(usdKrwRate), [usdKrwRate]);
   const settingsSections = [
     {
@@ -7696,6 +7348,68 @@ export default function App() {
       conflict: text.workspaceSyncConflict,
       'local-failed': text.workspaceSyncLocalFailed,
     }[portfolioSyncStatus] ?? text.workspaceSyncIdle;
+  const renderSettingsPanel = () => (
+    <div className="tool-drawer__settings">
+      {settingsSections.map((section) => (
+        <section key={section.key} className="settings-panel__section">
+          <p className="settings-panel__title">{section.title}</p>
+          <div className="settings-panel__options">
+            {section.options.map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                className={`settings-option${option.active ? ' is-active' : ''}`}
+                onClick={() => {
+                  noteInteraction();
+                  option.onSelect();
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </section>
+      ))}
+      <section className="settings-panel__section settings-panel__section--workspace">
+        <p className="settings-panel__title">{text.settingsSectionWorkspace}</p>
+        <dl className="settings-workspace">
+          <div className="settings-workspace__row">
+            <dt>{text.workspaceStatusLabel}</dt>
+            <dd>{workspaceAuthenticated ? text.workspaceStatusSignedIn : text.workspaceStatusGuest}</dd>
+          </div>
+          <div className="settings-workspace__row">
+            <dt>{text.workspaceIdLabel}</dt>
+            <dd title={currentWorkspaceId}>{currentWorkspaceId}</dd>
+          </div>
+          <div className="settings-workspace__row">
+            <dt>{text.workspaceSyncLabel}</dt>
+            <dd>{portfolioSyncStatusText}</dd>
+          </div>
+          {workspaceAuthenticated ? (
+            <div className="settings-workspace__row">
+              <dt>{text.workspaceUserLabel}</dt>
+              <dd title={workspaceUserLabel}>{workspaceUserLabel}</dd>
+            </div>
+          ) : null}
+        </dl>
+        {CLERK_PUBLISHABLE_KEY ? <AuthPanel text={text} onAuthenticated={handleAuthPanelSuccess} /> : null}
+        <button
+          type="button"
+          className="settings-action"
+          disabled={workspaceClaimDisabled}
+          onClick={() => {
+            noteInteraction();
+            void handleClaimGuestWorkspace();
+          }}
+        >
+          {workspaceClaimStatus === 'pending' ? text.workspaceClaimPending : text.workspaceClaimButton}
+        </button>
+        <p className={`settings-workspace__hint${workspaceClaimStatus === 'failed' ? ' is-error' : ''}`}>
+          {workspaceClaimStatusText}
+        </p>
+      </section>
+    </div>
+  );
   const contributionPreview = useMemo(
     () => createContributionPreview(portfolioItems),
     [portfolioItems],
@@ -7722,6 +7436,17 @@ export default function App() {
   const portfolioHeatmap = useMemo(
     () => createPortfolioHeatmap(portfolioTimelineItems, { weeks: 24 }),
     [portfolioTimelineItems],
+  );
+  const drawerHeatmap = useMemo(
+    () =>
+      portfolioHeatmap
+        ? {
+            ...portfolioHeatmap,
+            columns: contributionPreview.columns,
+            rows: contributionPreview.rows,
+          }
+        : null,
+    [portfolioHeatmap, contributionPreview],
   );
   const selectedAtom = atomsRef.current.find((atom) => atom.id === selectedAtomId) ?? null;
   const activeGroupValue =
@@ -7781,14 +7506,6 @@ export default function App() {
     !hasPortfolioItems && introCenterBurstAt >= 0
       ? Math.sin(clamp((frameTime - introCenterBurstAt) / 420, 0, 1) * Math.PI)
       : 0;
-  const settingsPanelSide =
-    typeof window === 'undefined'
-      ? 'left'
-      : floatingPanelSideFor(
-          settingsDock.position.x,
-          gearSizeFor(window.innerWidth),
-          window.innerWidth,
-        );
 
   const pulse = 0.5 + Math.sin(frameTime * 0.00042) * 0.5;
   const centerMotion = frameTime * 0.00112;
@@ -7936,15 +7653,7 @@ export default function App() {
             groupOptions={groupOptions}
             activeGroupKey={activeGroupKey}
             onGroupChange={setActiveGroupKey}
-            heatmap={
-              portfolioHeatmap
-                ? {
-                    ...portfolioHeatmap,
-                    columns: contributionPreview.columns,
-                    rows: contributionPreview.rows,
-                  }
-                : null
-            }
+            heatmap={drawerHeatmap}
             allocation={portfolioAllocation}
             analyticsSummary={portfolioAnalyticsSummary}
             scorecard={portfolioScorecard}
@@ -7974,108 +7683,9 @@ export default function App() {
             fxRates={displayFxRates}
             layerStyle={floatingLayerStyleFor('tool-drawer')}
             onInteract={interactWithDrawerTool}
+            renderSettingsPanel={renderSettingsPanel}
           />
         ) : null}
-
-        <div
-          ref={settingsDock.containerRef}
-          className={`settings-anchor${settingsPanelSide === 'right' ? ' is-flipped' : ''}${settingsDock.dragging ? ' is-dragging' : ''}`}
-          style={{
-            transform: `translate3d(${settingsDock.position.x}px, ${settingsDock.position.y}px, 0)`,
-            ...floatingLayerStyleFor('settings'),
-          }}
-        >
-          <div ref={settingsRef} className={`settings-wrap${settingsOpen ? ' is-open' : ''}`}>
-            <button
-              className="settings-gear"
-              type="button"
-              onClick={() => {
-                interactWithSettingsTool();
-                setSettingsOpen((current) => !current);
-              }}
-              aria-label={text.settingsAria}
-              aria-expanded={settingsOpen}
-            >
-              <SketchGearIcon />
-            </button>
-
-            {settingsOpen ? (
-              <div
-                className="settings-panel"
-                onPointerDown={(event) => {
-                  event.stopPropagation();
-                }}
-              >
-                {settingsSections.map((section) => (
-                  <section key={section.key} className="settings-panel__section">
-                    <p className="settings-panel__title">{section.title}</p>
-                    <div className="settings-panel__options">
-                      {section.options.map((option) => (
-                        <button
-                          key={option.key}
-                          type="button"
-                          className={`settings-option${option.active ? ' is-active' : ''}`}
-                          onClick={() => {
-                            noteInteraction();
-                            option.onSelect();
-                          }}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-                ))}
-                <section className="settings-panel__section settings-panel__section--workspace">
-                  <p className="settings-panel__title">{text.settingsSectionWorkspace}</p>
-                  <dl className="settings-workspace">
-                    <div className="settings-workspace__row">
-                      <dt>{text.workspaceStatusLabel}</dt>
-                      <dd>{workspaceAuthenticated ? text.workspaceStatusSignedIn : text.workspaceStatusGuest}</dd>
-                    </div>
-                    <div className="settings-workspace__row">
-                      <dt>{text.workspaceIdLabel}</dt>
-                      <dd title={currentWorkspaceId}>{currentWorkspaceId}</dd>
-                    </div>
-                    <div className="settings-workspace__row">
-                      <dt>{text.workspaceSyncLabel}</dt>
-                      <dd>{portfolioSyncStatusText}</dd>
-                    </div>
-                    {workspaceAuthenticated ? (
-                      <div className="settings-workspace__row">
-                        <dt>{text.workspaceUserLabel}</dt>
-                        <dd title={workspaceUserLabel}>{workspaceUserLabel}</dd>
-                      </div>
-                    ) : null}
-                  </dl>
-                  {CLERK_PUBLISHABLE_KEY ? (
-                    <AuthPanel text={text} onAuthenticated={handleAuthPanelSuccess} />
-                  ) : null}
-                  <button
-                    type="button"
-                    className="settings-action"
-                    disabled={workspaceClaimDisabled}
-                    onClick={() => {
-                      noteInteraction();
-                      void handleClaimGuestWorkspace();
-                    }}
-                  >
-                    {workspaceClaimStatus === 'pending'
-                      ? text.workspaceClaimPending
-                      : text.workspaceClaimButton}
-                  </button>
-                  <p
-                    className={`settings-workspace__hint${
-                      workspaceClaimStatus === 'failed' ? ' is-error' : ''
-                    }`}
-                  >
-                    {workspaceClaimStatusText}
-                  </p>
-                </section>
-              </div>
-            ) : null}
-          </div>
-        </div>
 
         <div className="upload-anchor">
           <input
