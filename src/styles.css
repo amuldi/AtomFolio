@@ -6420,7 +6420,7 @@ body::after {
 .stage-frame {
   position: relative;
   z-index: var(--z-stage);
-  width: min(72vw, 840px, max(18rem, calc(100vw - var(--tool-drawer-current-width) - 3.2rem)));
+  width: min(76vw, 900px, max(18rem, calc(100vw - var(--tool-drawer-current-width) - 3.2rem)));
   aspect-ratio: 1;
   display: grid;
   place-items: center;
@@ -6519,6 +6519,58 @@ body::after {
       0 0 calc(18px + var(--camera-focus) * 18px)
       rgba(247, 233, 208, calc(0.08 + var(--camera-focus) * 0.12))
     );
+}
+
+/* First-visit-only hint — same copy/timing as the desktop popover's atom hint
+   (desktop/src/renderer/atom-view.jsx), styled with the site's existing glass-pill language. */
+.atom-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 6%;
+  z-index: 4;
+  transform: translateX(-50%);
+  padding: 0.4rem 0.85rem;
+  border: 1px solid rgba(255, 242, 216, 0.12);
+  border-radius: 999px;
+  background: rgba(7, 7, 7, 0.82);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+  color: rgba(250, 240, 220, 0.85);
+  font-family: var(--ui-font);
+  font-size: 0.72rem;
+  font-weight: 560;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  animation: atomHintFade 4000ms ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atom-hint {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+@keyframes atomHintFade {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px);
+  }
+
+  10% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  85% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
 }
 
 .stage-breath.is-intro {
@@ -6915,7 +6967,7 @@ body::after {
   }
 
   .stage-frame {
-    width: min(86vw, 720px, max(18rem, calc(100vw - var(--tool-drawer-current-width) - 2rem)));
+    width: min(88vw, 760px, max(18rem, calc(100vw - var(--tool-drawer-current-width) - 2rem)));
   }
 
   .stage-breath {

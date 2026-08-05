@@ -16,7 +16,17 @@ const errorLevelRules = {
 
 export default [
   {
-    ignores: ['dist/**', 'node_modules/**', 'data/**', 'samples/**', 'docs/**', 'submission/**'],
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'data/**',
+      'samples/**',
+      'docs/**',
+      'submission/**',
+      // Bundled by desktop/scripts/build-renderer.mjs (esbuild output, includes react/three) —
+      // not source, not meant to be linted.
+      'desktop/src/renderer/atom-view.bundle.js',
+    ],
   },
   {
     files: ['**/*.{js,jsx,mjs}'],

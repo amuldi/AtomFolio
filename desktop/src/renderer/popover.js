@@ -1,146 +1,16 @@
-const root = document.getElementById('root');
-const SVG_NS = 'http://www.w3.org/2000/svg';
+// Header, portfolio picker, and news list — plain DOM, no build step needed. The atom visual
+// itself lives in atom-view.jsx/atom-view.bundle.js (a separate React root mounted at
+// #atom-visual-root, which this file never touches — see popover.html's comment on that node).
+const connectRoot = document.getElementById('connect-root');
+const headerRoot = document.getElementById('header-root');
+const pickerRoot = document.getElementById('picker-root');
+const restRoot = document.getElementById('rest-root');
+const settingsRoot = document.getElementById('settings-root');
 
-// Persists across re-renders (render() rebuilds the whole DOM on every state push, e.g. every
-// poll) so a background refresh doesn't snap the rotation back to 0 or drop the user's selection.
-// Two axes (radians), not one — this is a real trackball, not a flat record-player spin: dragging
-// horizontally yaws around the vertical axis, dragging vertically pitches around the horizontal
-// one, same two-axis feel as the web dashboard's atom scene.
-let rotationYaw = 0.4;
-let rotationPitch = -0.28;
-let selectedHoldingId = null;
-let atomFrameId = null;
-let isDraggingAtom = false;
-// True once a pointerdown-then-move has actually rotated the atom past a small threshold —
-// distinct from isDraggingAtom (true for the whole press, including a plain tap) so a drag that
-// happens to end over a node doesn't get misread as a click on that node.
-let dragMoved = false;
-
-// --- Minimal 3D math (no Three.js in this tiny renderer — just what a trackball + perspective
-// projection needs: a couple of axis rotations and a divide). Mirrors the shape of the web
-// dashboard's own scene math (src/utils/scene.js's trackballVector/projectPoint) without pulling
-// in the WebGL-scene dependency for a menu bar popover. ---
-const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
-const CAMERA_DISTANCE = 3.2;
-
-function normalize3(vector) {
-  const length = Math.hypot(vector[0], vector[1], vector[2]) || 1;
-  return [vector[0] / length, vector[1] / length, vector[2] / length];
-}
-
-function rotateAroundY(vector, angle) {
-  const cos = Math.cos(angle);
-  const sin = Math.sin(angle);
-  return [vector[0] * cos + vector[2] * sin, vector[1], vector[2] * cos - vector[0] * sin];
-}
-
-function rotateAroundX(vector, angle) {
-  const cos = Math.cos(angle);
-  const sin = Math.sin(angle);
-  return [vector[0], vector[1] * cos - vector[2] * sin, vector[1] * sin + vector[2] * cos];
-}
-
-// Fibonacci/golden-angle sphere distribution — the same even-but-organic placement
-// generateAtomLayout uses for the dashboard's atoms, so holdings scatter across the whole sphere
-// instead of clumping.
-function sphereDirection(index, total) {
-  if (total <= 1) {
-    return [0, 0, 1];
-  }
-
-  const ratio = index / (total - 1);
-  const y = 1 - ratio * 2;
-  const radiusAtY = Math.sqrt(Math.max(0, 1 - y * y));
-  const theta = index * GOLDEN_ANGLE;
-  return normalize3([Math.cos(theta) * radiusAtY, y, Math.sin(theta) * radiusAtY]);
-}
-
-function projectToScreen(vector, radiusPx) {
-  const perspective = CAMERA_DISTANCE / (CAMERA_DISTANCE - vector[2]);
-  return {
-    x: vector[0] * radiusPx * perspective,
-    y: vector[1] * radiusPx * perspective,
-    scale: perspective,
-  };
-}
-
-function clampNumber(value, min, max) {
-  return Math.min(Math.max(value, min), max);
-}
-
-// --- Hand-drawn "sketch" shapes, matching the web dashboard's atom aesthetic (see
-// src/utils/scene.js's noise/jitter/closedSketchPath/buildLoopPath) — reimplemented locally with
-// the same formulas rather than imported, since importing scene.js would pull in its `three`
-// dependency, which this dependency-free popover renderer doesn't have. ---
-function noise(seed) {
-  const value = Math.sin(seed * 127.1 + 311.7) * 43758.5453123;
-  return value - Math.floor(value);
-}
-
-function jitter(seed, amount) {
-  return (noise(seed) * 2 - 1) * amount;
-}
-
-function midpoint2(a, b) {
-  return { x: (a.x + b.x) * 0.5, y: (a.y + b.y) * 0.5 };
-}
-
-// A closed loop through jittered points around a circle, connected with quadratic curves through
-// each edge's midpoint — the same construction the dashboard uses for its atom/nucleus outlines,
-// which is what gives them a wobbly, hand-drawn feel instead of a mechanically perfect circle.
-// Wobble is deliberately heavy (up to ~38% of radius) — a subtle wobble reads as antialiasing at
-// this size, not a hand-drawn line.
-function buildWobbleLoopPoints(radius, seed, pointCount = 9) {
-  const points = [];
-  for (let index = 0; index < pointCount; index += 1) {
-    const angle = (index / pointCount) * Math.PI * 2;
-    const ring = radius + jitter(seed + index * 1.19, radius * 0.38);
-    points.push({
-      x: Math.cos(angle) * ring + jitter(seed + index * 2.17, radius * 0.22),
-      y: Math.sin(angle) * ring + jitter(seed + index * 3.03, radius * 0.22),
-    });
-  }
-  return points;
-}
-
-function closedSketchPath(points) {
-  const firstMid = midpoint2(points[points.length - 1], points[0]);
-  let path = `M ${firstMid.x.toFixed(2)} ${firstMid.y.toFixed(2)}`;
-  for (let index = 0; index < points.length; index += 1) {
-    const next = points[(index + 1) % points.length];
-    const mid = midpoint2(points[index], next);
-    path += ` Q ${points[index].x.toFixed(2)} ${points[index].y.toFixed(2)} ${mid.x.toFixed(2)} ${mid.y.toFixed(2)}`;
-  }
-  return path;
-}
-
-// A gently wobbled line from the nucleus out to a node — the "bond" look, not a ruler-straight
-// spoke. Seeded per holding so it stays the same shape across frames/re-renders.
-function buildBondPath(originX, originY, targetX, targetY, seed) {
-  const midX = (originX + targetX) / 2 + jitter(seed + 4.1, 5);
-  const midY = (originY + targetY) / 2 + jitter(seed + 5.3, 5);
-  return `M ${originX.toFixed(2)} ${originY.toFixed(2)} Q ${midX.toFixed(2)} ${midY.toFixed(2)} ${targetX.toFixed(2)} ${targetY.toFixed(2)}`;
-}
-
-function formatCurrency(value) {
-  if (!Number.isFinite(value)) {
-    return '—';
-  }
-
-  return new Intl.NumberFormat('ko-KR', {
-    style: 'currency',
-    currency: 'KRW',
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function formatPercent(value) {
-  if (!Number.isFinite(value)) {
-    return '';
-  }
-
-  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
-}
+// Settings overlay state lives outside render(state) — it's a local UI toggle, not portfolio
+// data, and must survive/ignore the poll-driven state pushes that drive the rest of the popover.
+let settingsOpen = false;
+let settingsCache = null;
 
 function formatTime(value) {
   if (!Number.isFinite(value)) {
@@ -153,15 +23,6 @@ function formatTime(value) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(value));
-}
-
-function toneClass(value) {
-  return Number(value) > 0 ? 'is-profit' : Number(value) < 0 ? 'is-loss' : '';
-}
-
-function truncateLabel(value, max = 10) {
-  const text = String(value ?? '').trim();
-  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
 function el(tag, className, children) {
@@ -177,12 +38,11 @@ function el(tag, className, children) {
   return node;
 }
 
-function svgEl(tag, attrs) {
-  const node = document.createElementNS(SVG_NS, tag);
-  for (const [key, value] of Object.entries(attrs ?? {})) {
-    node.setAttribute(key, String(value));
+function setChildren(container, node) {
+  container.innerHTML = '';
+  if (node != null) {
+    container.append(node);
   }
-  return node;
 }
 
 function renderConnect(state) {
@@ -231,250 +91,157 @@ function renderConnect(state) {
   return container;
 }
 
-// The atom stage: a nucleus (total portfolio) with each holding placed on a sphere around it —
-// the same layout the web dashboard uses (generateAtomLayout's golden-angle sphere), rendered
-// here as a 2D perspective projection instead of WebGL. Drag in any direction to tumble it in true
-// 3D (yaw + pitch, full 360deg, not just a flat spin); left alone, it turns slowly on its own.
-// Clicking a node pins its detail in the readout below; clicking the nucleus (or the same node
-// again) returns to the total.
-function renderAtomStage(state) {
-  const holdings = Array.isArray(state.holdings) ? state.holdings : [];
-  const totals = state.totals;
-
-  const stage = el('div', 'atom-stage', []);
-  const svg = svgEl('svg', {
-    viewBox: '0 0 300 220',
-    class: 'atom-stage__svg',
-    role: 'img',
-    'aria-label': '보유 종목 지도',
-  });
-
-  const cx = 150;
-  const cy = 110;
-  const sphereRadiusPx = 78;
-
-  const spokesLayer = svgEl('g', { class: 'atom-spokes' });
-  const nodesLayer = svgEl('g', { class: 'atom-nodes' });
-
-  // Nucleus never moves, so its wobble outline can be baked once at its final position instead of
-  // redrawn every frame — two overlapping hand-drawn loops (a fainter wider one behind a crisper
-  // inner one), the same double-pass sketch technique the dashboard draws its atoms with, rather
-  // than a single mechanical circle.
-  const nucleusGroup = svgEl('g', {
-    class: 'atom-nucleus',
-    role: 'button',
-    'aria-label': '포트폴리오 총액',
-    transform: `translate(${cx} ${cy})`,
-  });
-  const nucleusSoftPath = closedSketchPath(buildWobbleLoopPoints(14.5, 777, 11));
-  const nucleusMainPath = closedSketchPath(buildWobbleLoopPoints(12, 881, 10));
-  nucleusGroup.append(
-    svgEl('path', { d: nucleusSoftPath, class: 'atom-nucleus__soft' }),
-    svgEl('path', { d: nucleusMainPath, class: 'atom-nucleus__main' }),
-  );
-  nucleusGroup.addEventListener('click', (event) => {
-    event.stopPropagation();
-    if (dragMoved) {
-      return;
-    }
-    selectedHoldingId = null;
-    render(state);
-  });
-
-  const nodeRefs = holdings.map((holding, index) => {
-    const direction = sphereDirection(index, holdings.length);
-    const isSelected = holding.id === selectedHoldingId;
-    const seed = 100 + index * 47;
-    // Baked once in local space (centered on 0,0) — repositioned every frame via a
-    // translate+rotate+scale transform instead of rebuilding the wobble path itself, so the
-    // hand-drawn shape doesn't "redraw" itself every animation tick, only move. Two overlapping
-    // loops per node (soft outer + crisper inner), plus a small fixed per-node tilt, mirror the
-    // dashboard's own node-shell construction (SketchAtom's node-soft/node-main pair + nodeTilt).
-    const ringSoftPath = closedSketchPath(buildWobbleLoopPoints(5.1, seed, 8));
-    const ringMainPath = closedSketchPath(buildWobbleLoopPoints(4.1, seed + 31, 9));
-    const tiltDeg = jitter(seed + 601, 18);
-
-    const spokeSoft = svgEl('path', { class: 'atom-spoke atom-spoke--soft' });
-    const spokeMain = svgEl('path', {
-      class: `atom-spoke atom-spoke--main${isSelected ? ' is-selected' : ''}`,
-    });
-
-    const nodeGroup = svgEl('g', {
-      class: `atom-node${isSelected ? ' is-selected' : ''}`,
-      tabindex: '0',
-      role: 'button',
-      'aria-label': holding.label || holding.code || '종목',
-    });
-    nodeGroup.dataset.holdingId = holding.id ?? '';
-
-    const ringShell = svgEl('g', { class: 'atom-node__shell' });
-    const ringSoft = svgEl('path', { d: ringSoftPath, class: 'atom-node__ring-soft' });
-    const ringMain = svgEl('path', { d: ringMainPath, class: 'atom-node__ring-main' });
-    ringShell.append(ringSoft, ringMain);
-    const label = svgEl('text', { class: 'atom-node__label' });
-    label.textContent = truncateLabel(holding.label || holding.code || '');
-    const percent = svgEl('text', {
-      class: `atom-node__percent ${toneClass(holding.returnRate)}`.trim(),
-    });
-    percent.textContent = formatPercent(holding.returnRate);
-    const title = svgEl('title', {});
-    title.textContent = holding.label || holding.code || '';
-    nodeGroup.append(ringShell, label, percent, title);
-
-    nodeGroup.addEventListener('click', (event) => {
-      event.stopPropagation();
-      if (dragMoved) {
-        return;
-      }
-      selectedHoldingId = selectedHoldingId === holding.id ? null : holding.id;
-      render(state);
-    });
-
-    spokesLayer.append(spokeSoft, spokeMain);
-    nodesLayer.append(nodeGroup);
-
-    return { direction, seed, tiltDeg, spokeSoft, spokeMain, nodeGroup, ringShell, label, percent };
-  });
-
-  svg.append(spokesLayer, nucleusGroup, nodesLayer);
-  stage.append(svg);
-
-  // Repositions every node for the current rotation — called on every drag move and every idle-
-  // spin animation frame. Depth (how far toward/away from the viewer a node has rotated) drives
-  // both its projected distance from the nucleus and its size/opacity, which is what actually
-  // reads as "3D" rather than a flat shape sliding around.
-  const applyFrame = () => {
-    for (const ref of nodeRefs) {
-      const rotated = rotateAroundX(rotateAroundY(ref.direction, rotationYaw), rotationPitch);
-      const projected = projectToScreen(rotated, sphereRadiusPx);
-      const nx = cx + projected.x;
-      const ny = cy + projected.y;
-      const depthScale = clampNumber(projected.scale, 0.6, 1.55);
-      const depthFade = (depthScale - 0.6) / (1.55 - 0.6);
-
-      const bondPath = buildBondPath(cx, cy, nx, ny, ref.seed);
-      ref.spokeSoft.setAttribute('d', bondPath);
-      ref.spokeMain.setAttribute('d', bondPath);
-      const spokeOpacity = 0.22 + depthFade * 0.5;
-      ref.spokeSoft.style.opacity = String(spokeOpacity * 0.6);
-      ref.spokeMain.style.opacity = String(spokeOpacity);
-
-      ref.ringShell.setAttribute(
-        'transform',
-        `translate(${nx.toFixed(2)} ${ny.toFixed(2)}) rotate(${ref.tiltDeg.toFixed(1)}) scale(${depthScale.toFixed(3)})`,
-      );
-      ref.nodeGroup.style.opacity = String(0.5 + depthFade * 0.5);
-
-      const labelIsRight = nx >= cx;
-      const labelX = nx + (labelIsRight ? 9 : -9);
-      ref.label.setAttribute('x', String(labelX));
-      ref.label.setAttribute('y', String(ny - 2));
-      ref.label.setAttribute('text-anchor', labelIsRight ? 'start' : 'end');
-      ref.percent.setAttribute('x', String(labelX));
-      ref.percent.setAttribute('y', String(ny + 9));
-      ref.percent.setAttribute('text-anchor', labelIsRight ? 'start' : 'end');
-    }
-  };
-
-  applyFrame();
-  wireAtomDrag(stage, applyFrame);
-
-  const selectedHolding = holdings.find((holding) => holding.id === selectedHoldingId) ?? null;
-  const readout = renderAtomReadout(selectedHolding, totals);
-
-  const wrapper = el('div', 'atom-section', [stage, readout]);
-  return wrapper;
-}
-
-function renderAtomReadout(holding, totals) {
-  if (holding) {
-    return el('div', 'atom-readout', [
-      el('div', 'atom-readout__label', [holding.label || holding.code || '종목']),
-      el('div', 'atom-readout__value', [formatCurrency(holding.marketValue)]),
-      el('div', 'atom-readout__row', [
-        Number.isFinite(holding.returnRate)
-          ? el('span', `atom-readout__chip ${toneClass(holding.returnRate)}`.trim(), [
-              `${formatCurrency(holding.profitAmount)} · ${formatPercent(holding.returnRate)}`,
-            ])
-          : null,
-        Number.isFinite(holding.weightPercent)
-          ? el('span', 'atom-readout__note', [`비중 ${holding.weightPercent.toFixed(1)}%`])
-          : null,
-      ]),
-    ]);
-  }
-
-  const returnRate = totals?.totalReturnRate;
-  const profitAmount = totals?.totalProfitAmount;
-
-  return el('div', 'atom-readout', [
-    el('div', 'atom-readout__label', ['포트폴리오 총액']),
-    el('div', 'atom-readout__value', [totals ? formatCurrency(totals.totalMarketValue) : '—']),
-    el('div', 'atom-readout__row', [
-      totals && Number.isFinite(returnRate)
-        ? el('span', `atom-readout__chip ${toneClass(returnRate)}`.trim(), [
-            `${formatCurrency(profitAmount)} · ${formatPercent(returnRate)}`,
-          ])
-        : null,
-      totals ? el('span', 'atom-readout__note', [`${totals.holdingsCount}개 종목`]) : null,
+function renderHeader(state) {
+  return el('div', 'header', [
+    el('span', 'header__brand', ['AtomFolio']),
+    el('div', 'header__meta', [
+      el('span', 'header__updated', [state.lastUpdatedAt ? formatTime(state.lastUpdatedAt) : '']),
+      (() => {
+        const button = el('button', 'header__settings', ['⚙']);
+        button.type = 'button';
+        button.setAttribute('aria-label', '설정');
+        button.addEventListener('click', () => toggleSettings());
+        return button;
+      })(),
+      (() => {
+        const button = el('button', 'header__disconnect', ['연결 해제']);
+        button.addEventListener('click', () => window.atomfolio.disconnect());
+        return button;
+      })(),
     ]),
   ]);
 }
 
-// Drag in any direction to tumble the sphere freely (both axes, unclamped — true 360deg in every
-// direction, not a flat single-axis spin). Releasing lets a slow idle yaw resume from wherever the
-// user left it (never snaps back), matching the web dashboard scene's "rotate to browse" feel.
-function wireAtomDrag(stage, applyFrame) {
-  let dragStartX = 0;
-  let dragStartY = 0;
-  let dragStartYaw = rotationYaw;
-  let dragStartPitch = rotationPitch;
+// ---------- Settings overlay ----------
 
-  const handlePointerMove = (event) => {
-    const deltaX = event.clientX - dragStartX;
-    const deltaY = event.clientY - dragStartY;
-    if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
-      dragMoved = true;
-    }
-    rotationYaw = dragStartYaw + deltaX * 0.012;
-    rotationPitch = dragStartPitch + deltaY * 0.012;
-    applyFrame();
-  };
+function renderSlider({ label, format, min, max, step, value, onCommit }) {
+  const valueEl = el('span', 'settings-row__value', [format(value)]);
+  const row = el('div', 'settings-row', [
+    el('div', 'settings-row__top', [el('span', 'settings-row__label', [label]), valueEl]),
+  ]);
 
-  const handlePointerUp = () => {
-    isDraggingAtom = false;
-    stage.classList.remove('is-dragging');
-    window.removeEventListener('pointermove', handlePointerMove);
-    window.removeEventListener('pointerup', handlePointerUp);
-  };
+  const input = el('input', 'settings-slider', []);
+  input.type = 'range';
+  input.min = String(min);
+  input.max = String(max);
+  input.step = String(step);
+  input.value = String(value);
+  input.addEventListener('input', () => {
+    valueEl.textContent = format(Number(input.value));
+  });
+  // Committed (and sent to main) only on release, not on every drag tick — each commit triggers a
+  // config save + a silent refresh, which would otherwise fire dozens of times per drag.
+  input.addEventListener('change', () => onCommit(Number(input.value)));
 
-  stage.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0) {
-      return;
-    }
-    isDraggingAtom = true;
-    dragMoved = false;
-    dragStartX = event.clientX;
-    dragStartY = event.clientY;
-    dragStartYaw = rotationYaw;
-    dragStartPitch = rotationPitch;
-    stage.classList.add('is-dragging');
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp, { once: true });
+  row.append(input);
+  return row;
+}
+
+function renderToggle({ label, checked, onChange }) {
+  const track = el('button', `settings-toggle${checked ? ' is-on' : ''}`, [
+    el('span', 'settings-toggle__knob', []),
+  ]);
+  track.type = 'button';
+  track.setAttribute('role', 'switch');
+  track.setAttribute('aria-checked', String(checked));
+  track.addEventListener('click', () => {
+    const next = !track.classList.contains('is-on');
+    track.classList.toggle('is-on', next);
+    track.setAttribute('aria-checked', String(next));
+    onChange(next);
   });
 
-  if (atomFrameId != null) {
-    cancelAnimationFrame(atomFrameId);
-  }
+  return el('div', 'settings-row settings-row--toggle', [
+    el('span', 'settings-row__label', [label]),
+    track,
+  ]);
+}
 
-  const idleSpin = () => {
-    if (!isDraggingAtom) {
-      rotationYaw += 0.0035;
-      applyFrame();
-    }
-    atomFrameId = requestAnimationFrame(idleSpin);
-  };
-  atomFrameId = requestAnimationFrame(idleSpin);
+function updateSetting(partial) {
+  settingsCache = { ...settingsCache, ...partial };
+  void window.atomfolio.updateSettings(partial);
+}
+
+function renderSettingsPanel(settings) {
+  const closeButton = el('button', 'settings-panel__close', ['완료']);
+  closeButton.type = 'button';
+  closeButton.addEventListener('click', () => {
+    settingsOpen = false;
+    renderSettingsOverlay();
+  });
+
+  const body = el('div', 'settings-panel__body', [
+    renderToggle({
+      label: '인사이트 알림',
+      checked: settings.notificationsEnabled,
+      onChange: (next) => updateSetting({ notificationsEnabled: next }),
+    }),
+    renderSlider({
+      label: '새로고침 주기',
+      format: (v) => `${v}초`,
+      min: 15,
+      max: 300,
+      step: 15,
+      value: settings.pollIntervalSec,
+      onCommit: (v) => updateSetting({ pollIntervalSec: v }),
+    }),
+    renderSlider({
+      label: '손절 알림',
+      format: (v) => `${v}%`,
+      min: -50,
+      max: -1,
+      step: 1,
+      value: settings.stopLossPercent,
+      onCommit: (v) => updateSetting({ stopLossPercent: v }),
+    }),
+    renderSlider({
+      label: '익절 알림',
+      format: (v) => `+${v}%`,
+      min: 1,
+      max: 100,
+      step: 1,
+      value: settings.takeProfitPercent,
+      onCommit: (v) => updateSetting({ takeProfitPercent: v }),
+    }),
+    renderSlider({
+      label: '배분 이탈 허용치',
+      format: (v) => `${v}%p`,
+      min: 1,
+      max: 50,
+      step: 1,
+      value: settings.allocationDriftPercent,
+      onCommit: (v) => updateSetting({ allocationDriftPercent: v }),
+    }),
+  ]);
+
+  return el('div', 'settings-panel', [
+    el('div', 'settings-panel__header', [
+      el('span', 'settings-panel__title', ['알림 설정']),
+      closeButton,
+    ]),
+    body,
+  ]);
+}
+
+function renderSettingsOverlay() {
+  settingsRoot.classList.toggle('is-open', settingsOpen && Boolean(settingsCache));
+  if (!settingsOpen || !settingsCache) {
+    setChildren(settingsRoot, null);
+    return;
+  }
+  setChildren(settingsRoot, renderSettingsPanel(settingsCache));
+}
+
+function toggleSettings() {
+  settingsOpen = !settingsOpen;
+  if (settingsOpen && !settingsCache) {
+    window.atomfolio.getSettings().then((settings) => {
+      settingsCache = settings;
+      renderSettingsOverlay();
+    });
+    return;
+  }
+  renderSettingsOverlay();
 }
 
 // Only shown once there's something to choose between — a single-portfolio workspace (the common
@@ -494,33 +261,14 @@ function renderPortfolioPicker(state) {
   }
 
   select.addEventListener('change', () => {
-    selectedHoldingId = null;
     void window.atomfolio.selectPortfolio(select.value);
   });
 
   return el('div', 'portfolio-picker', [select]);
 }
 
-function renderConnected(state) {
+function renderRest(state) {
   const fragment = document.createDocumentFragment();
-
-  const header = el('div', 'header', [
-    el('span', 'header__brand', ['AtomFolio']),
-    el('div', 'header__meta', [
-      el('span', 'header__updated', [state.lastUpdatedAt ? formatTime(state.lastUpdatedAt) : '']),
-      (() => {
-        const button = el('button', 'header__disconnect', ['연결 해제']);
-        button.addEventListener('click', () => window.atomfolio.disconnect());
-        return button;
-      })(),
-    ]),
-  ]);
-  fragment.append(header);
-  const picker = renderPortfolioPicker(state);
-  if (picker) {
-    fragment.append(picker);
-  }
-  fragment.append(renderAtomStage(state));
 
   if (state.lastError) {
     fragment.append(el('div', 'error-banner', ['업데이트에 실패해 이전 데이터를 표시하고 있습니다.']));
@@ -562,18 +310,20 @@ function renderConnected(state) {
 }
 
 function render(state) {
-  root.innerHTML = '';
-
   if (!state?.connected) {
-    if (atomFrameId != null) {
-      cancelAnimationFrame(atomFrameId);
-      atomFrameId = null;
-    }
-    root.append(renderConnect(state));
+    setChildren(connectRoot, renderConnect(state));
+    setChildren(headerRoot, null);
+    setChildren(pickerRoot, null);
+    setChildren(restRoot, null);
+    settingsOpen = false;
+    renderSettingsOverlay();
     return;
   }
 
-  root.append(renderConnected(state));
+  setChildren(connectRoot, null);
+  setChildren(headerRoot, renderHeader(state));
+  setChildren(pickerRoot, renderPortfolioPicker(state));
+  setChildren(restRoot, renderRest(state));
 }
 
 async function bootstrap() {

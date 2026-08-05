@@ -6,9 +6,10 @@
   "type": "module",
   "main": "src/main.js",
   "scripts": {
-    "start": "electron .",
-    "dev": "ATOMFOLIO_API_BASE_URL=http://localhost:8787 electron .",
-    "build:mac": "electron-builder --mac"
+    "build:renderer": "node scripts/build-renderer.mjs",
+    "start": "npm run build:renderer && electron .",
+    "dev": "npm run build:renderer && ATOMFOLIO_API_BASE_URL=http://localhost:8787 electron .",
+    "build:mac": "npm run build:renderer && electron-builder --mac"
   },
   "devDependencies": {
     "electron": "^32.0.0",

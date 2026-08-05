@@ -1,0 +1,261 @@
+/* Mirrors the atom-visual class names from src/styles.css (the classes SketchAtom/AtomSketch/
+   AtomLabel render in src/components/atom/index.jsx) so the popover's atom looks like the real
+   dashboard scene. These are a deliberate, curated copy rather than an @import of styles.css
+   (which is ~7000 lines covering the whole web app, interleaved with unrelated stage/webgl-preview
+   rules around this exact section) — the JS/layout logic driving these shapes is the real shared
+   src/ code (see atom-view.jsx), not reimplemented; only these presentation rules are mirrored.
+   Keep in sync by hand if src/styles.css's atom rules change. */
+
+.sketch-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  display: block;
+}
+
+.label-layer,
+.label-note {
+  pointer-events: none;
+}
+
+.label-main,
+.label-detail {
+  fill: rgba(250, 240, 220, 0.9);
+  font-family:
+    'Bradley Hand',
+    'Marker Felt',
+    'Noteworthy',
+    'Comic Sans MS',
+    cursive;
+  letter-spacing: 0.02em;
+}
+
+.label-main {
+  font-size: 13.5px;
+}
+
+.label-detail {
+  fill: rgba(250, 240, 220, 0.62);
+  font-size: 10.5px;
+}
+
+.aura-line {
+  fill: none;
+  stroke: rgba(248, 235, 212, 0.11);
+  stroke-width: 8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.stroke-soft,
+.stroke-shadow,
+.stroke-main,
+.node-soft,
+.node-main,
+.node-selected-glow,
+.center-orbit,
+.center-blot,
+.center-glow-outer,
+.center-glow-mid,
+.center-glow-core,
+.center-shell-shadow,
+.center-shell-rim,
+.center-shell-highlight,
+.graphite-dust {
+  vector-effect: non-scaling-stroke;
+}
+
+.stroke-soft {
+  fill: none;
+  stroke: rgba(255, 242, 216, 0.31);
+  stroke-width: 1.08;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.stroke-shadow {
+  fill: none;
+  stroke: rgba(246, 233, 208, 0.54);
+  stroke-width: 2.18;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.stroke-main {
+  fill: none;
+  stroke: rgba(249, 239, 218, 0.96);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.node-soft {
+  fill: rgba(245, 233, 208, 0.09);
+  stroke: rgba(249, 238, 214, 0.67);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.node-main {
+  fill: none;
+  stroke: rgba(250, 240, 220, 0.98);
+  stroke-width: 1.42;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.node-selected-glow {
+  fill: rgba(255, 247, 232, 0.18);
+  stroke: rgba(255, 250, 238, 0.98);
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 8px rgba(255, 247, 232, 0.45));
+}
+
+.node-hit {
+  fill: rgba(255, 255, 255, 0.001);
+  stroke: none;
+  pointer-events: all;
+  cursor: pointer;
+}
+
+.node-hit:focus-visible {
+  outline: none;
+  stroke: rgba(255, 250, 238, 0.92);
+  stroke-width: 2.8;
+  filter: drop-shadow(0 0 8px rgba(255, 247, 232, 0.45));
+}
+
+.center-hit {
+  fill: rgba(255, 255, 255, 0.001);
+  stroke: none;
+  pointer-events: all;
+  cursor: pointer;
+}
+
+.center-blot {
+  fill: rgba(248, 237, 216, 0.42);
+  stroke: rgba(249, 239, 218, 0.96);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.center-glow-outer {
+  fill: rgba(255, 245, 226, 0.24);
+  stroke: rgba(255, 243, 220, 0.34);
+  stroke-width: 0.96;
+}
+
+.center-glow-mid {
+  fill: rgba(255, 246, 228, 0.3);
+  stroke: rgba(255, 246, 230, 0.42);
+  stroke-width: 0.96;
+}
+
+.center-glow-core {
+  fill: rgba(255, 250, 237, 0.68);
+  stroke: none;
+}
+
+.center-shell-shadow {
+  fill: rgba(255, 242, 214, 0.2);
+  stroke: rgba(250, 239, 218, 0.46);
+  stroke-width: 1;
+}
+
+.center-shell-rim {
+  fill: rgba(255, 248, 233, 0.1);
+  stroke: rgba(255, 247, 232, 0.68);
+  stroke-width: 1.12;
+}
+
+.center-shell-highlight {
+  fill: rgba(255, 250, 239, 0.54);
+  stroke: none;
+}
+
+.center-orbit {
+  fill: none;
+  stroke: rgba(250, 240, 220, 0.72);
+  stroke-width: 0.94;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.graphite-dust {
+  fill: rgba(248, 237, 214, 0.88);
+}
+
+.atom-visual-stage {
+  position: relative;
+  width: 100%;
+  height: 240px;
+  touch-action: none;
+  user-select: none;
+  border-radius: 12px;
+  overflow: hidden;
+  /* The stage is a deliberate exception to the chrome's flat/3-color rule — treated like
+     embedded media (a photo, a video), not a UI card. A fixed, deterministic star field (not
+     random per launch) over a near-black ground, matching the site's own atom-scene ground. */
+  background-color: var(--stage-bg, #050508);
+  background-image:
+    radial-gradient(1.2px 1.2px at 8% 10%, rgba(255, 255, 255, 0.55), transparent 60%),
+    radial-gradient(1px 1px at 22% 5%, rgba(255, 255, 255, 0.35), transparent 60%),
+    radial-gradient(1.4px 1.4px at 38% 15%, rgba(255, 255, 255, 0.4), transparent 60%),
+    radial-gradient(1px 1px at 55% 3%, rgba(255, 255, 255, 0.3), transparent 60%),
+    radial-gradient(1px 1px at 70% 12%, rgba(255, 255, 255, 0.45), transparent 60%),
+    radial-gradient(1.3px 1.3px at 88% 7%, rgba(255, 255, 255, 0.32), transparent 60%),
+    radial-gradient(1px 1px at 12% 28%, rgba(255, 255, 255, 0.28), transparent 60%),
+    radial-gradient(1.4px 1.4px at 92% 22%, rgba(255, 255, 255, 0.4), transparent 60%),
+    radial-gradient(1px 1px at 6% 50%, rgba(255, 255, 255, 0.3), transparent 60%),
+    radial-gradient(1.2px 1.2px at 95% 45%, rgba(255, 255, 255, 0.36), transparent 60%),
+    radial-gradient(1px 1px at 18% 72%, rgba(255, 255, 255, 0.25), transparent 60%),
+    radial-gradient(1.3px 1.3px at 80% 78%, rgba(255, 255, 255, 0.32), transparent 60%),
+    radial-gradient(1px 1px at 50% 90%, rgba(255, 255, 255, 0.22), transparent 60%),
+    radial-gradient(1px 1px at 45% 60%, rgba(255, 255, 255, 0.18), transparent 60%),
+    radial-gradient(120% 90% at 50% 0%, rgba(255, 255, 255, 0.05), transparent 60%);
+}
+
+.atom-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+  color: rgba(250, 246, 240, 0.75);
+  font-size: 10.5px;
+  font-weight: 560;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  animation: atomHintFade 4000ms ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atom-hint {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+@keyframes atomHintFade {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px);
+  }
+  10% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}

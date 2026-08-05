@@ -2,12 +2,26 @@
 <html lang="ko">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self';" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:;" />
     <title>AtomFolio</title>
     <link rel="stylesheet" href="popover.css" />
+    <link rel="stylesheet" href="atom-sketch.css" />
   </head>
   <body>
-    <div id="root" class="panel"></div>
+    <div class="panel">
+      <div id="connect-root"></div>
+      <div id="header-root"></div>
+      <div id="picker-root"></div>
+      <!-- Owned exclusively by atom-view.bundle.js's React root — popover.js never touches this
+           node, since its own render() replaces its containers' contents wholesale on every
+           state push, which would otherwise unmount React out from under itself. -->
+      <div id="atom-visual-root"></div>
+      <div id="rest-root"></div>
+      <!-- Settings overlay — absolutely positioned over the whole panel, toggled by the header
+           gear button. Independent of render(state); see popover.js's renderSettingsOverlay(). -->
+      <div id="settings-root"></div>
+    </div>
     <script src="popover.js"></script>
+    <script src="atom-view.bundle.js"></script>
   </body>
 </html>

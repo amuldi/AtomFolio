@@ -1,0 +1,4 @@
+# Built by scripts/build-renderer.mjs (npm run build:renderer, or automatically before
+# start/dev/build:mac) — not checked in, same as any other bundler output.
+src/renderer/atom-view.bundle.js
+src/renderer/atom-view.bundle.js.map

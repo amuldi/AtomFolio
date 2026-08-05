@@ -102,6 +102,7 @@ const STORAGE_KEYS = {
   scoreDockPosition: 'atom-sketch-score-dock-position-v2',
   allocationDockPosition: 'atom-sketch-allocation-dock-position',
   twinDockPosition: 'atom-sketch-twin-dock-position',
+  atomHintDismissed: 'atom-sketch-atom-hint-dismissed',
 };
 const SHOOTING_STAR_INTERVAL_MS = 30000;
 const SHOOTING_STAR_CLEAR_BUFFER_MS = 420;
@@ -255,6 +256,7 @@ const UI_TEXT = {
     allocationSourcePosition: '매수가 × 수량 기준',
     allocationSourceEqual: '균등 비중 기준',
     atomAria: '검은 배경 위 손으로 그린 인터랙티브 포트폴리오 스케치',
+    atomHint: '원자를 눌러 자세히 보기',
     scorePointUnit: '점',
     parseError: '종목 행을 찾지 못했습니다. ticker/name 컬럼이 있는 CSV를 올려주세요.',
     readError: '파일을 읽지 못했습니다.',
@@ -376,6 +378,7 @@ const UI_TEXT = {
     allocationSourcePosition: 'Weighted by buy price × shares',
     allocationSourceEqual: 'Weighted equally',
     atomAria: 'Interactive hand-drawn portfolio sketch on a black background',
+    atomHint: 'Tap an atom to see details',
     scorePointUnit: 'pts',
     parseError: 'Could not find portfolio rows. Upload a CSV with ticker or name columns.',
     readError: 'Could not read the file.',
@@ -5389,6 +5392,34 @@ export default function App() {
   const [, setScoreDockSpawn] = useState(null);
   const [activeGroupKey, setActiveGroupKey] = useState(null);
   const [selectedAtomId, setSelectedAtomId] = useState(null);
+  // First-visit-only hint on the atom stage — dismissed on first interaction or after a few
+  // seconds either way, then remembered so it never comes back. Same copy/timing as the desktop
+  // popover's own atom hint (desktop/src/renderer/atom-view.jsx).
+  const [atomHintVisible, setAtomHintVisible] = useState(() => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    try {
+      return window.localStorage.getItem(STORAGE_KEYS.atomHintDismissed) !== '1';
+    } catch {
+      return false;
+    }
+  });
+  const dismissAtomHint = useCallback(() => {
+    setAtomHintVisible(false);
+    try {
+      window.localStorage.setItem(STORAGE_KEYS.atomHintDismissed, '1');
+    } catch {
+      // Worst case it reappears next visit — not harmful enough to handle further.
+    }
+  }, []);
+  useEffect(() => {
+    if (!atomHintVisible) {
+      return undefined;
+    }
+    const timer = setTimeout(dismissAtomHint, 4000);
+    return () => clearTimeout(timer);
+  }, [atomHintVisible, dismissAtomHint]);
   const [hoverInfo, setHoverInfo] = useState(null);
   const [frameTime, setFrameTime] = useState(0);
   const [shootingStar, setShootingStar] = useState(null);
@@ -7708,7 +7739,7 @@ export default function App() {
         <div className="stage-tilt">
           <div className="stage-reveal">
               <div className={`stage-breath${!hasPortfolioItems ? ' is-intro' : ''}`}>
-              <div className="stage-camera">
+              <div className="stage-camera" onPointerDownCapture={dismissAtomHint}>
                 {ENABLE_WEBGL_SCENE_PREVIEW ? (
                   <AtomCanvas
                     atoms={atoms}
@@ -7740,6 +7771,11 @@ export default function App() {
                   onPointerLeave={handleNodeLeave}
                   onKeyboardSelect={handleNodeKeyboardSelect}
                 />
+                {atomHintVisible && hasPortfolioItems ? (
+                  <div className="atom-hint" role="status">
+                    {text.atomHint}
+                  </div>
+                ) : null}
                 {portfolioEntries.length ? (
                   <div className="portfolio-preview-layer">
                     {portfolioEntries

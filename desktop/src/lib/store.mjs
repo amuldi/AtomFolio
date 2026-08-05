@@ -10,6 +10,16 @@ const DEFAULTS = {
   pollIntervalSec: 60,
   lastSeenArticleIds: [],
   selectedPortfolioId: null,
+  // Proactive-insight thresholds — personal trading preferences, kept local-only (never sent to
+  // the server, unlike the portfolio data itself, which the user already trusts the backend with).
+  notificationsEnabled: true,
+  stopLossPercent: -10,
+  takeProfitPercent: 20,
+  allocationDriftPercent: 15,
+  targetBucketWeights: { stock: 60, dividend: 15, goldCash: 15, reit: 5, other: 5 },
+  // { [conditionKey]: lastFiredAtMs } — rate-limits repeat notifications for the same condition;
+  // never sent to the server either.
+  insightCooldowns: {},
 };
 
 const MAX_SEEN_IDS = 80;

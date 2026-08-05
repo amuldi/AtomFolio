@@ -8,7 +8,7 @@
 // environment that renders SVG (including this file's bezier "sketch" strokes) accurately; a
 // hand-rolled pixel rasterizer can't reproduce that shape faithfully.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -38,12 +38,6 @@ function render(outputPath, size, { background } = {}) {
   execFileSync('cairosvg', args, { stdio: 'inherit' });
 }
 
-// Tray icon: transparent background, black ink — macOS treats a "...Template.png"-named Tray
-// image as a template (it re-tints black-on-transparent to match the light/dark menu bar
-// automatically), so this must stay transparent, never a filled square.
-render(path.join(assetsDir, 'trayIconTemplate.png'), 22);
-render(path.join(assetsDir, 'trayIconTemplate@2x.png'), 44);
-
 // App logo: opaque white background with the black atom on top, per the actual app-icon
 // requirement (Finder/Dock icons need a real background — a transparent one looks broken outside
 // a light context).
@@ -61,5 +55,26 @@ execFileSync('iconutil', ['-c', 'icns', iconsetDir, '-o', path.join(assetsDir, '
   stdio: 'inherit',
 });
 rmSync(path.dirname(iconsetDir), { recursive: true, force: true });
+
+// Tray status dots: today's P/L at a glance, without the full atom detail — see main.js's
+// updateTrayIcon(). Colors match --profit-color/--loss-color from src/styles.css exactly. These
+// must NOT be named "...Template.png" — macOS force-monochromes template images, which would
+// throw away the color that's the entire point here.
+const dotSvgDir = mkdtempSync(path.join(tmpdir(), 'atomfolio-traydots-'));
+const DOT_COLORS = {
+  profit: 'rgba(255, 92, 82, 0.94)',
+  loss: 'rgba(91, 164, 255, 0.94)',
+  neutral: 'rgba(180, 180, 188, 0.9)',
+};
+for (const [name, color] of Object.entries(DOT_COLORS)) {
+  const svgPath = path.join(dotSvgDir, `${name}.svg`);
+  writeFileSync(
+    svgPath,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5" fill="${color}"/></svg>`,
+  );
+  execFileSync('cairosvg', [svgPath, '-o', path.join(assetsDir, `trayDot-${name}.png`), '--output-width', '22', '--output-height', '22'], { stdio: 'inherit' });
+  execFileSync('cairosvg', [svgPath, '-o', path.join(assetsDir, `trayDot-${name}@2x.png`), '--output-width', '44', '--output-height', '44'], { stdio: 'inherit' });
+}
+rmSync(dotSvgDir, { recursive: true, force: true });
 
 console.log('Generated tray + app icons (and icon.icns) in desktop/assets/ from public/favicon.svg.');

@@ -15,11 +15,12 @@ export function summarizeWorkspacePortfolios(portfolios = []) {
   };
 }
 
-// Per-holding detail for the popover's atom view — the biggest positions by weight, largest
-// first. Capped at 6, not more: each node carries a persistent name+return label (see
-// popover.js's renderAtomStage), and beyond ~6 in a ~300px-wide stage the labels start
-// overlapping each other.
-export function summarizeWorkspaceHoldings(portfolios = [], limit = 6) {
+// Per-holding detail (market value / return / weight) for the popover's atom readout — matched
+// against the real AtomSketch nodes by ticker code when one is clicked (see atom-view.jsx). The
+// atom itself shows every holding via the real generateAtomLayout, unbounded, so this needs a high
+// enough cap that essentially any real portfolio is fully covered, or clicking a smaller position
+// would select a node with no matching readout data.
+export function summarizeWorkspaceHoldings(portfolios = [], limit = 80) {
   const allItems = portfolios.flatMap((entry) => (Array.isArray(entry.items) ? entry.items : []));
   const summary = createPortfolioAnalyticsSummary(allItems, allItems);
 

@@ -9,14 +9,15 @@ import {
   collectWorkspaceTickers,
   listWorkspacePortfolios,
 } from './lib/portfolioTotals.mjs';
+import { evaluateInsights, filterByCooldown } from './lib/insights.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Polling never runs faster than this even if a config file is hand-edited — protects the shared
 // news/portfolio API from a misconfigured client.
 const MIN_POLL_INTERVAL_SEC = 60;
-const POPOVER_WIDTH = 336;
-const POPOVER_HEIGHT = 540;
+const POPOVER_WIDTH = 380;
+const POPOVER_HEIGHT = 620;
 
 let tray = null;
 let popover = null;
@@ -33,9 +34,11 @@ let state = {
   lastUpdatedAt: null,
   totals: null,
   holdings: [],
+  items: [],
   news: [],
   portfolios: [],
   selectedPortfolioId: null,
+  activeInsight: null,
 };
 
 function broadcastState() {
@@ -44,8 +47,28 @@ function broadcastState() {
   }
 }
 
+// The tray icon itself stays a plain profit/loss dot — no atom detail at 22px, that's what the
+// popover is for. Never named "...Template.png": macOS force-monochromes template images, which
+// would discard the color that's the entire point of this indicator.
+function trayDotToneFor(totals) {
+  const rate = totals?.totalReturnRate;
+  if (!Number.isFinite(rate) || rate === 0) {
+    return 'neutral';
+  }
+  return rate > 0 ? 'profit' : 'loss';
+}
+
+function updateTrayIcon() {
+  if (!tray) {
+    return;
+  }
+  const tone = state.connected ? trayDotToneFor(state.totals) : 'neutral';
+  tray.setImage(path.join(__dirname, '..', 'assets', `trayDot-${tone}.png`));
+}
+
 function setState(partial) {
   state = { ...state, ...partial };
+  updateTrayIcon();
   broadcastState();
 }
 
@@ -60,12 +83,13 @@ function createPopover() {
     movable: false,
     skipTaskbar: true,
     alwaysOnTop: true,
+    // transparent (not vibrancy) is only here so the CSS border-radius on .panel actually shows
+    // rounded corners against the desktop — the panel itself paints a fully opaque background, no
+    // native frosted-glass blur. Ordinary opaque macOS chrome, not a translucent overlay.
     transparent: true,
     backgroundColor: '#00000000',
     hasShadow: true,
     roundedCorners: true,
-    vibrancy: 'popover',
-    visualEffectState: 'active',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -90,13 +114,22 @@ function positionPopoverNearTray() {
 
   const trayBounds = tray.getBounds();
   const display = screen.getDisplayNearestPoint({ x: trayBounds.x, y: trayBounds.y });
+  const workArea = display.workArea;
   const x = Math.round(
     Math.min(
-      Math.max(trayBounds.x + trayBounds.width / 2 - POPOVER_WIDTH / 2, display.workArea.x + 8),
-      display.workArea.x + display.workArea.width - POPOVER_WIDTH - 8,
+      Math.max(trayBounds.x + trayBounds.width / 2 - POPOVER_WIDTH / 2, workArea.x + 8),
+      workArea.x + workArea.width - POPOVER_WIDTH - 8,
     ),
   );
-  const y = Math.round(trayBounds.y + trayBounds.height + 4);
+  // Clamped on both ends: pinned above the work-area floor so a taller popover never runs off the
+  // bottom of a short display, but never pushed above the tray itself either (the natural position
+  // is already below the menu bar, so this floor only ever bites on unusually short screens).
+  const y = Math.round(
+    Math.max(
+      Math.min(trayBounds.y + trayBounds.height + 4, workArea.y + workArea.height - POPOVER_HEIGHT - 8),
+      workArea.y + 8,
+    ),
+  );
   popover.setPosition(x, y, false);
 }
 
@@ -127,7 +160,7 @@ function showPopoverFocusedOn(articleId) {
 }
 
 function createTray() {
-  const iconPath = path.join(__dirname, '..', 'assets', 'trayIconTemplate.png');
+  const iconPath = path.join(__dirname, '..', 'assets', 'trayDot-neutral.png');
   tray = new Tray(iconPath);
   tray.setToolTip('AtomFolio');
   tray.on('click', togglePopover);
@@ -156,9 +189,11 @@ async function refresh({ silent = false } = {}) {
       loading: false,
       totals: null,
       holdings: [],
+      items: [],
       news: [],
       portfolios: [],
       selectedPortfolioId: null,
+      activeInsight: null,
       lastError: null,
     });
     return;
@@ -192,6 +227,12 @@ async function refresh({ silent = false } = {}) {
     const totals = summarizeWorkspacePortfolios(scopedPortfolios);
     const holdings = summarizeWorkspaceHoldings(scopedPortfolios);
     const tickers = collectWorkspaceTickers(scopedPortfolios);
+    // Raw items (not the summarized `holdings` above) for the popover's atom view — it feeds
+    // these straight into the real generateAtomLayout from the web app, which expects full
+    // portfolio-item shape (region/sector/assetClass etc.), not the flattened summary.
+    const selectedPortfolioItems = Array.isArray(selectedPortfolio?.items)
+      ? selectedPortfolio.items
+      : [];
 
     let newsItems = [];
     try {
@@ -233,6 +274,30 @@ async function refresh({ silent = false } = {}) {
       rememberSeenArticleIds(config, newsItems.map((item) => item.id).filter(Boolean));
     }
 
+    // Proactive insights (stop-loss/take-profit/allocation drift): the popover always highlights
+    // whatever's currently true (not rate-limited — showing it when the user happens to open the
+    // popover isn't spammy the way a repeat notification would be), but only the first one still
+    // outside its cooldown window actually fires a Notification, and only the single most severe
+    // one — several highlighted at once would just be noise.
+    const allInsights = evaluateInsights({ items: selectedPortfolioItems, config });
+    const activeInsight = allInsights[0] ?? null;
+
+    if (config.notificationsEnabled && Notification.isSupported()) {
+      const [notifiable] = filterByCooldown(allInsights, config.insightCooldowns);
+      if (notifiable) {
+        const notification = new Notification({
+          title: notifiable.message,
+          body: 'AtomFolio',
+          silent: false,
+        });
+        notification.on('click', () => togglePopover());
+        notification.show();
+        saveConfig({
+          insightCooldowns: { ...config.insightCooldowns, [notifiable.key]: Date.now() },
+        });
+      }
+    }
+
     if (requestToken !== latestRefreshToken) {
       return;
     }
@@ -244,9 +309,11 @@ async function refresh({ silent = false } = {}) {
       lastUpdatedAt: Date.now(),
       totals,
       holdings,
+      items: selectedPortfolioItems,
       news: decoratedNews,
       portfolios: portfolioList,
       selectedPortfolioId,
+      activeInsight,
     });
   } catch (error) {
     if (requestToken !== latestRefreshToken) {
@@ -305,9 +372,11 @@ function registerIpcHandlers() {
       connected: false,
       totals: null,
       holdings: [],
+      items: [],
       news: [],
       portfolios: [],
       selectedPortfolioId: null,
+      activeInsight: null,
       lastError: null,
     });
     return { ok: true };
@@ -324,6 +393,44 @@ function registerIpcHandlers() {
     if (typeof url === 'string' && /^https?:\/\//.test(url)) {
       shell.openExternal(url);
     }
+  });
+
+  ipcMain.handle('atomfolio:get-settings', () => {
+    const config = loadConfig();
+    return {
+      notificationsEnabled: config.notificationsEnabled,
+      stopLossPercent: config.stopLossPercent,
+      takeProfitPercent: config.takeProfitPercent,
+      allocationDriftPercent: config.allocationDriftPercent,
+      pollIntervalSec: config.pollIntervalSec,
+    };
+  });
+
+  // Only these fields — never the workspace/connection ones — are reachable from here, so the
+  // settings panel can't accidentally touch anything beyond the thresholds it's meant to control.
+  ipcMain.handle('atomfolio:update-settings', async (_event, partial) => {
+    const allowedKeys = [
+      'notificationsEnabled',
+      'stopLossPercent',
+      'takeProfitPercent',
+      'allocationDriftPercent',
+      'pollIntervalSec',
+    ];
+    const clean = {};
+    for (const key of allowedKeys) {
+      if (partial && key in partial) {
+        clean[key] = partial[key];
+      }
+    }
+
+    saveConfig(clean);
+
+    if ('pollIntervalSec' in clean && pollTimer) {
+      startPolling();
+    }
+
+    await refresh({ silent: true });
+    return { ok: true };
   });
 }
 

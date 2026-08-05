@@ -5,23 +5,28 @@
 }
 
 :root {
-  color-scheme: dark;
-  --ink: rgba(250, 246, 240, 0.96);
-  --ink-dim: rgba(250, 246, 240, 0.5);
-  --ink-faint: rgba(250, 246, 240, 0.32);
-  --profit: rgba(255, 126, 116, 0.98);
-  --profit-bg: rgba(255, 78, 68, 0.16);
-  --loss: rgba(126, 190, 255, 0.98);
-  --loss-bg: rgba(54, 128, 255, 0.16);
-  --panel-bg: #050508;
-  --hairline: rgba(250, 246, 240, 0.1);
+  color-scheme: light;
+  --ink: rgba(0, 0, 0, 0.88);
+  --ink-dim: rgba(0, 0, 0, 0.55);
+  --ink-faint: rgba(0, 0, 0, 0.35);
+  --profit: rgb(214, 50, 40);
+  --profit-bg: rgba(214, 50, 40, 0.1);
+  --loss: rgb(11, 110, 224);
+  --loss-bg: rgba(11, 110, 224, 0.1);
+  /* Stage/chrome split: the atom + stardust area is deliberately exempt from the opaque, native
+     chrome look below — treated like embedded media (a photo, a video) — and keeps its own
+     near-black ground + star field, defined in atom-sketch.css. Everything else — the "frame"
+     (header, readout, news, settings) — is a flat, opaque, ordinary macOS-light panel. */
+  --stage-bg: #050508;
+  --chrome-bg: #f5f5f7;
+  --hairline: rgba(0, 0, 0, 0.08);
   --ease: cubic-bezier(0.2, 0.8, 0.4, 1);
 }
 
 html,
 body {
-  width: 336px;
-  height: 540px;
+  width: 380px;
+  height: 620px;
   overflow: hidden;
   background: transparent;
   font-family:
@@ -34,31 +39,13 @@ body {
 }
 
 .panel {
+  position: relative;
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
-  /* A fixed, deterministic star field (not random per launch — same feel every time the popover
-     opens) layered over a near-black ground, rather than the macOS translucent-blur "popover"
-     look, so this reads as its own small window into space instead of a frosted system panel. */
-  background-color: var(--panel-bg);
-  background-image:
-    radial-gradient(1.2px 1.2px at 8% 12%, rgba(255, 255, 255, 0.55), transparent 60%),
-    radial-gradient(1px 1px at 22% 6%, rgba(255, 255, 255, 0.35), transparent 60%),
-    radial-gradient(1.4px 1.4px at 38% 18%, rgba(255, 255, 255, 0.4), transparent 60%),
-    radial-gradient(1px 1px at 55% 4%, rgba(255, 255, 255, 0.3), transparent 60%),
-    radial-gradient(1px 1px at 70% 15%, rgba(255, 255, 255, 0.45), transparent 60%),
-    radial-gradient(1.3px 1.3px at 88% 8%, rgba(255, 255, 255, 0.32), transparent 60%),
-    radial-gradient(1px 1px at 12% 34%, rgba(255, 255, 255, 0.28), transparent 60%),
-    radial-gradient(1.4px 1.4px at 92% 28%, rgba(255, 255, 255, 0.4), transparent 60%),
-    radial-gradient(1px 1px at 6% 62%, rgba(255, 255, 255, 0.3), transparent 60%),
-    radial-gradient(1.2px 1.2px at 95% 55%, rgba(255, 255, 255, 0.36), transparent 60%),
-    radial-gradient(1px 1px at 18% 88%, rgba(255, 255, 255, 0.25), transparent 60%),
-    radial-gradient(1.3px 1.3px at 80% 92%, rgba(255, 255, 255, 0.32), transparent 60%),
-    radial-gradient(1px 1px at 50% 96%, rgba(255, 255, 255, 0.22), transparent 60%),
-    radial-gradient(1px 1px at 45% 45%, rgba(255, 255, 255, 0.18), transparent 60%),
-    radial-gradient(120% 90% at 50% 0%, rgba(255, 255, 255, 0.05), transparent 60%);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background-color: var(--chrome-bg);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 14px;
   color: var(--ink);
   overflow: hidden;
@@ -105,6 +92,173 @@ body {
   color: var(--ink-dim);
 }
 
+.header__settings {
+  background: none;
+  border: none;
+  color: var(--ink-faint);
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  transition: color 140ms var(--ease), transform 140ms var(--ease);
+}
+
+.header__settings:hover {
+  color: var(--ink-dim);
+}
+
+.header__settings:active {
+  transform: scale(0.9);
+}
+
+/* ---------- Settings overlay ---------- */
+
+#settings-root {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms var(--ease);
+  z-index: 5;
+}
+
+#settings-root.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background-color: var(--chrome-bg);
+}
+
+.settings-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--hairline);
+  flex: 0 0 auto;
+}
+
+.settings-panel__title {
+  font-size: 12.5px;
+  font-weight: 640;
+  color: var(--ink-dim);
+}
+
+.settings-panel__close {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--ink);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 140ms var(--ease);
+}
+
+.settings-panel__close:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.settings-panel__body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.settings-row__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 9px;
+}
+
+.settings-row__label {
+  font-size: 12.5px;
+  font-weight: 560;
+  color: var(--ink);
+}
+
+.settings-row__value {
+  font-size: 12px;
+  font-weight: 620;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-slider {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.12);
+  outline: none;
+  cursor: pointer;
+}
+
+.settings-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--ink);
+  cursor: pointer;
+  transition: transform 140ms var(--ease);
+}
+
+.settings-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.settings-row--toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-toggle {
+  position: relative;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.14);
+  cursor: pointer;
+  transition: background-color 160ms var(--ease);
+}
+
+.settings-toggle.is-on {
+  background: rgba(0, 0, 0, 0.86);
+}
+
+.settings-toggle__knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  transition: transform 160ms var(--ease);
+}
+
+.settings-toggle.is-on .settings-toggle__knob {
+  transform: translateX(14px);
+}
+
 /* ---------- Portfolio picker ---------- */
 
 .portfolio-picker {
@@ -119,9 +273,9 @@ body {
   border-radius: 9px;
   border: 1px solid var(--hairline);
   background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6' viewBox='0 0 9 6'%3E%3Cpath d='M1 1l3.5 3.5L8 1' fill='none' stroke='rgba(250,246,240,0.5)' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6' viewBox='0 0 9 6'%3E%3Cpath d='M1 1l3.5 3.5L8 1' fill='none' stroke='rgba(0,0,0,0.5)' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
       no-repeat right 12px center,
-    rgba(255, 255, 255, 0.045);
+    rgba(0, 0, 0, 0.035);
   color: var(--ink);
   font-family: inherit;
   font-size: 12px;
@@ -132,162 +286,31 @@ body {
 }
 
 .portfolio-picker select:hover {
-  background-color: rgba(255, 255, 255, 0.07);
+  background-color: rgba(0, 0, 0, 0.05);
 }
 
 .portfolio-picker select:hover,
 .portfolio-picker select:focus-visible {
-  border-color: rgba(250, 246, 240, 0.32);
+  border-color: rgba(0, 0, 0, 0.22);
 }
 
-/* ---------- Atom stage ---------- */
+/* ---------- Atom section (stage sizing is in atom-sketch.css; the SVG shapes themselves are the
+   real AtomSketch component, rendered by atom-view.jsx into #atom-visual-root) ---------- */
 
 .atom-section {
   flex: 0 0 auto;
   padding: 2px 8px 10px;
 }
 
-.atom-stage {
-  height: 182px;
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-}
-
-.atom-stage.is-dragging {
-  cursor: grabbing;
-}
-
-.atom-stage__svg {
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-
-/* Stroke-only "pencil line" shapes throughout the atom — fill:none plus round caps/joins is what
-   reads as hand-drawn rather than vector-perfect; non-scaling-stroke keeps the line weight
-   constant even while a shape is being scaled for depth each frame. */
-.atom-spoke {
-  fill: none;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-}
-
-.atom-spoke--soft {
-  stroke: var(--hairline);
-  stroke-width: 2.2;
-}
-
-.atom-spoke--main {
-  stroke: rgba(250, 246, 240, 0.24);
-  stroke-width: 1;
-}
-
-.atom-spoke--main.is-selected {
-  stroke: var(--ink-faint);
-}
-
-.atom-node__ring-soft,
-.atom-node__ring-main {
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
-  transition: stroke 160ms var(--ease);
-}
-
-.atom-node__ring-soft {
-  stroke: rgba(250, 246, 240, 0.22);
-  stroke-width: 2.6;
-}
-
-.atom-node__ring-main {
-  stroke: var(--ink-dim);
-  stroke-width: 1.5;
-}
-
-/* Label x/y are set directly every animation frame (see applyFrame in popover.js) — real 3D
-   rotation, not a CSS transform, so no counter-rotation trick is needed to keep labels upright;
-   they're never rotated in the first place. */
-.atom-node__label {
-  font-size: 8.6px;
-  font-weight: 560;
-  fill: var(--ink-dim);
-}
-
-.atom-node__percent {
-  font-size: 8px;
-  font-weight: 560;
-  fill: var(--ink-faint);
-}
-
-.atom-node__percent.is-profit {
-  fill: var(--profit);
-}
-
-.atom-node__percent.is-loss {
-  fill: var(--loss);
-}
-
-.atom-node {
-  cursor: pointer;
-}
-
-.atom-node:hover .atom-node__ring-main,
-.atom-node.is-selected .atom-node__ring-main {
-  stroke: var(--ink);
-}
-
-.atom-node:hover .atom-node__ring-soft,
-.atom-node.is-selected .atom-node__ring-soft {
-  stroke: rgba(250, 246, 240, 0.4);
-}
-
-.atom-node.is-selected .atom-node__shell {
-  filter: drop-shadow(0 0 5px rgba(250, 246, 240, 0.5));
-}
-
-.atom-node.is-selected .atom-node__label {
-  fill: var(--ink);
-}
-
-.atom-nucleus {
-  cursor: pointer;
-  transition: transform 160ms var(--ease);
-  transform-box: fill-box;
-  transform-origin: center;
-}
-
-.atom-nucleus:hover {
-  transform: scale(1.06);
-}
-
-.atom-nucleus__soft,
-.atom-nucleus__main {
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
-}
-
-.atom-nucleus__soft {
-  stroke: rgba(250, 246, 240, 0.3);
-  stroke-width: 3;
-}
-
-.atom-nucleus__main {
-  stroke: var(--ink);
-  stroke-width: 1.7;
-}
-
 .atom-readout {
-  padding: 8px 8px 0;
-  min-height: 62px;
+  padding: 10px 8px 0;
+  min-height: 70px;
 }
 
 .atom-readout__label {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 620;
+  letter-spacing: 0.01em;
   color: var(--ink-faint);
   white-space: nowrap;
   overflow: hidden;
@@ -295,11 +318,12 @@ body {
 }
 
 .atom-readout__value {
-  margin-top: 2px;
-  font-size: 24px;
+  margin-top: 3px;
+  font-size: 28px;
   font-weight: 660;
   letter-spacing: -0.02em;
   line-height: 1.2;
+  font-variant-numeric: tabular-nums;
 }
 
 .atom-readout__row {
@@ -316,7 +340,7 @@ body {
   border-radius: 999px;
   font-size: 12.5px;
   font-weight: 620;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.05);
   color: var(--ink-dim);
 }
 
@@ -331,15 +355,16 @@ body {
 }
 
 .atom-readout__note {
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--ink-faint);
+  opacity: 0.85;
 }
 
 .error-banner {
   margin: 0 16px 10px;
   padding: 7px 10px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.045);
   color: var(--ink-dim);
   font-size: 11.5px;
   flex: 0 0 auto;
@@ -379,7 +404,7 @@ body {
 }
 
 .news-card:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.045);
 }
 
 .news-card__title-row {
@@ -460,7 +485,7 @@ body {
   padding: 9px 10px;
   border-radius: 8px;
   border: 1px solid var(--hairline);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(0, 0, 0, 0.035);
   color: var(--ink);
   font-size: 12.5px;
   outline: none;
@@ -468,14 +493,14 @@ body {
 }
 
 .connect__input:focus {
-  border-color: rgba(250, 246, 240, 0.32);
+  border-color: rgba(0, 0, 0, 0.22);
 }
 
 .connect__button {
   padding: 9px 12px;
   border-radius: 8px;
   border: none;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.06);
   color: var(--ink);
   font-size: 12.5px;
   font-weight: 600;
@@ -484,7 +509,7 @@ body {
 }
 
 .connect__button:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .connect__button:active {
@@ -501,6 +526,6 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.18);
   border-radius: 999px;
 }
