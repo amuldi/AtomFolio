@@ -2590,25 +2590,6 @@ function HoverCard({ atom, position, language }) {
   );
 }
 
-function SketchSpiralIcon() {
-  return (
-    <svg className="spiral-glyph__icon" viewBox="0 0 48 48" aria-hidden="true">
-      <path
-        className="spiral-glyph__soft"
-        d="M34.6 11.3C29.4 6.9 19.5 7.2 14.5 12.5C9.9 17.3 9.6 25.6 14 30.7C18.4 35.9 26.7 36.7 31.9 33.1C36.1 30.2 37.9 24.7 36 20.1C34.2 15.9 29.6 13.3 25.2 14.1C21.1 14.8 17.9 18.3 17.9 22.4C17.9 26 20.6 29.1 24.1 29.4C27.2 29.6 29.9 27.5 30.2 24.8C30.4 22.5 29.1 20.6 26.9 19.9"
-      />
-      <path
-        className="spiral-glyph__main"
-        d="M33.3 11.2C28.8 7.5 20.1 7.5 15.1 12.1C10.2 16.6 9.9 24.8 14 30.1C18.1 35.4 26.4 36.3 31.3 32.8C35.4 29.8 37.1 24.5 35.3 20.3C33.7 16.4 29.4 14.2 25.4 14.8C21.6 15.3 18.5 18.5 18.4 22.2C18.3 25.8 20.9 28.7 24.1 28.9C27 29.1 29.5 27.1 29.8 24.6C30 22.2 28.8 20.2 26.3 19.4C24.2 18.8 21.8 19.7 20.8 21.6C19.9 23.4 20.3 25.7 21.9 27C23.3 28.1 25.5 28.1 26.9 27"
-      />
-      <path
-        className="spiral-glyph__highlight"
-        d="M33.1 11.8C28.5 8.1 20.3 8 15.8 12.5C11.5 16.9 11.2 24.6 14.8 29.3C18.5 34.1 25.9 35 30.6 31.9C34.4 29.4 35.9 24.7 34.4 20.7C33 17.1 29.1 15.1 25.6 15.6C22.3 16 19.6 18.8 19.4 22C19.2 25 21.3 27.5 24.1 27.9C26.7 28.1 28.7 26.4 28.9 24.3C29.1 22.4 28 20.8 26 20.1"
-      />
-    </svg>
-  );
-}
-
 function SketchTwinIcon() {
   return (
     <svg className="twin-dock__icon" viewBox="0 0 48 48" aria-hidden="true">
@@ -3574,25 +3555,37 @@ function StockDetailCard({
   );
 }
 
+// How long a freshly-arrived article keeps its "NEW" badge before it fades back to a normal row
+// — a UX timing choice, independent of the design system's 100-150ms Contextual Duration rule
+// (that rule governs the badge's own enter/exit transition, defined in CSS, not how long it stays).
+const NEWS_AUTO_REFRESH_MS = 90 * 1000;
+const NEWS_NEW_BADGE_VISIBLE_MS = 8000;
+
 function MarketNewsPanel({ language }) {
   const requestIdRef = useRef(0);
   const activeNewsAbortRef = useRef(null);
+  const seenArticleIdsRef = useRef(new Set());
+  const newBadgeTimeoutRef = useRef(null);
   const [query, setQuery] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
   const [news, setNews] = useState(null);
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState('');
+  const [newArticleIds, setNewArticleIds] = useState(() => new Set());
 
   const loadNews = useCallback(
-    async (nextQuery = '') => {
+    async (nextQuery = '', { silent = false } = {}) => {
       const requestId = requestIdRef.current + 1;
       requestIdRef.current = requestId;
       activeNewsAbortRef.current?.abort();
       const controller = new AbortController();
       activeNewsAbortRef.current = controller;
       const cleanQuery = String(nextQuery ?? '').trim();
-      setStatus('loading');
-      setError('');
+
+      if (!silent) {
+        setStatus('loading');
+        setError('');
+      }
 
       try {
         const payload = await fetchMarketNews({
@@ -3607,10 +3600,40 @@ function MarketNewsPanel({ language }) {
           return;
         }
 
+        const seenIds = seenArticleIdsRef.current;
+        const isFirstLoadForThisQuery = seenIds.size === 0;
+        const freshIds = new Set(
+          (payload.items ?? [])
+            .filter((article) => article.id && !seenIds.has(article.id))
+            .map((article) => article.id),
+        );
+        for (const article of payload.items ?? []) {
+          if (article.id) {
+            seenIds.add(article.id);
+          }
+        }
+
         setNews(payload);
         setStatus('ready');
+        setError('');
+
+        // Badges only make sense once there's a prior snapshot to compare against — the very
+        // first load of a query shouldn't paint its whole result list as "new".
+        if (!isFirstLoadForThisQuery && freshIds.size) {
+          window.clearTimeout(newBadgeTimeoutRef.current);
+          setNewArticleIds(freshIds);
+          newBadgeTimeoutRef.current = window.setTimeout(() => {
+            setNewArticleIds(new Set());
+          }, NEWS_NEW_BADGE_VISIBLE_MS);
+        }
       } catch {
         if (requestIdRef.current !== requestId || controller.signal.aborted) {
+          return;
+        }
+
+        // A silent (background poll) failure keeps whatever's already on screen rather than
+        // blanking the panel over a single missed 90s tick.
+        if (silent) {
           return;
         }
 
@@ -3624,19 +3647,38 @@ function MarketNewsPanel({ language }) {
 
   useEffect(() => {
     setSubmittedQuery('');
+    seenArticleIdsRef.current = new Set();
+    setNewArticleIds(new Set());
     loadNews('');
 
     return () => {
       requestIdRef.current += 1;
       activeNewsAbortRef.current?.abort();
+      window.clearTimeout(newBadgeTimeoutRef.current);
     };
   }, [language, loadNews]);
+
+  // Auto-refresh: only while this panel is mounted (i.e. actually open — see ToolSideDrawer's
+  // resolvedTool.key === 'news' gate) and the tab is in the foreground. Background tabs pause
+  // entirely rather than firing polls that'll just be wasted work.
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState === 'visible') {
+        void loadNews(submittedQuery, { silent: true });
+      }
+    };
+
+    const intervalId = window.setInterval(tick, NEWS_AUTO_REFRESH_MS);
+    return () => window.clearInterval(intervalId);
+  }, [loadNews, submittedQuery]);
 
   const handleSearch = useCallback(
     (event) => {
       event.preventDefault();
       const cleanQuery = query.trim();
       setSubmittedQuery(cleanQuery);
+      seenArticleIdsRef.current = new Set();
+      setNewArticleIds(new Set());
       loadNews(cleanQuery);
     },
     [loadNews, query],
@@ -3702,11 +3744,30 @@ function MarketNewsPanel({ language }) {
               target="_blank"
               rel="noopener noreferrer"
             >
-              <strong>{article.title}</strong>
-              <span>
-                {sourceLabel}
-                {article.publishedAt ? ` · ${formatNewsTime(article.publishedAt, language)}` : ''}
-              </span>
+              <div className="tool-drawer__news-thumb">
+                {article.thumbnailUrl ? (
+                  <img
+                    src={article.thumbnailUrl}
+                    alt=""
+                    loading="lazy"
+                    onError={(event) => {
+                      event.currentTarget.style.display = 'none';
+                    }}
+                  />
+                ) : null}
+              </div>
+              <div className="tool-drawer__news-body">
+                <div className="tool-drawer__news-title-row">
+                  <strong>{article.title}</strong>
+                  {newArticleIds.has(article.id) ? (
+                    <span className="tool-drawer__news-badge">NEW</span>
+                  ) : null}
+                </div>
+                <span>
+                  {sourceLabel}
+                  {article.publishedAt ? ` · ${formatNewsTime(article.publishedAt, language)}` : ''}
+                </span>
+              </div>
             </a>
           );
         })}
@@ -3788,10 +3849,14 @@ function ToolSideDrawer({
       available: true,
     },
     {
+      // No rail button — reachable via the "Add Stock" button inside the accounts panel and via
+      // holding-edit flows (onSelectTool('manual')). Kept in `tools` so those still resolve; just
+      // not its own top-level icon, since it duplicated the button already in the accounts panel.
       key: 'manual',
       label: language === 'en' ? 'Add Stock' : '종목 추가',
       icon: <SketchManualAccountIcon />,
       available: true,
+      hidden: true,
     },
     {
       key: 'overview',
@@ -3800,22 +3865,10 @@ function ToolSideDrawer({
       available: Boolean(analyticsSummary || heatmap || allocation || scorecard || groupOptions.length),
     },
     {
-      key: 'ai',
-      label: language === 'en' ? 'AI Summary' : 'AI 요약',
-      icon: <SketchSpiralIcon />,
-      available: Boolean(activePortfolio?.id || items.length),
-    },
-    {
       key: 'compare',
       label: language === 'en' ? 'Compare' : '비교',
       icon: <SketchAccountStackIcon />,
       available: portfolioEntries.length >= 2,
-    },
-    {
-      key: 'report',
-      label: language === 'en' ? 'Monthly Report' : '월간 리포트',
-      icon: <SketchBurstIcon />,
-      available: Boolean(analyticsSummary?.profitFlow?.length),
     },
     {
       key: 'twin',
@@ -4423,7 +4476,8 @@ function ToolSideDrawer({
   );
 
   useEffect(() => {
-    if (!open || resolvedTool?.key !== 'ai') {
+    // AI summary is now a section within the merged 'overview' panel rather than its own tool tab.
+    if (!open || resolvedTool?.key !== 'overview') {
       return undefined;
     }
 
@@ -5407,20 +5461,15 @@ function ToolSideDrawer({
               </section>
             ) : null}
           </div>
+
+          {activePortfolio?.id || items.length ? renderAiSummaryPanel() : null}
+          {analyticsSummary?.profitFlow?.length ? renderMonthlyReportPanel() : null}
         </div>
       );
     }
 
-    if (resolvedTool.key === 'ai') {
-      return renderAiSummaryPanel();
-    }
-
     if (resolvedTool.key === 'compare') {
       return renderComparePanel();
-    }
-
-    if (resolvedTool.key === 'report') {
-      return renderMonthlyReportPanel();
     }
 
     if (resolvedTool.key === 'twin') {
@@ -5452,7 +5501,7 @@ function ToolSideDrawer({
     >
       <div className="tool-drawer__window">
         <div className="tool-drawer__rail" aria-label={text.toolMenuAria}>
-          {tools.map((tool) => (
+          {tools.filter((tool) => !tool.hidden).map((tool) => (
             <button
               key={tool.key}
               type="button"
