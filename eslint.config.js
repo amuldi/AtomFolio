@@ -26,6 +26,10 @@ export default [
       // Bundled by desktop/scripts/build-renderer.mjs (esbuild output, includes react/three) —
       // not source, not meant to be linted.
       'desktop/src/renderer/atom-view.bundle.js',
+      // Bundled by desktop/scripts/build-main-libs.mjs, same reasoning.
+      'desktop/src/lib/insights.bundle.mjs',
+      'desktop/src/lib/portfolioTotals.bundle.mjs',
+      'release/**',
     ],
   },
   {

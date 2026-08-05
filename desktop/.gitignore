@@ -2,3 +2,12 @@
 # start/dev/build:mac) — not checked in, same as any other bundler output.
 src/renderer/atom-view.bundle.js
 src/renderer/atom-view.bundle.js.map
+
+# Built by scripts/build-main-libs.mjs, same reasoning.
+src/lib/insights.bundle.mjs
+src/lib/insights.bundle.mjs.map
+src/lib/portfolioTotals.bundle.mjs
+src/lib/portfolioTotals.bundle.mjs.map
+
+# electron-builder output
+release/

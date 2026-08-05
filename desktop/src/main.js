@@ -3,13 +3,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, saveConfig, rememberSeenArticleIds } from './lib/store.mjs';
 import { createApiClient } from './lib/api.mjs';
+// .bundle.mjs, not the raw source — these two reach into the web app's shared src/, which isn't
+// included in a packaged app's asar; see scripts/build-main-libs.mjs for why.
 import {
   summarizeWorkspacePortfolios,
   summarizeWorkspaceHoldings,
   collectWorkspaceTickers,
   listWorkspacePortfolios,
-} from './lib/portfolioTotals.mjs';
-import { evaluateInsights, filterByCooldown } from './lib/insights.mjs';
+} from './lib/portfolioTotals.bundle.mjs';
+import { evaluateInsights, filterByCooldown } from './lib/insights.bundle.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

@@ -7,9 +7,10 @@
   "main": "src/main.js",
   "scripts": {
     "build:renderer": "node scripts/build-renderer.mjs",
-    "start": "npm run build:renderer && electron .",
-    "dev": "npm run build:renderer && ATOMFOLIO_API_BASE_URL=http://localhost:8787 electron .",
-    "build:mac": "npm run build:renderer && electron-builder --mac"
+    "build:main-libs": "node scripts/build-main-libs.mjs",
+    "start": "npm run build:renderer && npm run build:main-libs && electron .",
+    "dev": "npm run build:renderer && npm run build:main-libs && ATOMFOLIO_API_BASE_URL=http://localhost:8787 electron .",
+    "build:mac": "npm run build:renderer && npm run build:main-libs && electron-builder --mac"
   },
   "devDependencies": {
     "electron": "^32.0.0",
