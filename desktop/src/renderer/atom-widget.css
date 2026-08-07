@@ -1,0 +1,165 @@
+/* The floating atom widget — same shared React root/bundle as the popover used to host
+   (atom-view.jsx, atom-view.bundle.js), but retargeted from "a page inside an opaque panel" to
+   "floats directly over the desktop, fully transparent, no card". atom-sketch.css (linked before
+   this file) still supplies the actual SVG stroke/node/label styling — this file only overrides
+   the container-level layout, background, and drag/no-drag regions. */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    'SF Pro Text',
+    'Apple SD Gothic Neo',
+    'Malgun Gothic',
+    sans-serif;
+}
+
+#atom-visual-root {
+  width: 100%;
+  height: 100%;
+}
+
+/* The widget's own padding is the only drag handle for moving the window — .atom-visual-stage
+   opts back out below so dragging the atom itself keeps rotating/selecting like it always has.
+   24px (not the original 10px, and not the first-pass 18px) so there's an actually-graspable
+   margin even at the widget's smallest resizable size, and cursor: grab so "you can pick the
+   window up here" reads visually. 24px specifically because .atom-visual-stage below sets
+   overflow: visible (unlike the popover's card, nothing here clips the atom to its box), which
+   exposes .sketch-svg's shared transform: scale(1.1) — a ~5%-per-side visual overflow that used
+   to be clipped. Measured at the widget's 160×190 floor, that overflow reaches ~6px past the
+   stage's own hit-test box; 24px keeps a real margin of *inert* drag padding outside that
+   overflow, so there's no band where the atom is visible but a click there actually drags the
+   window instead of hitting a node. */
+.atom-section {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  padding: 24px;
+  gap: 6px;
+  -webkit-app-region: drag;
+  cursor: grab;
+}
+
+.atom-section:active {
+  cursor: grabbing;
+}
+
+/* Overrides atom-sketch.css's popover-oriented version (fixed aspect-ratio, near-black star-field
+   card, rounded corners) — no card here at all, the atom floats straight over the desktop. */
+.atom-visual-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  background: none;
+  border-radius: 0;
+  overflow: visible;
+  touch-action: none;
+  user-select: none;
+  -webkit-app-region: no-drag;
+  cursor: default;
+}
+
+.node-hit,
+.center-hit {
+  -webkit-app-region: no-drag;
+}
+
+/* Minimal total-value readout — no card, no background, just text with a soft dark halo so it
+   stays legible over any desktop wallpaper (light or dark, photo or plain). */
+:root {
+  --widget-ink: rgba(250, 244, 232, 0.96);
+  --widget-ink-dim: rgba(250, 244, 232, 0.72);
+  --widget-ink-faint: rgba(250, 244, 232, 0.52);
+  --widget-profit: rgb(255, 132, 122);
+  --widget-loss: rgb(150, 195, 255);
+  --widget-text-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.6),
+    0 0 14px rgba(0, 0, 0, 0.4);
+}
+
+.atom-readout {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  text-align: center;
+}
+
+.atom-readout__label {
+  font-size: 10px;
+  font-weight: 620;
+  letter-spacing: 0.01em;
+  color: var(--widget-ink-faint);
+  text-shadow: var(--widget-text-shadow);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.atom-readout__value {
+  margin-top: 2px;
+  font-size: 19px;
+  font-weight: 660;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  color: var(--widget-ink);
+  text-shadow: var(--widget-text-shadow);
+}
+
+.atom-readout__row {
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  /* At the widget's minimum width the chip + note together can be wider than the row — wrap them
+     as whole units (chip on one line, note on the next) instead of letting a single word inside
+     one of them break mid-text (e.g. "5개 종목" → "5개" / "종목"). */
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+
+.atom-readout__chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 620;
+  white-space: nowrap;
+  background: none;
+  color: var(--widget-ink-dim);
+  text-shadow: var(--widget-text-shadow);
+}
+
+.atom-readout__chip.is-profit {
+  color: var(--widget-profit);
+}
+
+.atom-readout__chip.is-loss {
+  color: var(--widget-loss);
+}
+
+.atom-readout__note {
+  font-size: 10px;
+  color: var(--widget-ink-faint);
+  text-shadow: var(--widget-text-shadow);
+  white-space: nowrap;
+}
+
+/* The one-time hint needs its own small legible backdrop (unlike the value text above, which is
+   deliberately card-free) since it also has to read over arbitrary wallpaper. */
+.atom-hint {
+  background: rgba(20, 18, 16, 0.6);
+  backdrop-filter: blur(6px);
+}

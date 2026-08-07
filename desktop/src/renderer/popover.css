@@ -5,28 +5,35 @@
 }
 
 :root {
-  color-scheme: light;
-  --ink: rgba(0, 0, 0, 0.88);
-  --ink-dim: rgba(0, 0, 0, 0.55);
-  --ink-faint: rgba(0, 0, 0, 0.35);
-  --profit: rgb(214, 50, 40);
-  --profit-bg: rgba(214, 50, 40, 0.1);
-  --loss: rgb(11, 110, 224);
-  --loss-bg: rgba(11, 110, 224, 0.1);
-  /* Stage/chrome split: the atom + stardust area is deliberately exempt from the opaque, native
-     chrome look below — treated like embedded media (a photo, a video) — and keeps its own
-     near-black ground + star field, defined in atom-sketch.css. Everything else — the "frame"
-     (header, readout, news, settings) — is a flat, opaque, ordinary macOS-light panel. */
-  --stage-bg: #050508;
-  --chrome-bg: #f5f5f7;
-  --hairline: rgba(0, 0, 0, 0.08);
+  color-scheme: dark;
+  /* Text alpha steps are matched against macOS's own dark-appearance semantic label colors
+     (labelColor / secondaryLabelColor / tertiaryLabelColor are documented at roughly full /
+     ~55% / ~25% white respectively) — not picked freehand. --ink was already effectively at
+     labelColor; --ink-dim and --ink-faint are nudged half a step closer to their native
+     counterparts here (0.5→0.55, 0.32→0.28) so the three tiers read with the same relative
+     contrast as a native dark panel side by side, not just individually "dark enough". */
+  --ink: rgba(250, 246, 240, 0.96);
+  --ink-dim: rgba(250, 246, 240, 0.55);
+  --ink-faint: rgba(250, 246, 240, 0.28);
+  --profit: rgba(255, 126, 116, 0.98);
+  --profit-bg: rgba(255, 78, 68, 0.16);
+  --loss: rgba(126, 190, 255, 0.98);
+  --loss-bg: rgba(54, 128, 255, 0.16);
+  /* One step lighter than pure black, not a flat white — the atom's own near-black stage lives in
+     the separate floating widget now, so the popover has no "media" area to stay consistent with;
+     this is just an ordinary dark macOS panel. */
+  --chrome-bg: #121317;
+  /* macOS's dark-mode opaque separator reads closer to ~15% white than 10% — 10% all but
+     disappears against a near-black panel background, native ones stay faintly but clearly
+     visible. */
+  --hairline: rgba(250, 246, 240, 0.15);
   --ease: cubic-bezier(0.2, 0.8, 0.4, 1);
 }
 
 html,
 body {
-  width: 380px;
-  height: 620px;
+  width: 340px;
+  height: 480px;
   overflow: hidden;
   background: transparent;
   font-family:
@@ -45,7 +52,7 @@ body {
   display: flex;
   flex-direction: column;
   background-color: var(--chrome-bg);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 14px;
   color: var(--ink);
   overflow: hidden;
@@ -63,7 +70,7 @@ body {
   display: none;
 }
 
-/* ---------- Pager (atom / news / settings) ---------- */
+/* ---------- Pager (news / settings) ---------- */
 
 .pager {
   position: relative;
@@ -92,10 +99,26 @@ body {
   overflow: hidden;
 }
 
-#atom-visual-root,
 #news-root,
 #settings-root {
   height: 100%;
+}
+
+/* Dimmed the instant a portfolio switch is requested, then un-dimmed once the new state (and its
+   freshly-swapped content) arrives — a lightweight "loading, then crossfaded in" cue without a
+   separate spinner. Instant either way if reduced motion is on. */
+#news-root {
+  transition: opacity 180ms ease;
+}
+
+#news-root.is-loading {
+  opacity: 0.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #news-root {
+    transition: none;
+  }
 }
 
 .pager-dots {
@@ -113,18 +136,18 @@ body {
   padding: 0;
   border: none;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.16);
+  background: rgba(255, 255, 255, 0.16);
   cursor: pointer;
   transition: width 220ms var(--ease), background-color 220ms var(--ease);
 }
 
 .pager-dot:hover {
-  background: rgba(0, 0, 0, 0.28);
+  background: rgba(255, 255, 255, 0.28);
 }
 
 .pager-dot.is-active {
   width: 18px;
-  background: rgba(0, 0, 0, 0.75);
+  background: rgba(255, 255, 255, 0.75);
 }
 
 /* ---------- Header ---------- */
@@ -245,7 +268,7 @@ body {
   width: 100%;
   height: 3px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.14);
   outline: none;
   cursor: pointer;
 }
@@ -278,13 +301,13 @@ body {
   padding: 0;
   border: none;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.14);
+  background: rgba(255, 255, 255, 0.14);
   cursor: pointer;
   transition: background-color 160ms var(--ease);
 }
 
 .settings-toggle.is-on {
-  background: rgba(0, 0, 0, 0.86);
+  background: rgba(250, 246, 240, 0.85);
 }
 
 .settings-toggle__knob {
@@ -294,12 +317,13 @@ body {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #ffffff;
+  background: var(--ink);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
-  transition: transform 160ms var(--ease);
+  transition: transform 160ms var(--ease), background-color 160ms var(--ease);
 }
 
 .settings-toggle.is-on .settings-toggle__knob {
+  background: var(--chrome-bg);
   transform: translateX(14px);
 }
 
@@ -317,9 +341,9 @@ body {
   border-radius: 9px;
   border: 1px solid var(--hairline);
   background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6' viewBox='0 0 9 6'%3E%3Cpath d='M1 1l3.5 3.5L8 1' fill='none' stroke='rgba(0,0,0,0.5)' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6' viewBox='0 0 9 6'%3E%3Cpath d='M1 1l3.5 3.5L8 1' fill='none' stroke='rgba(250,246,240,0.5)' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
       no-repeat right 12px center,
-    rgba(0, 0, 0, 0.035);
+    rgba(255, 255, 255, 0.045);
   color: var(--ink);
   font-family: inherit;
   font-size: 12px;
@@ -330,89 +354,19 @@ body {
 }
 
 .portfolio-picker select:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+  background-color: rgba(255, 255, 255, 0.07);
 }
 
 .portfolio-picker select:hover,
 .portfolio-picker select:focus-visible {
-  border-color: rgba(0, 0, 0, 0.22);
-}
-
-/* ---------- Atom section (stage sizing is in atom-sketch.css; the SVG shapes themselves are the
-   real AtomSketch component, rendered by atom-view.jsx into #atom-visual-root) ---------- */
-
-.atom-section {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  padding: 2px 8px 10px;
-}
-
-.atom-readout {
-  flex: 0 0 auto;
-  padding: 10px 8px 0;
-  min-height: 70px;
-}
-
-.atom-readout__label {
-  font-size: 10.5px;
-  font-weight: 620;
-  letter-spacing: 0.01em;
-  color: var(--ink-faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.atom-readout__value {
-  margin-top: 3px;
-  font-size: 28px;
-  font-weight: 660;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-}
-
-.atom-readout__row {
-  margin-top: 6px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.atom-readout__chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 12.5px;
-  font-weight: 620;
-  background: rgba(0, 0, 0, 0.05);
-  color: var(--ink-dim);
-}
-
-.atom-readout__chip.is-profit {
-  background: var(--profit-bg);
-  color: var(--profit);
-}
-
-.atom-readout__chip.is-loss {
-  background: var(--loss-bg);
-  color: var(--loss);
-}
-
-.atom-readout__note {
-  font-size: 11px;
-  color: var(--ink-faint);
-  opacity: 0.85;
+  border-color: rgba(250, 246, 240, 0.32);
 }
 
 .error-banner {
   margin: 0 16px 10px;
   padding: 7px 10px;
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.045);
+  background: rgba(255, 255, 255, 0.05);
   color: var(--ink-dim);
   font-size: 11.5px;
   flex: 0 0 auto;
@@ -457,7 +411,7 @@ body {
 }
 
 .news-card:hover {
-  background: rgba(0, 0, 0, 0.045);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .news-card__title-row {
@@ -538,7 +492,7 @@ body {
   padding: 9px 10px;
   border-radius: 8px;
   border: 1px solid var(--hairline);
-  background: rgba(0, 0, 0, 0.035);
+  background: rgba(255, 255, 255, 0.04);
   color: var(--ink);
   font-size: 12.5px;
   outline: none;
@@ -546,14 +500,14 @@ body {
 }
 
 .connect__input:focus {
-  border-color: rgba(0, 0, 0, 0.22);
+  border-color: rgba(250, 246, 240, 0.32);
 }
 
 .connect__button {
   padding: 9px 12px;
   border-radius: 8px;
   border: none;
-  background: rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.1);
   color: var(--ink);
   font-size: 12.5px;
   font-weight: 600;
@@ -562,7 +516,7 @@ body {
 }
 
 .connect__button:hover {
-  background: rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .connect__button:active {
@@ -579,6 +533,6 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.18);
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 999px;
 }

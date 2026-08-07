@@ -1,7 +1,7 @@
-// Header/picker (fixed chrome) + a 3-page horizontal pager (atom / news / settings) — plain DOM,
-// no build step needed. The atom visual itself lives in atom-view.jsx/atom-view.bundle.js (a
-// separate React root mounted at #atom-visual-root, which this file never touches — see
-// popover.html's comment on that node).
+// Header/picker (fixed chrome) + a 2-page horizontal pager (news / settings) — plain DOM, no
+// build step needed. The atom itself no longer lives in the popover at all — it's its own
+// always-on-top floating widget now (atom-widget.html/atom-widget.css), reusing the same
+// atom-view.jsx/atom-view.bundle.js React root this file never touched anyway.
 const connectRoot = document.getElementById('connect-root');
 const appRoot = document.getElementById('app-root');
 const headerRoot = document.getElementById('header-root');
@@ -48,6 +48,10 @@ function setChildren(container, node) {
   if (node != null) {
     container.append(node);
   }
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 }
 
 // ---------- Pager: pointer drag + trackpad swipe (wheel deltaX) + interruptible spring snap ----------
@@ -319,20 +323,29 @@ function createPager({ container, track, dots }) {
     get currentIndex() {
       return currentIndex;
     },
+    // True only once a drag/wheel gesture has actually committed to horizontal paging (axis
+    // locked, or an active trackpad scroll) — not for the brief pre-axis-lock window, and not
+    // during the post-release spring settle (that's cheap transform-only work, nothing worth
+    // guarding against). Profiling (see popover.js's onState below) showed a render() DOM
+    // rebuild landing in this window is what causes the swipe stutter — this is what lets
+    // callers detect that window and defer.
+    get isInteracting() {
+      return dragState?.axis === 'x' || wheelState != null;
+    },
   };
 }
 
 const pager = createPager({ container: pagerEl, track: pagerTrackEl, dots: pagerDotsEl });
 
-// Every time the popover is actually shown, land back on the atom page — a stale "you left it on
+// Every time the popover is actually shown, land back on the news page — a stale "you left it on
 // settings last time" isn't worth remembering for a menu-bar glance.
-function resetToAtomPageIfVisible() {
+function resetToFirstPageIfVisible() {
   if (document.visibilityState === 'visible') {
     pager.goToPage(0, { instant: true });
   }
 }
-document.addEventListener('visibilitychange', resetToAtomPageIfVisible);
-window.addEventListener('focus', resetToAtomPageIfVisible);
+document.addEventListener('visibilitychange', resetToFirstPageIfVisible);
+window.addEventListener('focus', resetToFirstPageIfVisible);
 
 function renderConnect(state) {
   const container = el('div', 'connect');
@@ -391,7 +404,7 @@ function renderHeader(state) {
         button.setAttribute('aria-label', '설정');
         // A shortcut, not a toggle — settings is a normal page now, so this just jumps there;
         // swiping or tapping another dot navigates away just like any other page.
-        button.addEventListener('click', () => pager.goToPage(2));
+        button.addEventListener('click', () => pager.goToPage(1));
         return button;
       })(),
       (() => {
@@ -404,7 +417,7 @@ function renderHeader(state) {
 }
 
 // Only shown once there's something to choose between — a single-portfolio workspace (the common
-// case) skips straight to the atom instead of a picker with one disabled-feeling option.
+// case) has no need for a picker with one disabled-feeling option.
 function renderPortfolioPicker(state) {
   const portfolios = Array.isArray(state.portfolios) ? state.portfolios : [];
   if (portfolios.length < 2) {
@@ -420,10 +433,56 @@ function renderPortfolioPicker(state) {
   }
 
   select.addEventListener('change', () => {
+    pendingPortfolioSwitch = true;
+    showNewsLoading();
     void window.atomfolio.selectPortfolio(select.value);
   });
 
   return el('div', 'portfolio-picker', [select]);
+}
+
+// Rebuilding the <select> from scratch on every state push (poll, portfolio switch, holding-count
+// tick) resets its native focus/open-dropdown state out from under the user. When the set of
+// portfolios hasn't actually changed, this updates the existing element's option labels and
+// selected value in place instead of tearing it down.
+let currentPickerPortfolioIds = null;
+
+function updatePortfolioPicker(state) {
+  const portfolios = Array.isArray(state.portfolios) ? state.portfolios : [];
+
+  if (portfolios.length < 2) {
+    if (currentPickerPortfolioIds !== null) {
+      setChildren(pickerRoot, null);
+      currentPickerPortfolioIds = null;
+    }
+    return;
+  }
+
+  const newIds = portfolios.map((portfolio) => portfolio.id);
+  const idsMatch =
+    currentPickerPortfolioIds &&
+    newIds.length === currentPickerPortfolioIds.length &&
+    newIds.every((id, index) => id === currentPickerPortfolioIds[index]);
+
+  if (idsMatch) {
+    const select = pickerRoot.querySelector('select');
+    if (select) {
+      const options = select.querySelectorAll('option');
+      portfolios.forEach((portfolio, index) => {
+        const label = `${portfolio.name} · ${portfolio.holdingsCount}개 종목`;
+        if (options[index] && options[index].textContent !== label) {
+          options[index].textContent = label;
+        }
+      });
+      if (select.value !== state.selectedPortfolioId) {
+        select.value = state.selectedPortfolioId;
+      }
+    }
+    return;
+  }
+
+  setChildren(pickerRoot, renderPortfolioPicker(state));
+  currentPickerPortfolioIds = newIds;
 }
 
 function renderNewsPage(state) {
@@ -466,6 +525,25 @@ function renderNewsPage(state) {
 
   page.append(list);
   return page;
+}
+
+// True from the moment the picker's `change` fires until the resulting state push is rendered —
+// distinguishes "this render is the direct result of a portfolio switch" (worth the loading dim
+// + crossfade) from an ordinary background poll tick (which shouldn't flicker on every refresh).
+let pendingPortfolioSwitch = false;
+
+function showNewsLoading() {
+  if (prefersReducedMotion()) {
+    return;
+  }
+  newsRoot.classList.add('is-loading');
+}
+
+function updateNewsPage(state) {
+  setChildren(newsRoot, renderNewsPage(state));
+  // A no-op unless showNewsLoading() dimmed it for an in-flight portfolio switch — removing the
+  // class now lets the CSS opacity transition carry the new content back in.
+  newsRoot.classList.remove('is-loading');
 }
 
 // ---------- Settings page ----------
@@ -561,6 +639,26 @@ function renderSettingsPanel(settings) {
       value: settings.allocationDriftPercent,
       onCommit: (v) => updateSetting({ allocationDriftPercent: v }),
     }),
+    // Floored at 0.4 (matches main.js's own MIN_WINDOW_OPACITY re-clamp) — much lower than that
+    // and the window's own text stops being legible, which defeats the point of a settings UI.
+    renderSlider({
+      label: '팝업 불투명도',
+      format: (v) => `${Math.round(v * 100)}%`,
+      min: 0.4,
+      max: 1,
+      step: 0.05,
+      value: settings.popoverOpacity,
+      onCommit: (v) => updateSetting({ popoverOpacity: v }),
+    }),
+    renderSlider({
+      label: '원자 위젯 불투명도',
+      format: (v) => `${Math.round(v * 100)}%`,
+      min: 0.4,
+      max: 1,
+      step: 0.05,
+      value: settings.widgetOpacity,
+      onCommit: (v) => updateSetting({ widgetOpacity: v }),
+    }),
   ]);
 
   return el('div', 'settings-panel', [
@@ -583,14 +681,56 @@ function render(state) {
   if (!state?.connected) {
     setChildren(connectRoot, renderConnect(state));
     appRoot.classList.add('is-hidden');
+    pendingPortfolioSwitch = false;
+    newsRoot.classList.remove('is-loading');
     return;
   }
 
   setChildren(connectRoot, null);
   appRoot.classList.remove('is-hidden');
   setChildren(headerRoot, renderHeader(state));
-  setChildren(pickerRoot, renderPortfolioPicker(state));
-  setChildren(newsRoot, renderNewsPage(state));
+  updatePortfolioPicker(state);
+  pendingPortfolioSwitch = false;
+  updateNewsPage(state);
+}
+
+// A poll tick (or a portfolio switch's own state push) landing mid-swipe forces render() to tear
+// down and rebuild header/picker/news — profiled with DevTools Tracing during a simulated drag,
+// that rebuild costs several ms of Style/Layout work landing in the same frame window as the
+// active pointer tracking, which is what read as the swipe stutter. While the pager is actually
+// mid-gesture, incoming state is held here instead of applied immediately; only the latest one is
+// kept (mid-drag intermediate states aren't worth rendering anyway), and it's flushed the moment
+// the gesture ends.
+let pendingRenderState = null;
+let pendingRenderFlushScheduled = false;
+
+function scheduleRenderFlushCheck() {
+  if (pendingRenderFlushScheduled) {
+    return;
+  }
+  pendingRenderFlushScheduled = true;
+  const check = () => {
+    if (pager.isInteracting) {
+      requestAnimationFrame(check);
+      return;
+    }
+    pendingRenderFlushScheduled = false;
+    const state = pendingRenderState;
+    pendingRenderState = null;
+    if (state) {
+      render(state);
+    }
+  };
+  requestAnimationFrame(check);
+}
+
+function applyIncomingState(state) {
+  if (pager.isInteracting) {
+    pendingRenderState = state;
+    scheduleRenderFlushCheck();
+    return;
+  }
+  render(state);
 }
 
 async function bootstrap() {
@@ -598,9 +738,9 @@ async function bootstrap() {
   render(initialState);
   void ensureSettingsLoaded();
 
-  window.atomfolio.onState((state) => render(state));
+  window.atomfolio.onState((state) => applyIncomingState(state));
   window.atomfolio.onFocusArticle((articleId) => {
-    pager.goToPage(1);
+    pager.goToPage(0);
     const cardEl = document.querySelector(`[data-article-id="${CSS.escape(articleId ?? '')}"]`);
     cardEl?.scrollIntoView({ block: 'center' });
   });

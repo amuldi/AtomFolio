@@ -18,11 +18,25 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Polling never runs faster than this even if a config file is hand-edited — protects the shared
 // news/portfolio API from a misconfigured client.
 const MIN_POLL_INTERVAL_SEC = 60;
-const POPOVER_WIDTH = 380;
-const POPOVER_HEIGHT = 620;
+// Atom moved out into its own floating widget — popover only needs to fit news + settings now.
+const POPOVER_WIDTH = 340;
+const POPOVER_HEIGHT = 480;
+const ATOM_WIDGET_WIDTH = 260;
+const ATOM_WIDGET_HEIGHT = 300;
+const ATOM_WIDGET_MIN_WIDTH = 160;
+const ATOM_WIDGET_MIN_HEIGHT = 190;
+const ATOM_WIDGET_MAX_WIDTH = 480;
+const ATOM_WIDGET_MAX_HEIGHT = 560;
+const ATOM_WIDGET_DEFAULT_MARGIN = 24;
+const ATOM_WIDGET_GEOMETRY_SAVE_DEBOUNCE_MS = 400;
+// A window this transparent would make its own text unreadable — the slider in settings is
+// clamped to this floor too, but the backend re-clamps in case config.json was hand-edited.
+const MIN_WINDOW_OPACITY = 0.4;
 
 let tray = null;
 let popover = null;
+let atomWidget = null;
+let atomWidgetGeometrySaveTimer = null;
 let pollTimer = null;
 /** @type {Set<string>} article ids already pushed to the renderer at least once this session —
  * separate from the persisted lastSeenArticleIds, which only exists to avoid re-notifying across
@@ -46,6 +60,9 @@ let state = {
 function broadcastState() {
   if (popover && !popover.isDestroyed()) {
     popover.webContents.send('atomfolio:state', state);
+  }
+  if (atomWidget && !atomWidget.isDestroyed()) {
+    atomWidget.webContents.send('atomfolio:state', state);
   }
 }
 
@@ -74,7 +91,16 @@ function setState(partial) {
   broadcastState();
 }
 
+function clampOpacity(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 1;
+  }
+  return Math.min(1, Math.max(MIN_WINDOW_OPACITY, numeric));
+}
+
 function createPopover() {
+  const config = loadConfig();
   popover = new BrowserWindow({
     width: POPOVER_WIDTH,
     height: POPOVER_HEIGHT,
@@ -99,6 +125,7 @@ function createPopover() {
     },
   });
 
+  popover.setOpacity(clampOpacity(config.popoverOpacity));
   popover.loadFile(path.join(__dirname, 'renderer', 'popover.html'));
   popover.on('blur', () => {
     if (popover && !popover.isDestroyed()) {
@@ -107,6 +134,117 @@ function createPopover() {
   });
 
   return popover;
+}
+
+function defaultAtomWidgetPosition() {
+  const workArea = screen.getPrimaryDisplay().workArea;
+  return {
+    x: Math.round(workArea.x + workArea.width - ATOM_WIDGET_WIDTH - ATOM_WIDGET_DEFAULT_MARGIN),
+    y: Math.round(workArea.y + ATOM_WIDGET_DEFAULT_MARGIN),
+  };
+}
+
+// A position saved on a display that's since been unplugged (external monitor, different desk)
+// would otherwise put the widget somewhere the user can never see or reach again. Snapping back
+// onto whichever display now best matches that rect keeps it always reachable.
+function clampPointToVisibleDisplay(x, y, width, height) {
+  const display = screen.getDisplayMatching({ x, y, width, height });
+  const workArea = display.workArea;
+  return {
+    x: Math.round(Math.min(Math.max(x, workArea.x), workArea.x + workArea.width - width)),
+    y: Math.round(Math.min(Math.max(y, workArea.y), workArea.y + workArea.height - height)),
+  };
+}
+
+function createAtomWidget() {
+  const config = loadConfig();
+  const width = config.atomWidgetSize?.width ?? ATOM_WIDGET_WIDTH;
+  const height = config.atomWidgetSize?.height ?? ATOM_WIDGET_HEIGHT;
+  const { x, y } = config.atomWidgetPosition
+    ? clampPointToVisibleDisplay(config.atomWidgetPosition.x, config.atomWidgetPosition.y, width, height)
+    : defaultAtomWidgetPosition();
+
+  atomWidget = new BrowserWindow({
+    width,
+    height,
+    x,
+    y,
+    minWidth: ATOM_WIDGET_MIN_WIDTH,
+    minHeight: ATOM_WIDGET_MIN_HEIGHT,
+    maxWidth: ATOM_WIDGET_MAX_WIDTH,
+    maxHeight: ATOM_WIDGET_MAX_HEIGHT,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    // Unlike the popover (an opaque rounded panel, where a native shadow reads as a normal macOS
+    // surface), the widget's content is an irregular transparent shape — a rectangular native
+    // window shadow behind it would look like a visible glitch, not depth. The atom's own SVG
+    // glow already does the "lifted off the desktop" job.
+    hasShadow: false,
+    resizable: true,
+    movable: true,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    fullscreenable: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  atomWidget.setOpacity(clampOpacity(config.widgetOpacity));
+  atomWidget.loadFile(path.join(__dirname, 'renderer', 'atom-widget.html'));
+
+  // One shared debounce for both events, saving position + size together — not two independent
+  // move/resize handlers. A corner/edge drag that changes the origin *and* the dimensions in the
+  // same native resize (e.g. dragging the top-left corner) doesn't reliably fire both 'move' and
+  // 'resize' on every platform; getBounds() always reflects the window's true current geometry
+  // regardless of which event happened to fire, so saving both from either event can't miss half
+  // the change the way two separately-scoped handlers could.
+  const saveAtomWidgetGeometry = () => {
+    clearTimeout(atomWidgetGeometrySaveTimer);
+    atomWidgetGeometrySaveTimer = setTimeout(() => {
+      if (!atomWidget || atomWidget.isDestroyed()) {
+        return;
+      }
+      const { x, y, width, height } = atomWidget.getBounds();
+      saveConfig({ atomWidgetPosition: { x, y }, atomWidgetSize: { width, height } });
+    }, ATOM_WIDGET_GEOMETRY_SAVE_DEBOUNCE_MS);
+  };
+  atomWidget.on('move', saveAtomWidgetGeometry);
+  atomWidget.on('resize', saveAtomWidgetGeometry);
+
+  // A discoverable way to turn the widget off without needing to know the tray menu exists.
+  atomWidget.webContents.on('context-menu', () => {
+    if (!atomWidget || atomWidget.isDestroyed()) {
+      return;
+    }
+    Menu.buildFromTemplate([
+      { label: '위젯 숨기기', click: () => setAtomWidgetVisible(false) },
+    ]).popup({ window: atomWidget });
+  });
+
+  if (config.atomWidgetVisible) {
+    // showInactive, not show — an ambient overlay shouldn't steal focus from whatever the user
+    // was doing, on launch or when toggled back on from the tray menu.
+    atomWidget.showInactive();
+  }
+
+  return atomWidget;
+}
+
+function setAtomWidgetVisible(visible) {
+  saveConfig({ atomWidgetVisible: visible });
+  if (!atomWidget || atomWidget.isDestroyed()) {
+    return;
+  }
+  if (visible) {
+    atomWidget.showInactive();
+  } else {
+    atomWidget.hide();
+  }
 }
 
 function positionPopoverNearTray() {
@@ -166,10 +304,21 @@ function createTray() {
   tray = new Tray(iconPath);
   tray.setToolTip('AtomFolio');
   tray.on('click', togglePopover);
-  // Right-click keeps a minimal escape hatch (quit) without cluttering the primary click path.
+  // Right-click keeps a minimal escape hatch (widget toggle + quit) without cluttering the
+  // primary click path, which stays scoped to the news/settings popover.
   tray.on('right-click', () => {
+    const config = loadConfig();
     tray.popUpContextMenu(
-      Menu.buildFromTemplate([{ label: 'Quit AtomFolio', click: () => app.quit() }]),
+      Menu.buildFromTemplate([
+        {
+          label: '원자 위젯 표시',
+          type: 'checkbox',
+          checked: config.atomWidgetVisible,
+          click: (menuItem) => setAtomWidgetVisible(menuItem.checked),
+        },
+        { type: 'separator' },
+        { label: 'Quit AtomFolio', click: () => app.quit() },
+      ]),
     );
   });
 }
@@ -405,6 +554,8 @@ function registerIpcHandlers() {
       takeProfitPercent: config.takeProfitPercent,
       allocationDriftPercent: config.allocationDriftPercent,
       pollIntervalSec: config.pollIntervalSec,
+      popoverOpacity: config.popoverOpacity,
+      widgetOpacity: config.widgetOpacity,
     };
   });
 
@@ -417,6 +568,8 @@ function registerIpcHandlers() {
       'takeProfitPercent',
       'allocationDriftPercent',
       'pollIntervalSec',
+      'popoverOpacity',
+      'widgetOpacity',
     ];
     const clean = {};
     for (const key of allowedKeys) {
@@ -430,6 +583,12 @@ function registerIpcHandlers() {
     if ('pollIntervalSec' in clean && pollTimer) {
       startPolling();
     }
+    if ('popoverOpacity' in clean && popover && !popover.isDestroyed()) {
+      popover.setOpacity(clampOpacity(clean.popoverOpacity));
+    }
+    if ('widgetOpacity' in clean && atomWidget && !atomWidget.isDestroyed()) {
+      atomWidget.setOpacity(clampOpacity(clean.widgetOpacity));
+    }
 
     await refresh({ silent: true });
     return { ok: true };
@@ -442,6 +601,7 @@ app.whenReady().then(async () => {
 
   createTray();
   createPopover();
+  createAtomWidget();
   registerIpcHandlers();
 
   const config = loadConfig();

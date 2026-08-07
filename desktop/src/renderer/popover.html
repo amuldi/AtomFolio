@@ -5,7 +5,6 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:;" />
     <title>AtomFolio</title>
     <link rel="stylesheet" href="popover.css" />
-    <link rel="stylesheet" href="atom-sketch.css" />
   </head>
   <body>
     <div class="panel">
@@ -15,13 +14,6 @@
         <div id="picker-root"></div>
         <div class="pager" id="pager">
           <div class="pager__track" id="pager-track">
-            <div class="pager__page" data-page="atom">
-              <!-- Owned exclusively by atom-view.bundle.js's React root — popover.js never
-                   touches this node, since its own render() replaces containers' contents
-                   wholesale on every state push, which would otherwise unmount React out from
-                   under itself. -->
-              <div id="atom-visual-root"></div>
-            </div>
             <div class="pager__page" data-page="news">
               <div id="news-root"></div>
             </div>
@@ -31,13 +23,11 @@
           </div>
         </div>
         <div class="pager-dots" id="pager-dots">
-          <button class="pager-dot" type="button" data-page-index="0" aria-label="원자"></button>
-          <button class="pager-dot" type="button" data-page-index="1" aria-label="종목 뉴스"></button>
-          <button class="pager-dot" type="button" data-page-index="2" aria-label="설정"></button>
+          <button class="pager-dot" type="button" data-page-index="0" aria-label="종목 뉴스"></button>
+          <button class="pager-dot" type="button" data-page-index="1" aria-label="설정"></button>
         </div>
       </div>
     </div>
     <script src="popover.js"></script>
-    <script src="atom-view.bundle.js"></script>
   </body>
 </html>

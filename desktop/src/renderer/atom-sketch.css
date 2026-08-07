@@ -11,6 +11,11 @@
   height: 100%;
   overflow: visible;
   display: block;
+  /* The real atom cluster only fills ~67% of its own viewBox (BOND_LENGTH radius, shared with the
+     web app — not adjusted here), so at 1:1 scale it reads small even in a properly-square stage.
+     Desktop-only visual scale-up; tuned against the stage's own overflow:hidden clipping, not
+     picked arbitrarily. */
+  transform: scale(1.1);
 }
 
 .label-layer,
@@ -30,13 +35,21 @@
   letter-spacing: 0.02em;
 }
 
+/* --atom-label-scale is set by atom-view.jsx's ResizeObserver (desktop widget only — the popover
+   no longer embeds the atom at all) so labels stay legible when the widget is resized down to its
+   160×190 minimum; it's 1 (no-op) at the widget's default/larger sizes, so this is a pure no-op
+   everywhere except near the small end of the resize range. */
 .label-main {
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--atom-label-scale, 1));
 }
 
 .label-detail {
   fill: rgba(250, 240, 220, 0.62);
-  font-size: 10.5px;
+  /* 14px, not 13.5px's old 10.5px pair — measured against the shared AtomLabel component's own
+     internal detail-vs-main scale, the old 10.5px rendered detail text ~40% the height of the main
+     label even at the widget's default size, well under comfortable legibility. 14px brings it to
+     a proportionate ~65-70%. */
+  font-size: calc(14px * var(--atom-label-scale, 1));
 }
 
 .aura-line {
@@ -191,8 +204,13 @@
 
 .atom-visual-stage {
   position: relative;
-  flex: 1 1 auto;
-  min-height: 0;
+  /* Square-ish, not flex-grown to fill whatever vertical space is left — the real atom SVG's
+     viewBox is a 1:1 square (src/components/atom/index.jsx), so a taller-than-wide box just
+     letterboxes it. Sized from width via aspect-ratio, can shrink (not grow) if the page is
+     tight (e.g. the portfolio picker row eating extra height), never overflows the page. */
+  flex: 0 1 auto;
+  aspect-ratio: 1 / 1;
+  max-height: 100%;
   width: 100%;
   touch-action: none;
   user-select: none;

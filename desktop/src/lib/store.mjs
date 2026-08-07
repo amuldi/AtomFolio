@@ -20,6 +20,16 @@ const DEFAULTS = {
   // { [conditionKey]: lastFiredAtMs } — rate-limits repeat notifications for the same condition;
   // never sent to the server either.
   insightCooldowns: {},
+  // The floating atom widget — a separate always-on-top window from the popover. Position is
+  // null until the user actually moves it once; createAtomWidget() falls back to a sensible
+  // default (primary display, top-right) rather than storing that default here.
+  atomWidgetVisible: true,
+  atomWidgetPosition: null,
+  atomWidgetSize: null,
+  // Window opacity — 1 is fully opaque. Clamped to a readable floor (see main.js) before ever
+  // being applied, so this stored value alone can't make either window illegibly transparent.
+  popoverOpacity: 1,
+  widgetOpacity: 1,
 };
 
 const MAX_SEEN_IDS = 80;

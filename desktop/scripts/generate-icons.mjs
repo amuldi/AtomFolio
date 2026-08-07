@@ -8,7 +8,7 @@
 // environment that renders SVG (including this file's bezier "sketch" strokes) accurately; a
 // hand-rolled pixel rasterizer can't reproduce that shape faithfully.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -56,22 +56,28 @@ execFileSync('iconutil', ['-c', 'icns', iconsetDir, '-o', path.join(assetsDir, '
 });
 rmSync(path.dirname(iconsetDir), { recursive: true, force: true });
 
-// Tray status dots: today's P/L at a glance, without the full atom detail — see main.js's
-// updateTrayIcon(). Colors match --profit-color/--loss-color from src/styles.css exactly. These
-// must NOT be named "...Template.png" — macOS force-monochromes template images, which would
-// throw away the color that's the entire point here.
+// Tray status glyph: today's P/L at a glance, using the exact same mark as the real app logo
+// (public/favicon.svg — the 3 overlapping hand-drawn loops + dots), just recolored per tone,
+// rather than a separately-invented shape — so "메뉴바 아이콘도 앱로고와 동일하게" holds literally,
+// not just "in spirit". See main.js's updateTrayIcon(). Colors match --profit-color/--loss-color
+// from src/styles.css exactly. These must NOT be named "...Template.png" — macOS force-monochromes
+// template images, which would throw away the color that's the entire point here.
 const dotSvgDir = mkdtempSync(path.join(tmpdir(), 'atomfolio-traydots-'));
 const DOT_COLORS = {
   profit: 'rgba(255, 92, 82, 0.94)',
-  loss: 'rgba(91, 164, 255, 0.94)',
+  loss: 'rgba(255, 255, 255, 0.94)',
   neutral: 'rgba(180, 180, 188, 0.9)',
 };
+const faviconSource = readFileSync(faviconSvg, 'utf-8');
+function recoloredFaviconSvg(color) {
+  // The favicon's <style> block only ever uses these two literal hex colors (light-mode default
+  // + a prefers-color-scheme:dark override) — cairosvg has no notion of a media query anyway, so
+  // both are just replaced with the tone color directly rather than trying to preserve the switch.
+  return faviconSource.replaceAll('#050505', color).replaceAll('#ffffff', color);
+}
 for (const [name, color] of Object.entries(DOT_COLORS)) {
   const svgPath = path.join(dotSvgDir, `${name}.svg`);
-  writeFileSync(
-    svgPath,
-    `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5" fill="${color}"/></svg>`,
-  );
+  writeFileSync(svgPath, recoloredFaviconSvg(color));
   execFileSync('cairosvg', [svgPath, '-o', path.join(assetsDir, `trayDot-${name}.png`), '--output-width', '22', '--output-height', '22'], { stdio: 'inherit' });
   execFileSync('cairosvg', [svgPath, '-o', path.join(assetsDir, `trayDot-${name}@2x.png`), '--output-width', '44', '--output-height', '44'], { stdio: 'inherit' });
 }

@@ -28,6 +28,18 @@ const DRAG_SPIN_DECAY = 7.4;
 const MAX_DRAG_SPIN_VELOCITY = 0.58;
 const DRAG_ROTATION_RESPONSE = 30;
 const IDLE_ROTATION_RESPONSE = 10;
+// How far idle auto-rotate slows down once nobody's engaged with the (now always-visible) widget.
+const IDLE_ROTATE_DISENGAGED_MULTIPLIER = 0.12;
+
+// The widget is now user-resizable (main.js createAtomWidget, 160×190 – 480×560), but SVG text
+// has no "stay a fixed screen size" mode — font-size lives in the same viewBox-scaled coordinate
+// space as everything else, so shrinking the widget shrinks node labels right along with it. Below
+// this reference stage size (the rendered stage px at the widget's *default* 260×300 — the size
+// atom-sketch.css's base label font-sizes were tuned against), --atom-label-scale grows so labels
+// stay legible at the widget's minimum size; at/above the reference size it's clamped to 1, so
+// default and larger widgets render exactly as before.
+const ATOM_LABEL_REFERENCE_STAGE_PX = 192;
+const ATOM_LABEL_MAX_SCALE = 3;
 
 function formatCurrency(value) {
   if (!Number.isFinite(value)) {
@@ -156,6 +168,56 @@ function AtomView({ items, holdings, totals, activeInsight }) {
     return () => query.removeEventListener('change', handleChange);
   }, []);
 
+  // The atom widget is always on screen (unlike the old popover atom page, only open when
+  // clicked), so an ambient full-speed spin runs indefinitely whether or not anyone's looking.
+  // Idle rotation drops to a slow crawl once neither the pointer nor window focus indicates
+  // someone's actually engaged with it, and returns to normal the moment either does.
+  const engagementRef = useRef({ hovered: false, focused: typeof document !== 'undefined' && document.hasFocus() });
+  useEffect(() => {
+    const handleFocus = () => {
+      engagementRef.current.focused = true;
+    };
+    const handleBlur = () => {
+      engagementRef.current.focused = false;
+    };
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('blur', handleBlur);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, []);
+  const handleStagePointerEnter = useCallback(() => {
+    engagementRef.current.hovered = true;
+  }, []);
+  const handleStagePointerLeave = useCallback(() => {
+    engagementRef.current.hovered = false;
+  }, []);
+
+  // Imperative (not React state) on purpose — this fires continuously while the user drags-resizes
+  // the window, and a CSS custom property write is far cheaper than a re-render on every tick.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage || typeof ResizeObserver === 'undefined') {
+      return undefined;
+    }
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[entries.length - 1];
+      if (!entry) {
+        return;
+      }
+      const { width, height } = entry.contentRect;
+      const minDimension = Math.min(width, height);
+      if (!minDimension) {
+        return;
+      }
+      const scale = clamp(ATOM_LABEL_REFERENCE_STAGE_PX / minDimension, 1, ATOM_LABEL_MAX_SCALE);
+      stage.style.setProperty('--atom-label-scale', String(scale));
+    });
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, []);
+
   useEffect(() => {
     let frameId = 0;
     let last = performance.now();
@@ -184,8 +246,10 @@ function AtomView({ items, holdings, totals, activeInsight }) {
       }
 
       if (!isDragging && !prefersReducedMotionRef.current) {
-        autoRotateY.setFromAxisAngle(yAxis, delta * AUTO_ROTATE_SPEED);
-        autoRotateX.setFromAxisAngle(xAxis, Math.sin(now * 0.00012) * delta * 0.0038);
+        const engaged = engagementRef.current.hovered || engagementRef.current.focused;
+        const idleMultiplier = engaged ? 1 : IDLE_ROTATE_DISENGAGED_MULTIPLIER;
+        autoRotateY.setFromAxisAngle(yAxis, delta * AUTO_ROTATE_SPEED * idleMultiplier);
+        autoRotateX.setFromAxisAngle(xAxis, Math.sin(now * 0.00012) * delta * 0.0038 * idleMultiplier);
         rotationRef.current.target.premultiply(autoRotateY).premultiply(autoRotateX).normalize();
       }
 
@@ -399,7 +463,13 @@ function AtomView({ items, holdings, totals, activeInsight }) {
 
   return (
     <div className="atom-section">
-      <div className="atom-visual-stage" ref={stageRef} onPointerDownCapture={dismissHint}>
+      <div
+        className="atom-visual-stage"
+        ref={stageRef}
+        onPointerDownCapture={dismissHint}
+        onPointerEnter={handleStagePointerEnter}
+        onPointerLeave={handleStagePointerLeave}
+      >
         <AtomSketch
           svgRef={svgRef}
           atoms={atoms}
