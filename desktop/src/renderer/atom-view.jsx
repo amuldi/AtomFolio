@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import { AtomSketch } from '../../../src/components/atom/index.jsx';
 import { generateAtomLayout, createAtomState, projectPoint, trackballVector } from '../../../src/utils/scene.js';
 import { clamp } from '../../../src/utils/math.js';
+import { useAtomTransition } from '../../../src/utils/useAtomTransition.js';
 import {
   BOND_LENGTH,
   VIEWBOX_SIZE,
@@ -161,7 +162,7 @@ function AtomReadout({ info }) {
   );
 }
 
-function AtomView({ items, holdings, activeInsight }) {
+function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
   const stageRef = useRef(null);
   const svgRef = useRef(null);
   const [selectedAtomId, setSelectedAtomId] = useState(null);
@@ -176,7 +177,66 @@ function AtomView({ items, holdings, activeInsight }) {
     spinAxis: new THREE.Vector3(0, 1, 0),
   });
 
-  const baseAtoms = useMemo(() => generateAtomLayout(items).map(createAtomState), [items]);
+  // Dissolve/materialize (shared with the web app — see the hook itself) for two triggers here:
+  // widget close (main.js sends atomfolio:widget-closing, see the effect below) and portfolio
+  // switch (this component noticing selectedPortfolioId changed, see the next effect down).
+  const {
+    scale: atomTransitionScale,
+    phase: atomTransitionPhase,
+    rotationSpeedMultiplierRef: atomRotationSpeedMultiplierRef,
+    dissolve: dissolveAtom,
+    materialize: materializeAtom,
+  } = useAtomTransition();
+
+  // What the scene actually renders — deliberately not just `items` directly. On a portfolio
+  // switch, main.js has already swapped state.items by the time this component finds out (unlike
+  // the web app's preview-atom click, which controls its own timing and can dissolve *before*
+  // touching the data); holding the previous portfolio's items here until the dissolve finishes
+  // is what makes "dissolve the old one, then swap, then materialize the new one" possible instead
+  // of the swap happening invisibly out from under an already-in-flight dissolve.
+  const [displayedItems, setDisplayedItems] = useState(items);
+  const previousPortfolioIdRef = useRef(selectedPortfolioId);
+
+  useEffect(() => {
+    if (previousPortfolioIdRef.current === selectedPortfolioId) {
+      // Same portfolio — e.g. a poll-tick price refresh, or a quick-added holding. Real data, just
+      // not a "switch", so it should show up immediately with no transition at all.
+      setDisplayedItems(items);
+      return undefined;
+    }
+    previousPortfolioIdRef.current = selectedPortfolioId;
+    let cancelled = false;
+    (async () => {
+      await dissolveAtom();
+      if (cancelled) {
+        return;
+      }
+      setDisplayedItems(items);
+      await materializeAtom();
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Fires on every items change (a poll-tick price refresh included, not just a switch) — the
+    // branch at the top of this effect is what tells those apart, immediately adopting the new
+    // items with no transition unless selectedPortfolioId also moved since the last run.
+  }, [items, selectedPortfolioId, dissolveAtom, materializeAtom]);
+
+  // main.js plays this dissolve before actually hiding the window (see its own
+  // hideAtomWidgetAfterDissolve) — acks back once done, with a timeout on that side in case this
+  // never fires (component unmounted, reduced-motion resolved instantly but the message raced
+  // it, etc.) so the widget can never get stuck refusing to hide.
+  useEffect(() => {
+    return window.atomfolio?.onWidgetClosing?.(async () => {
+      await dissolveAtom();
+      window.atomfolio?.widgetCloseAck?.();
+    });
+  }, [dissolveAtom]);
+
+  const baseAtoms = useMemo(
+    () => generateAtomLayout(displayedItems).map(createAtomState),
+    [displayedItems],
+  );
 
   useEffect(() => {
     setSelectedAtomId((current) => (baseAtoms.some((atom) => atom.id === current) ? current : null));
@@ -373,7 +433,8 @@ function AtomView({ items, holdings, activeInsight }) {
       if (!isDragging && !prefersReducedMotionRef.current) {
         const engaged = engagementRef.current.hovered || engagementRef.current.focused;
         const idleMultiplier = engaged ? 1 : IDLE_ROTATE_DISENGAGED_MULTIPLIER;
-        autoRotateY.setFromAxisAngle(yAxis, delta * AUTO_ROTATE_SPEED * idleMultiplier);
+        const rotationSpeed = AUTO_ROTATE_SPEED * atomRotationSpeedMultiplierRef.current * idleMultiplier;
+        autoRotateY.setFromAxisAngle(yAxis, delta * rotationSpeed);
         autoRotateX.setFromAxisAngle(xAxis, Math.sin(now * 0.00012) * delta * 0.0038 * idleMultiplier);
         rotationRef.current.target.premultiply(autoRotateY).premultiply(autoRotateX).normalize();
       }
@@ -421,6 +482,14 @@ function AtomView({ items, holdings, activeInsight }) {
       if (event.metaKey) {
         return;
       }
+      // Dissolving/materializing swaps the underlying atom data out from under any rotation state
+      // that was mid-gesture, and is already animating rotation speed on its own — ignoring new
+      // rotation drags while a transition is in flight is simpler and safer than reconciling the
+      // two. ⌘-drag (window move, handled above) is unaffected — it doesn't touch rotation state
+      // at all, so there's nothing for it to conflict with.
+      if (atomTransitionPhase !== 'idle') {
+        return;
+      }
       event.stopPropagation();
       event.preventDefault();
       // Not every pointerdown is guaranteed to have an OS-level pointer session backing it
@@ -447,7 +516,7 @@ function AtomView({ items, holdings, activeInsight }) {
       rotationRef.current.lastDragAt = performance.now();
       rotationRef.current.spinVelocity = 0;
     },
-    [clientToLocalPoint],
+    [clientToLocalPoint, atomTransitionPhase],
   );
 
   useEffect(() => {
@@ -598,7 +667,7 @@ function AtomView({ items, holdings, activeInsight }) {
       ) ?? null
     : null;
   const selectedItem = selectedAtom
-    ? items.find(
+    ? displayedItems.find(
         (item) => item && (item.ticker === selectedAtom.ticker || item.stockCode === selectedAtom.stockCode),
       ) ?? null
     : null;
@@ -614,24 +683,29 @@ function AtomView({ items, holdings, activeInsight }) {
         onPointerEnter={handleStagePointerEnter}
         onPointerLeave={handleStagePointerLeave}
       >
-        <AtomSketch
-          svgRef={svgRef}
-          atoms={atoms}
-          pulse={pulse}
-          centerMotion={centerMotion}
-          centerClickBurst={0}
-          standalone={false}
-          ariaLabel="보유 종목 원자"
-          highlightActive={false}
-          onCenterClick={() => setSelectedAtomId(null)}
-          onPointerDown={handleNodePointerDown}
-          onPointerEnter={() => {}}
-          onPointerMove={() => {}}
-          onPointerLeave={() => {}}
-          onKeyboardSelect={(atomId) =>
-            setSelectedAtomId((current) => (current === atomId ? null : atomId))
-          }
-        />
+        {/* Dissolve/materialize (useAtomTransition, shared with the web app) — whole-scene scale
+            via a CSS custom property, not per-node repositioning. See atom-widget.css for the
+            class itself. */}
+        <div className="atom-materialize-wrapper" style={{ '--materialize': atomTransitionScale }}>
+          <AtomSketch
+            svgRef={svgRef}
+            atoms={atoms}
+            pulse={pulse}
+            centerMotion={centerMotion}
+            centerClickBurst={0}
+            standalone={false}
+            ariaLabel="보유 종목 원자"
+            highlightActive={false}
+            onCenterClick={() => setSelectedAtomId(null)}
+            onPointerDown={handleNodePointerDown}
+            onPointerEnter={() => {}}
+            onPointerMove={() => {}}
+            onPointerLeave={() => {}}
+            onKeyboardSelect={(atomId) =>
+              setSelectedAtomId((current) => (current === atomId ? null : atomId))
+            }
+          />
+        </div>
         {hintVisible ? (
           <div className="atom-hint" role="status">
             원자를 눌러 자세히 보기
@@ -669,6 +743,7 @@ function AtomViewRoot() {
       items={state.items}
       holdings={state.holdings ?? []}
       activeInsight={state.activeInsight ?? null}
+      selectedPortfolioId={state.selectedPortfolioId ?? null}
     />
   );
 }

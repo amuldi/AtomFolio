@@ -776,7 +776,12 @@ function updateSetting(partial) {
 }
 
 function renderSettingsPanel(settings) {
+  // Two groups, not one flat list of 9 controls — "앱 설정" (how the app itself behaves/looks)
+  // vs. "투자 설정" (thresholds about the portfolio's numbers). Same .section-label pattern the
+  // news page already uses for its own subheading, just reused here (see popover.css for the
+  // settings-panel__body-scoped padding override that pattern needs in this context).
   const body = el('div', 'settings-panel__body', [
+    el('div', 'section-label', ['앱 설정']),
     renderToggle({
       label: '인사이트 알림',
       checked: settings.notificationsEnabled,
@@ -790,33 +795,6 @@ function renderSettingsPanel(settings) {
       step: 15,
       value: settings.pollIntervalSec,
       onCommit: (v) => updateSetting({ pollIntervalSec: v }),
-    }),
-    renderSlider({
-      label: '손절 알림',
-      format: (v) => `${v}%`,
-      min: -50,
-      max: -1,
-      step: 1,
-      value: settings.stopLossPercent,
-      onCommit: (v) => updateSetting({ stopLossPercent: v }),
-    }),
-    renderSlider({
-      label: '익절 알림',
-      format: (v) => `+${v}%`,
-      min: 1,
-      max: 100,
-      step: 1,
-      value: settings.takeProfitPercent,
-      onCommit: (v) => updateSetting({ takeProfitPercent: v }),
-    }),
-    renderSlider({
-      label: '배분 이탈 허용치',
-      format: (v) => `${v}%p`,
-      min: 1,
-      max: 50,
-      step: 1,
-      value: settings.allocationDriftPercent,
-      onCommit: (v) => updateSetting({ allocationDriftPercent: v }),
     }),
     // Floored at 0.4 (matches main.js's own MIN_WINDOW_OPACITY re-clamp) — much lower than that
     // and the window's own text stops being legible, which defeats the point of a settings UI.
@@ -855,10 +833,38 @@ function renderSettingsPanel(settings) {
       checked: settings.launchAtLogin,
       onChange: (next) => updateSetting({ launchAtLogin: next }),
     }),
+    el('div', 'section-label', ['투자 설정']),
+    renderSlider({
+      label: '손절 알림',
+      format: (v) => `${v}%`,
+      min: -50,
+      max: -1,
+      step: 1,
+      value: settings.stopLossPercent,
+      onCommit: (v) => updateSetting({ stopLossPercent: v }),
+    }),
+    renderSlider({
+      label: '익절 알림',
+      format: (v) => `+${v}%`,
+      min: 1,
+      max: 100,
+      step: 1,
+      value: settings.takeProfitPercent,
+      onCommit: (v) => updateSetting({ takeProfitPercent: v }),
+    }),
+    renderSlider({
+      label: '배분 이탈 허용치',
+      format: (v) => `${v}%p`,
+      min: 1,
+      max: 50,
+      step: 1,
+      value: settings.allocationDriftPercent,
+      onCommit: (v) => updateSetting({ allocationDriftPercent: v }),
+    }),
   ]);
 
   return el('div', 'settings-panel', [
-    el('div', 'settings-panel__header', [el('span', 'settings-panel__title', ['알림 설정'])]),
+    el('div', 'settings-panel__header', [el('span', 'settings-panel__title', ['설정'])]),
     body,
   ]);
 }

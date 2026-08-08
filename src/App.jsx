@@ -10,6 +10,7 @@ import {
 import { createPortfolioScorecard } from './lib/portfolioScoring.js';
 import { createPortfolioAnalyticsSummary } from './lib/portfolioAnalyticsSummary.js';
 import { enrichPortfolioItem, resolveExactSecurityReferenceCode } from './lib/securityKnowledge.js';
+import { useAtomTransition } from './utils/useAtomTransition.js';
 import {
   fetchLiveMarketData,
   fetchMarketSymbolSuggestions,
@@ -5398,6 +5399,16 @@ export default function App() {
   const frameCommitRef = useRef(0);
   const targetTiltRef = useRef({ x: 0, y: 0 });
   const currentTiltRef = useRef({ x: 0, y: 0 });
+  // Dissolve/materialize when the main atom's own data changes (a preview-atom click swaps in a
+  // different portfolio) — see the click handler below (which drives it) and the rAF loop further
+  // down (which reads rotationSpeedMultiplierRef every frame).
+  const {
+    scale: atomTransitionScale,
+    phase: atomTransitionPhase,
+    rotationSpeedMultiplierRef: atomRotationSpeedMultiplierRef,
+    dissolve: dissolveAtom,
+    materialize: materializeAtom,
+  } = useAtomTransition();
   const pendingHoverInfoRef = useRef(null);
   const restoredPortfolioStateRef = useRef(null);
   const portfolioSyncTimerRef = useRef(0);
@@ -5412,6 +5423,21 @@ export default function App() {
   const activePortfolioLiveItemsRef = useRef([]);
   const [activePortfolioId, setActivePortfolioId] = useState(
     () => restoredPortfolioState.activePortfolioId,
+  );
+  // Preview atoms (small drifting portfolio thumbnails floating around the main one) swap the
+  // main atom to their own portfolio when clicked — dissolve the current one, swap the data via
+  // the exact same setActivePortfolioId the existing portfolio switcher already uses, then
+  // materialize the new one, rather than snapping straight to it.
+  const handleSelectPreviewPortfolio = useCallback(
+    async (entryId) => {
+      if (!entryId || entryId === activePortfolioId || atomTransitionPhase !== 'idle') {
+        return;
+      }
+      await dissolveAtom();
+      setActivePortfolioId(entryId);
+      await materializeAtom();
+    },
+    [activePortfolioId, atomTransitionPhase, dissolveAtom, materializeAtom],
   );
   const [portfolioError, setPortfolioError] = useState('');
   const [portfolioErrorClosing, setPortfolioErrorClosing] = useState(false);
@@ -5936,7 +5962,8 @@ export default function App() {
       }
 
       if (shouldAutoRotate) {
-        autoRotateY.setFromAxisAngle(yAxis, delta * AUTO_ROTATE_SPEED);
+        const rotationSpeed = AUTO_ROTATE_SPEED * atomRotationSpeedMultiplierRef.current;
+        autoRotateY.setFromAxisAngle(yAxis, delta * rotationSpeed);
         autoRotateX.setFromAxisAngle(xAxis, Math.sin(now * 0.00012) * delta * 0.0038);
         rotationRef.current.target
           .premultiply(autoRotateY)
@@ -6596,6 +6623,13 @@ export default function App() {
   }, []);
 
   const handleNodePointerDown = (atomId, event) => {
+    // Dissolving/materializing swaps the atom's underlying data out from under any rotation state
+    // that was mid-gesture — ignoring new drags while a transition is in flight (rather than
+    // starting one that will immediately reference stale/about-to-change atom data) is simpler and
+    // safer than trying to reconcile the two.
+    if (atomTransitionPhase !== 'idle') {
+      return;
+    }
     event.stopPropagation();
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -7779,37 +7813,43 @@ export default function App() {
           <div className="stage-reveal">
               <div className={`stage-breath${!hasPortfolioItems ? ' is-intro' : ''}`}>
               <div className="stage-camera" onPointerDownCapture={dismissAtomHint}>
-                {ENABLE_WEBGL_SCENE_PREVIEW ? (
-                  <AtomCanvas
+                {/* Whole-scene dissolve/materialize (useAtomTransition) — scale, not individual
+                    node repositioning, so it works identically whichever scene renderer is active
+                    below. --materialize defaults to 1 (full size) via the CSS custom property's
+                    own fallback in App.css, so this wrapper is a no-op outside a transition. */}
+                <div className="atom-materialize-wrapper" style={{ '--materialize': atomTransitionScale }}>
+                  {ENABLE_WEBGL_SCENE_PREVIEW ? (
+                    <AtomCanvas
+                      atoms={atoms}
+                      rotationRef={rotationRef}
+                      motionPreferenceRef={motionPreferenceRef}
+                      bondLength={BOND_LENGTH}
+                      onAtomPointerDown={handleNodePointerDown}
+                      onAtomPointerEnter={handleNodeEnter}
+                      onAtomPointerMove={handleNodeMove}
+                      onAtomPointerLeave={handleNodeLeave}
+                      onKeyboardSelect={handleNodeKeyboardSelect}
+                      onCenterClick={hasPortfolioItems ? clearCenterSelection : triggerIntroCenterBurst}
+                    />
+                  ) : null}
+                  <AtomSketchView
                     atoms={atoms}
-                    rotationRef={rotationRef}
-                    motionPreferenceRef={motionPreferenceRef}
-                    bondLength={BOND_LENGTH}
-                    onAtomPointerDown={handleNodePointerDown}
-                    onAtomPointerEnter={handleNodeEnter}
-                    onAtomPointerMove={handleNodeMove}
-                    onAtomPointerLeave={handleNodeLeave}
-                    onKeyboardSelect={handleNodeKeyboardSelect}
+                    pulse={pulse}
+                    centerMotion={centerMotion}
+                    centerClickBurst={introCenterBurst}
+                    standalone={!hasPortfolioItems}
+                    svgRef={svgRef}
+                    ariaLabel={text.atomAria}
+                    highlightActive={highlightActive}
+                    centerFocusActive={Boolean(selectedAtomId)}
                     onCenterClick={hasPortfolioItems ? clearCenterSelection : triggerIntroCenterBurst}
+                    onPointerDown={handleNodePointerDown}
+                    onPointerEnter={handleNodeEnter}
+                    onPointerMove={handleNodeMove}
+                    onPointerLeave={handleNodeLeave}
+                    onKeyboardSelect={handleNodeKeyboardSelect}
                   />
-                ) : null}
-                <AtomSketchView
-                  atoms={atoms}
-                  pulse={pulse}
-                  centerMotion={centerMotion}
-                  centerClickBurst={introCenterBurst}
-                  standalone={!hasPortfolioItems}
-                  svgRef={svgRef}
-                  ariaLabel={text.atomAria}
-                  highlightActive={highlightActive}
-                  centerFocusActive={Boolean(selectedAtomId)}
-                  onCenterClick={hasPortfolioItems ? clearCenterSelection : triggerIntroCenterBurst}
-                  onPointerDown={handleNodePointerDown}
-                  onPointerEnter={handleNodeEnter}
-                  onPointerMove={handleNodeMove}
-                  onPointerLeave={handleNodeLeave}
-                  onKeyboardSelect={handleNodeKeyboardSelect}
-                />
+                </div>
                 {atomHintVisible && hasPortfolioItems ? (
                   <div className="atom-hint" role="status">
                     {text.atomHint}
@@ -7824,6 +7864,7 @@ export default function App() {
                           key={entry.id}
                           entry={entry}
                           slot={PORTFOLIO_PREVIEW_SLOTS[index]}
+                          onSelect={handleSelectPreviewPortfolio}
                         />
                       ))}
                   </div>

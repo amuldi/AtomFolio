@@ -242,6 +242,20 @@ body {
   gap: 22px;
 }
 
+/* .section-label reused verbatim for its typography (same small/uppercase/letter-spaced/faint
+   look the news page's own subheading uses) — only the padding needs overriding here, since
+   .settings-panel__body already insets its children 16px horizontally (.section-label's own 16px
+   would double that up). The second (and any later) group gets a hairline divider above it, using
+   the existing 22px flex gap as the divider's own breathing room rather than adding more. */
+.settings-panel__body .section-label {
+  padding: 0;
+}
+
+.settings-panel__body .section-label:not(:first-child) {
+  padding-top: 18px;
+  border-top: 1px solid var(--hairline);
+}
+
 .settings-row__top {
   display: flex;
   align-items: baseline;
@@ -331,14 +345,14 @@ body {
 
 .portfolio-picker {
   flex: 0 0 auto;
-  padding: 0 16px 8px;
+  padding: 0 16px 10px;
 }
 
 .portfolio-picker select {
   appearance: none;
   width: 100%;
   padding: 9px 30px 9px 12px;
-  border-radius: 9px;
+  border-radius: 8px;
   border: 1px solid var(--hairline);
   background:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6' viewBox='0 0 9 6'%3E%3Cpath d='M1 1l3.5 3.5L8 1' fill='none' stroke='rgba(250,246,240,0.5)' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
@@ -364,7 +378,7 @@ body {
 
 .error-banner {
   margin: 0 16px 10px;
-  padding: 7px 10px;
+  padding: 8px 12px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.05);
   color: var(--ink-dim);
@@ -376,7 +390,7 @@ body {
 
 .quick-add {
   flex: 0 0 auto;
-  padding: 0 16px 8px;
+  padding: 0 16px 10px;
 }
 
 .quick-add__row {
@@ -385,7 +399,7 @@ body {
 }
 
 .quick-add__input {
-  padding: 8px 9px;
+  padding: 9px 12px;
   border-radius: 8px;
   border: 1px solid var(--hairline);
   background: rgba(255, 255, 255, 0.045);
@@ -429,7 +443,7 @@ body {
 
 .quick-add__button {
   flex: 0 0 auto;
-  padding: 8px 12px;
+  padding: 9px 12px;
   border-radius: 8px;
   border: none;
   background: rgba(255, 255, 255, 0.1);
@@ -473,8 +487,12 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 10px 16px 0;
-  padding: 7px 10px;
+  /* No top margin of its own — .quick-add's own bottom padding above already provides that gap,
+     the same "trailing space belongs to the block before it" convention .portfolio-picker and
+     .quick-add already use, so the picker→quick-add→search rhythm reads as one consistent 10px
+     step instead of mixing bottom-padding and top-margin conventions. */
+  margin: 0 16px;
+  padding: 9px 12px;
   border-radius: 8px;
   border: 1px solid var(--hairline);
   background: rgba(255, 255, 255, 0.045);
@@ -544,7 +562,7 @@ body {
   width: 100%;
   text-align: left;
   padding: 8px 8px;
-  border-radius: 9px;
+  border-radius: 8px;
   background: transparent;
   border: none;
   color: inherit;
@@ -631,10 +649,10 @@ body {
 
 .connect__input {
   margin-top: 6px;
-  padding: 9px 10px;
+  padding: 9px 12px;
   border-radius: 8px;
   border: 1px solid var(--hairline);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.045);
   color: var(--ink);
   font-size: 12.5px;
   outline: none;

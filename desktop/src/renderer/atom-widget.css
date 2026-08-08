@@ -102,6 +102,18 @@ body {
   cursor: grabbing;
 }
 
+/* Dissolve/materialize (src/utils/useAtomTransition.js, shared with the web app's identical
+   .atom-materialize-wrapper in src/styles.css) — scale driven by a CSS custom property the hook
+   writes every animation frame, not a CSS transition (the JS rAF loop already interpolates it
+   smoothly). --materialize falls back to 1 so this is inert outside a transition. */
+.atom-materialize-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform: scale(var(--materialize, 1));
+  transform-origin: 50% 50%;
+}
+
 /* Minimal total-value readout — no card, no background, just text with a soft dark halo so it
    stays legible over any desktop wallpaper (light or dark, photo or plain). */
 :root {

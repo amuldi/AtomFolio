@@ -5,6 +5,10 @@ contextBridge.exposeInMainWorld('atomfolio', {
   // Fire-and-forget (send, not invoke) — see main.js's atomfolio:widget-move-by handler for why.
   moveWidgetBy: (dx, dy) => ipcRenderer.send('atomfolio:widget-move-by', dx, dy),
   moveWidgetEnd: () => ipcRenderer.send('atomfolio:widget-move-end'),
+  // Round-trip for the widget-close dissolve — main.js sends 'closing' before actually hiding the
+  // window, atom-view.jsx plays the transition and acks back. See main.js's
+  // hideAtomWidgetAfterDissolve for the timeout fallback if this ack never arrives.
+  widgetCloseAck: () => ipcRenderer.send('atomfolio:widget-close-ack'),
   connect: (workspaceId) => ipcRenderer.invoke('atomfolio:connect', workspaceId),
   disconnect: () => ipcRenderer.invoke('atomfolio:disconnect'),
   selectPortfolio: (portfolioId) => ipcRenderer.invoke('atomfolio:select-portfolio', portfolioId),
@@ -27,5 +31,10 @@ contextBridge.exposeInMainWorld('atomfolio', {
     const listener = (_event, pageIndex) => callback(pageIndex);
     ipcRenderer.on('atomfolio:focus-page', listener);
     return () => ipcRenderer.removeListener('atomfolio:focus-page', listener);
+  },
+  onWidgetClosing: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('atomfolio:widget-closing', listener);
+    return () => ipcRenderer.removeListener('atomfolio:widget-closing', listener);
   },
 });

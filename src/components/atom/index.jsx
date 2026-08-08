@@ -163,7 +163,7 @@ export function AtomLabel({ atom }) {
   );
 }
 
-export function PortfolioPreviewAtom({ entry, slot }) {
+export function PortfolioPreviewAtom({ entry, slot, onSelect }) {
   const atoms = generateAtomLayout(entry.items).slice(0, 9);
   const previewNodes = atoms.map((atom, index) => {
     const direction = new THREE.Vector3(...atom.direction).normalize();
@@ -190,8 +190,10 @@ export function PortfolioPreviewAtom({ entry, slot }) {
   });
 
   return (
-    <div
+    <button
+      type="button"
       className="portfolio-preview"
+      onClick={() => onSelect?.(entry.id)}
       style={{
         left: `${slot.x * 100}%`,
         top: `${slot.y * 100}%`,
@@ -274,7 +276,7 @@ export function PortfolioPreviewAtom({ entry, slot }) {
         </g>
       </svg>
       <span className="portfolio-preview__label">{previewNodes[0]?.label ?? entry.fileName}</span>
-    </div>
+    </button>
   );
 }
 

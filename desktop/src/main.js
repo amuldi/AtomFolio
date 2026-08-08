@@ -316,16 +316,63 @@ function createAtomWidget() {
   return atomWidget;
 }
 
+// How long to wait for atom-view.jsx's dissolve-transition ack before hiding the widget anyway —
+// the animation itself runs ~420ms (useAtomTransition's default), so this is a generous ceiling
+// past that, not a race against it.
+const WIDGET_CLOSE_ACK_TIMEOUT_MS = 900;
+
+// Set (to a cleanup function) only while a hide-after-dissolve sequence is in flight — lets
+// setAtomWidgetVisible(true) cancel a pending hide if the user shows the widget again before the
+// dissolve/ack round-trip settles, instead of that stale sequence hiding it right back out from
+// under them a moment later.
+let cancelPendingWidgetHide = null;
+
 function setAtomWidgetVisible(visible) {
   saveConfig({ atomWidgetVisible: visible });
   if (!atomWidget || atomWidget.isDestroyed()) {
     return;
   }
   if (visible) {
+    cancelPendingWidgetHide?.();
     atomWidget.showInactive();
-  } else {
-    atomWidget.hide();
+    return;
   }
+  hideAtomWidgetAfterDissolve();
+}
+
+// Plays the dissolve transition (atom-view.jsx) before actually hiding the window, instead of
+// cutting straight to invisible. The renderer acks once its own animation finishes;
+// WIDGET_CLOSE_ACK_TIMEOUT_MS is the fallback in case that ack never arrives (component unmounted,
+// renderer busy, message lost) so the widget can never get stuck refusing to hide.
+function hideAtomWidgetAfterDissolve() {
+  if (!atomWidget || atomWidget.isDestroyed() || cancelPendingWidgetHide) {
+    // Already mid-hide (e.g. a double-click on "위젯 숨기기") — let the one already in flight run
+    // its course rather than layering a second dissolve/ack/timeout on top of it.
+    return;
+  }
+
+  const onAck = () => finish();
+  const timeoutId = setTimeout(finish, WIDGET_CLOSE_ACK_TIMEOUT_MS);
+
+  function finish() {
+    clearTimeout(timeoutId);
+    ipcMain.removeListener('atomfolio:widget-close-ack', onAck);
+    cancelPendingWidgetHide = null;
+    if (atomWidget && !atomWidget.isDestroyed()) {
+      atomWidget.hide();
+    }
+  }
+
+  cancelPendingWidgetHide = () => {
+    clearTimeout(timeoutId);
+    ipcMain.removeListener('atomfolio:widget-close-ack', onAck);
+    cancelPendingWidgetHide = null;
+    // Deliberately not calling atomWidget.hide() here — this path only runs when
+    // setAtomWidgetVisible(true) just called showInactive(), so hiding it again would undo that.
+  };
+
+  ipcMain.once('atomfolio:widget-close-ack', onAck);
+  atomWidget.webContents.send('atomfolio:widget-closing');
 }
 
 function positionPopoverNearTray() {
