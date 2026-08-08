@@ -57,7 +57,12 @@ body {
 }
 
 /* Overrides atom-sketch.css's popover-oriented version (fixed aspect-ratio, near-black star-field
-   card, rounded corners) — no card here at all, the atom floats straight over the desktop. */
+   card, rounded corners) — no card here at all, the atom floats straight over the desktop.
+   -webkit-app-region: no-drag by default — grabbing the atom (center, bond-lines, or an
+   individual stock node) rotates/selects it, same as the real website's trackball, not the
+   window-hijacking behavior this used to have. Holding ⌘ flips it into a window-move handle
+   instead (.is-move-mode below, toggled by atom-view.jsx reading event.metaKey off pointer
+   events — see that file for why not a keydown listener). */
 .atom-visual-stage {
   position: relative;
   flex: 1 1 auto;
@@ -72,9 +77,31 @@ body {
   cursor: default;
 }
 
-.node-hit,
-.center-hit {
-  -webkit-app-region: no-drag;
+/* -webkit-app-region: no-drag on the individual .node-hit SVG circles doesn't reliably carve out
+   an exception within a `drag`-marked ancestor for real (hardware-originated) drags — verified
+   directly with synthetic CGEvent input, not just CDP's synthetic events (which never engage the
+   native window-drag path at all, so they couldn't have caught this). That's fine here: in move
+   mode the *whole* stage, node circles included, is meant to drag the window — there's nothing to
+   carve out. atom-view.jsx's handleNodePointerDown also bails out early when event.metaKey is set
+   so a node's own rotation logic never starts a gesture the native drag is about to take over. */
+.atom-visual-stage.is-move-mode {
+  -webkit-app-region: drag;
+  cursor: grab;
+}
+
+.atom-visual-stage.is-move-mode:active {
+  cursor: grabbing;
+}
+
+/* Specific enough to win over atom-sketch.css's plain .node-hit { cursor: pointer } — in move
+   mode a node is just as much a "grab to move the window" target as everywhere else on the
+   stage, so it should read that way, not as a clickable stock. */
+.atom-visual-stage.is-move-mode .node-hit {
+  cursor: grab;
+}
+
+.atom-visual-stage.is-move-mode .node-hit:active {
+  cursor: grabbing;
 }
 
 /* Minimal total-value readout — no card, no background, just text with a soft dark halo so it

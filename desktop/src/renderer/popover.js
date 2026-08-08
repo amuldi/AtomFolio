@@ -6,8 +6,10 @@ const connectRoot = document.getElementById('connect-root');
 const appRoot = document.getElementById('app-root');
 const headerRoot = document.getElementById('header-root');
 const pickerRoot = document.getElementById('picker-root');
+const newsSearchRoot = document.getElementById('news-search-root');
 const newsRoot = document.getElementById('news-root');
 const settingsRoot = document.getElementById('settings-root');
+const quickAddRoot = document.getElementById('quick-add-root');
 const pagerEl = document.getElementById('pager');
 const pagerTrackEl = document.getElementById('pager-track');
 const pagerDotsEl = document.getElementById('pager-dots');
@@ -16,6 +18,11 @@ const pagerDotsEl = document.getElementById('pager-dots');
 // to load eagerly alongside the rest of the page rather than waiting for the settings page to
 // become visible.
 let settingsCache = null;
+
+// The last state pushed to render() — kept around so the quick-add form and news search bar
+// (both rendered once at bootstrap, not rebuilt on every state push — see their creators below)
+// can read the current portfolio/connection without needing their own state plumbing.
+let latestState = null;
 
 function formatTime(value) {
   if (!Number.isFinite(value)) {
@@ -485,8 +492,60 @@ function updatePortfolioPicker(state) {
   currentPickerPortfolioIds = newIds;
 }
 
+// Shared by both the holdings-scoped list below and the search-results branch (search results
+// carry the same title/link/source/publishedAt shape, just without an isNew flag — that badge is
+// a desktop-side decoration main.js only computes for the holdings feed, see decoratedNews).
+function renderNewsCard(article) {
+  const card = el('button', 'news-card', []);
+  card.dataset.articleId = article.id ?? '';
+  card.append(
+    el('div', 'news-card__title-row', [
+      el('span', 'news-card__title', [article.title]),
+      article.isNew ? el('span', 'news-card__badge', ['NEW']) : null,
+    ]),
+    el('div', 'news-card__meta', [
+      [article.source, article.publishedAt ? formatTime(article.publishedAt) : null]
+        .filter(Boolean)
+        .join(' · '),
+    ]),
+  );
+  card.addEventListener('click', () => {
+    if (article.link) {
+      window.atomfolio.openExternal(article.link);
+    }
+  });
+  return card;
+}
+
+// { query, items, loading, error } — '' query means "not searching, show the holdings feed".
+// Mutated (not replaced wholesale) by createNewsSearchBar's runSearch below; renderNewsPage just
+// reads whatever's current each time it's called.
+let newsSearchState = { query: '', items: null, loading: false, error: false };
+
 function renderNewsPage(state) {
   const page = el('div', 'news-page', []);
+
+  if (newsSearchState.query) {
+    page.append(el('div', 'section-label', [`"${newsSearchState.query}" 검색 결과`]));
+
+    if (newsSearchState.loading) {
+      page.append(el('div', 'empty-state', ['불러오는 중…']));
+    } else if (newsSearchState.error) {
+      page.append(el('div', 'empty-state', ['검색에 실패했습니다.']));
+    } else {
+      const list = el('div', 'news-list', []);
+      if (!newsSearchState.items?.length) {
+        list.append(el('div', 'empty-state', ['검색 결과가 없습니다.']));
+      } else {
+        for (const article of newsSearchState.items) {
+          list.append(renderNewsCard(article));
+        }
+      }
+      page.append(list);
+    }
+
+    return page;
+  }
 
   if (state.lastError) {
     page.append(el('div', 'error-banner', ['업데이트에 실패해 이전 데이터를 표시하고 있습니다.']));
@@ -501,30 +560,150 @@ function renderNewsPage(state) {
     list.append(el('div', 'empty-state', ['표시할 뉴스가 없습니다.']));
   } else {
     for (const article of state.news) {
-      const card = el('button', 'news-card', []);
-      card.dataset.articleId = article.id ?? '';
-      card.append(
-        el('div', 'news-card__title-row', [
-          el('span', 'news-card__title', [article.title]),
-          article.isNew ? el('span', 'news-card__badge', ['NEW']) : null,
-        ]),
-        el('div', 'news-card__meta', [
-          [article.source, article.publishedAt ? formatTime(article.publishedAt) : null]
-            .filter(Boolean)
-            .join(' · '),
-        ]),
-      );
-      card.addEventListener('click', () => {
-        if (article.link) {
-          window.atomfolio.openExternal(article.link);
-        }
-      });
-      list.append(card);
+      list.append(renderNewsCard(article));
     }
   }
 
   page.append(list);
   return page;
+}
+
+// Created once at bootstrap, not rebuilt on every state push — see the module-level comment on
+// latestState for why (a poll tick landing mid-keystroke would otherwise blow away focus/typed
+// text). Search results themselves still go through the normal newsRoot rebuild path
+// (updateNewsPage → renderNewsPage above), same as holdings news always has.
+function createNewsSearchBar() {
+  const input = el('input', 'news-search__input', []);
+  input.type = 'search';
+  input.placeholder = '뉴스 검색';
+  input.spellcheck = false;
+
+  const clearButton = el('button', 'news-search__clear', ['✕']);
+  clearButton.type = 'button';
+  clearButton.setAttribute('aria-label', '검색 지우기');
+  clearButton.hidden = true;
+
+  async function runSearch(rawQuery) {
+    const query = rawQuery.trim();
+    clearButton.hidden = !query;
+
+    if (!query) {
+      newsSearchState = { query: '', items: null, loading: false, error: false };
+      updateNewsPage(latestState);
+      return;
+    }
+
+    newsSearchState = { query, items: null, loading: true, error: false };
+    updateNewsPage(latestState);
+
+    try {
+      const payload = await window.atomfolio.searchNews(query);
+      // A slower-finishing search for a query the user has since changed (or cleared) shouldn't
+      // clobber whatever's on screen for the newer one — same stale-response guard shape as
+      // main.js's own latestRefreshToken.
+      if (newsSearchState.query !== query) {
+        return;
+      }
+      newsSearchState = {
+        query,
+        items: Array.isArray(payload?.items) ? payload.items : [],
+        loading: false,
+        error: false,
+      };
+    } catch {
+      if (newsSearchState.query !== query) {
+        return;
+      }
+      newsSearchState = { query, items: null, loading: false, error: true };
+    }
+    updateNewsPage(latestState);
+  }
+
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      runSearch(input.value);
+    }
+  });
+  clearButton.addEventListener('click', () => {
+    input.value = '';
+    runSearch('');
+    input.focus();
+  });
+
+  return el('div', 'news-search', [input, clearButton]);
+}
+
+// Created once at bootstrap, same reasoning as createNewsSearchBar above (survives poll-tick
+// rebuilds so mid-typing state isn't lost). Reads latestState.selectedPortfolioId at submit time
+// rather than being passed one, since there's nothing to re-render it on a portfolio switch.
+function createQuickAddForm() {
+  const tickerInput = el('input', 'quick-add__input quick-add__input--ticker', []);
+  tickerInput.type = 'text';
+  tickerInput.placeholder = '티커';
+  tickerInput.spellcheck = false;
+  tickerInput.autocapitalize = 'characters';
+
+  const qtyInput = el('input', 'quick-add__input quick-add__input--qty', []);
+  qtyInput.type = 'number';
+  qtyInput.placeholder = '수량';
+  qtyInput.min = '0';
+  qtyInput.step = 'any';
+
+  const button = el('button', 'quick-add__button', ['추가']);
+  button.type = 'button';
+
+  const errorLine = el('div', 'quick-add__error', []);
+
+  async function submit() {
+    const ticker = tickerInput.value.trim();
+    const quantity = Number(qtyInput.value);
+
+    if (!ticker || !Number.isFinite(quantity) || quantity <= 0) {
+      errorLine.textContent = '티커와 수량을 입력하세요.';
+      return;
+    }
+
+    const portfolioId = latestState?.selectedPortfolioId;
+    if (!portfolioId) {
+      errorLine.textContent = '연결된 포트폴리오가 없습니다.';
+      return;
+    }
+
+    tickerInput.disabled = true;
+    qtyInput.disabled = true;
+    button.disabled = true;
+    button.textContent = '추가하는 중…';
+    errorLine.textContent = '';
+
+    const result = await window.atomfolio.addHolding({ portfolioId, ticker, quantity });
+
+    tickerInput.disabled = false;
+    qtyInput.disabled = false;
+    button.disabled = false;
+    button.textContent = '추가';
+
+    if (result?.ok) {
+      tickerInput.value = '';
+      qtyInput.value = '';
+      tickerInput.focus();
+    } else {
+      errorLine.textContent = '종목 추가에 실패했습니다.';
+    }
+  }
+
+  button.addEventListener('click', submit);
+  for (const input of [tickerInput, qtyInput]) {
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        submit();
+      }
+    });
+  }
+
+  return el('div', 'quick-add', [
+    el('div', 'quick-add__row', [tickerInput, qtyInput, button]),
+    errorLine,
+  ]);
 }
 
 // True from the moment the picker's `change` fires until the resulting state push is rendered —
@@ -659,6 +838,23 @@ function renderSettingsPanel(settings) {
       value: settings.widgetOpacity,
       onCommit: (v) => updateSetting({ widgetOpacity: v }),
     }),
+    // Widget can also be resized by dragging its own edges directly — this is the settings-panel
+    // equivalent for when that's not convenient. Bounds come from main.js (ATOM_WIDGET_MIN_WIDTH/
+    // MAX_WIDTH) rather than being hardcoded here so the two can't silently drift apart.
+    renderSlider({
+      label: '원자 위젯 크기',
+      format: (v) => `${v}px`,
+      min: settings.atomWidgetSizeBounds.minWidth,
+      max: settings.atomWidgetSizeBounds.maxWidth,
+      step: 10,
+      value: settings.atomWidgetSize.width,
+      onCommit: (v) => updateSetting({ atomWidgetSize: { width: v } }),
+    }),
+    renderToggle({
+      label: '로그인 시 자동 실행',
+      checked: settings.launchAtLogin,
+      onChange: (next) => updateSetting({ launchAtLogin: next }),
+    }),
   ]);
 
   return el('div', 'settings-panel', [
@@ -678,6 +874,8 @@ async function ensureSettingsLoaded() {
 }
 
 function render(state) {
+  latestState = state;
+
   if (!state?.connected) {
     setChildren(connectRoot, renderConnect(state));
     appRoot.classList.add('is-hidden');
@@ -737,12 +935,20 @@ async function bootstrap() {
   const initialState = await window.atomfolio.getState();
   render(initialState);
   void ensureSettingsLoaded();
+  // Both mounted once, outside render()'s rebuild cycle — see their own comments for why.
+  quickAddRoot.append(createQuickAddForm());
+  newsSearchRoot.append(createNewsSearchBar());
 
   window.atomfolio.onState((state) => applyIncomingState(state));
   window.atomfolio.onFocusArticle((articleId) => {
     pager.goToPage(0);
     const cardEl = document.querySelector(`[data-article-id="${CSS.escape(articleId ?? '')}"]`);
     cardEl?.scrollIntoView({ block: 'center' });
+  });
+  // Widget context-menu's "뉴스 열기"/"설정 열기" — same show-and-jump shape as onFocusArticle
+  // above, just without an article to scroll to.
+  window.atomfolio.onFocusPage((pageIndex) => {
+    pager.goToPage(pageIndex);
   });
 }
 

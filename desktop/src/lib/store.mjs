@@ -30,6 +30,17 @@ const DEFAULTS = {
   // being applied, so this stored value alone can't make either window illegibly transparent.
   popoverOpacity: 1,
   widgetOpacity: 1,
+  // Whether AtomFolio is registered as a macOS Login Item (System Settings → General → Login
+  // Items), i.e. launches automatically after sign-in/reboot. The stored value alone does
+  // nothing — main.js mirrors it to the OS via app.setLoginItemSettings whenever it changes, and
+  // once more at startup so a hand-edited config.json stays in sync too.
+  launchAtLogin: false,
+  // Accelerator string (Electron's format — see its `accelerator` docs, e.g. 'Alt+A') for the
+  // global hotkey that toggles the popover from anywhere via Electron's globalShortcut, even
+  // while some other app is focused. No settings-panel control for it yet (would need a
+  // key-capture UI), but kept as data here rather than a literal in main.js so a future one — or
+  // a hand-edited config.json — can repoint it without a code change.
+  toggleShortcut: 'Alt+A',
 };
 
 const MAX_SEEN_IDS = 80;

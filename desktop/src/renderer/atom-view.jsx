@@ -41,6 +41,7 @@ const IDLE_ROTATE_DISENGAGED_MULTIPLIER = 0.12;
 const ATOM_LABEL_REFERENCE_STAGE_PX = 192;
 const ATOM_LABEL_MAX_SCALE = 3;
 
+
 function formatCurrency(value) {
   if (!Number.isFinite(value)) {
     return '—';
@@ -96,45 +97,71 @@ function useAtomHint() {
   return [visible, dismiss];
 }
 
-function AtomReadout({ holding, totals }) {
+function findFieldValue(fields, label) {
+  const match = Array.isArray(fields) ? fields.find((field) => field?.label === label) : null;
+  return match ? Number(match.value) : null;
+}
+
+// Prefers the workspace holdings summary (clean, already-computed marketValue/profitAmount) when
+// it has a match for the clicked atom — but summarizeWorkspaceHoldings (desktop/src/lib/
+// portfolioTotals.mjs, shared analytics math) only includes positions with a computable
+// marketValue, which needs a share quantity. A weight-only import ("this position is 40% of the
+// portfolio", no quantity) never gets a marketValue there, so `holdings` comes back without it —
+// even though the atom itself renders every item unconditionally via the real generateAtomLayout.
+// Clicking one of those would otherwise show nothing. Falling back to the raw item's own live
+// market-data fields (already fetched for the atom's own detail label) means every clickable node
+// has *something* to show, regardless of which import style produced it.
+function buildSelectedInfo(holding, item) {
   if (holding) {
-    return (
-      <div className="atom-readout">
-        <div className="atom-readout__label">{holding.label || holding.code || '종목'}</div>
-        <div className="atom-readout__value">{formatCurrency(holding.marketValue)}</div>
-        <div className="atom-readout__row">
-          {Number.isFinite(holding.returnRate) ? (
-            <span className={`atom-readout__chip ${toneClass(holding.returnRate)}`.trim()}>
-              {formatCurrency(holding.profitAmount)} · {formatPercent(holding.returnRate)}
-            </span>
-          ) : null}
-          {Number.isFinite(holding.weightPercent) ? (
-            <span className="atom-readout__note">비중 {holding.weightPercent.toFixed(1)}%</span>
-          ) : null}
-        </div>
-      </div>
-    );
+    return {
+      label: holding.label || holding.code || '종목',
+      valueText: formatCurrency(holding.marketValue),
+      changeText: Number.isFinite(holding.returnRate)
+        ? `${formatCurrency(holding.profitAmount)} · ${formatPercent(holding.returnRate)}`
+        : null,
+      changeTone: toneClass(holding.returnRate),
+      weightText: Number.isFinite(holding.weightPercent) ? `비중 ${holding.weightPercent.toFixed(1)}%` : null,
+    };
   }
 
-  const returnRate = totals?.totalReturnRate;
+  if (item) {
+    const weightPercent = findFieldValue(item.fields, '비중(%)');
+    return {
+      label: item.label || item.stockName || item.name || item.ticker || '종목',
+      valueText: item.marketPrice || (Number.isFinite(item.latestPrice) ? formatCurrency(item.latestPrice) : '—'),
+      changeText: Number.isFinite(item.marketChangePercent)
+        ? `${formatCurrency(item.marketChange)} · ${formatPercent(item.marketChangePercent)}`
+        : null,
+      changeTone: toneClass(item.marketChangePercent),
+      weightText: Number.isFinite(weightPercent) ? `비중 ${weightPercent.toFixed(1)}%` : null,
+    };
+  }
 
+  return null;
+}
+
+// No idle/default state anymore (used to show the portfolio-wide total when nothing was
+// selected) — the widget stays quiet until a node is actually clicked, then shows that stock's
+// own info.
+function AtomReadout({ info }) {
+  if (!info) {
+    return null;
+  }
   return (
     <div className="atom-readout">
-      <div className="atom-readout__label">포트폴리오 총액</div>
-      <div className="atom-readout__value">{totals ? formatCurrency(totals.totalMarketValue) : '—'}</div>
+      <div className="atom-readout__label">{info.label}</div>
+      <div className="atom-readout__value">{info.valueText}</div>
       <div className="atom-readout__row">
-        {totals && Number.isFinite(returnRate) ? (
-          <span className={`atom-readout__chip ${toneClass(returnRate)}`.trim()}>
-            {formatCurrency(totals.totalProfitAmount)} · {formatPercent(returnRate)}
-          </span>
+        {info.changeText ? (
+          <span className={`atom-readout__chip ${info.changeTone}`.trim()}>{info.changeText}</span>
         ) : null}
-        {totals ? <span className="atom-readout__note">{totals.holdingsCount}개 종목</span> : null}
+        {info.weightText ? <span className="atom-readout__note">{info.weightText}</span> : null}
       </div>
     </div>
   );
 }
 
-function AtomView({ items, holdings, totals, activeInsight }) {
+function AtomView({ items, holdings, activeInsight }) {
   const stageRef = useRef(null);
   const svgRef = useRef(null);
   const [selectedAtomId, setSelectedAtomId] = useState(null);
@@ -192,6 +219,45 @@ function AtomView({ items, holdings, totals, activeInsight }) {
   }, []);
   const handleStagePointerLeave = useCallback(() => {
     engagementRef.current.hovered = false;
+  }, []);
+
+  // ⌘ gates "move the window" vs "rotate the atom" — without it, grabbing anywhere on the stage
+  // (including the center/bond-lines) behaves like the website's trackball; holding ⌘ turns the
+  // whole stage into a native drag handle instead. This used to be a hand-rolled IPC-driven drag
+  // (tracking screenX/screenY deltas and calling atomfolio.moveWidgetBy on every move) instead of
+  // plain -webkit-app-region: drag, because -webkit-app-region: no-drag on the individual
+  // .node-hit SVG circles turned out not to reliably carve out an exception within a `drag`
+  // ancestor for real (hardware-originated) drags — verified directly with synthetic CGEvent
+  // input. The manual version worked but had a real edge case (see git history): moving the
+  // actual window out from under the cursor mid-drag means the eventual mouseup can land outside
+  // it, so the "drag ended" signal is sometimes missed. Native app-region has neither problem
+  // here, because in move mode we *want* the entire stage draggable, node circles included — no
+  // carve-out needed, so the one thing native app-region couldn't do reliably isn't needed
+  // anymore, and OS-managed drags don't have a "missed the up event" failure mode at all.
+  //
+  // The widget is shown via showInactive() and normally never holds keyboard focus, so a
+  // document-level keydown/keyup listener for ⌘ would frequently just never fire. Reading
+  // event.metaKey directly off pointer events instead works regardless of focus — the OS attaches
+  // current modifier state to every mouse event, not just keyboard ones.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) {
+      return undefined;
+    }
+    const syncMoveMode = (event) => {
+      stage.classList.toggle('is-move-mode', event.metaKey);
+    };
+    const clearMoveMode = () => {
+      stage.classList.remove('is-move-mode');
+    };
+    stage.addEventListener('pointermove', syncMoveMode);
+    stage.addEventListener('pointerdown', syncMoveMode);
+    stage.addEventListener('pointerleave', clearMoveMode);
+    return () => {
+      stage.removeEventListener('pointermove', syncMoveMode);
+      stage.removeEventListener('pointerdown', syncMoveMode);
+      stage.removeEventListener('pointerleave', clearMoveMode);
+    };
   }, []);
 
   // Imperative (not React state) on purpose — this fires continuously while the user drags-resizes
@@ -284,6 +350,16 @@ function AtomView({ items, holdings, totals, activeInsight }) {
 
   const handleNodePointerDown = useCallback(
     (atomId, event) => {
+      // ⌘ held means this is a window-move gesture (native -webkit-app-region: drag on the
+      // stage, gated by the .is-move-mode sync effect below), not a rotation — bail out without
+      // touching dragRef/stopPropagation/preventDefault so the native drag region gets a clean,
+      // unobstructed shot at the same pointerdown. Starting rotation tracking here anyway would
+      // risk it never getting a matching pointerup once the native drag takes over the gesture,
+      // leaving dragRef.current.atomId stuck non-null — which would silently disable idle
+      // auto-rotate for good, since the render loop treats a non-null atomId as "still dragging".
+      if (event.metaKey) {
+        return;
+      }
       event.stopPropagation();
       event.preventDefault();
       // Not every pointerdown is guaranteed to have an OS-level pointer session backing it
@@ -460,6 +536,12 @@ function AtomView({ items, holdings, totals, activeInsight }) {
           holding.code && (holding.code === selectedAtom.ticker || holding.code === selectedAtom.stockCode),
       ) ?? null
     : null;
+  const selectedItem = selectedAtom
+    ? items.find(
+        (item) => item && (item.ticker === selectedAtom.ticker || item.stockCode === selectedAtom.stockCode),
+      ) ?? null
+    : null;
+  const selectedInfo = buildSelectedInfo(selectedHolding, selectedItem);
 
   return (
     <div className="atom-section">
@@ -494,7 +576,7 @@ function AtomView({ items, holdings, totals, activeInsight }) {
           </div>
         ) : null}
       </div>
-      <AtomReadout holding={selectedHolding} totals={totals} />
+      <AtomReadout info={selectedInfo} />
     </div>
   );
 }
@@ -524,7 +606,6 @@ function AtomViewRoot() {
     <AtomView
       items={state.items}
       holdings={state.holdings ?? []}
-      totals={state.totals}
       activeInsight={state.activeInsight ?? null}
     />
   );

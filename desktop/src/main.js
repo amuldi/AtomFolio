@@ -1,6 +1,7 @@
-import { app, Tray, BrowserWindow, ipcMain, Menu, Notification, shell, screen } from 'electron';
+import { app, Tray, BrowserWindow, ipcMain, Menu, Notification, shell, screen, globalShortcut } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
 import { loadConfig, saveConfig, rememberSeenArticleIds } from './lib/store.mjs';
 import { createApiClient } from './lib/api.mjs';
 // .bundle.mjs, not the raw source — these two reach into the web app's shared src/, which isn't
@@ -29,6 +30,15 @@ const ATOM_WIDGET_MAX_WIDTH = 480;
 const ATOM_WIDGET_MAX_HEIGHT = 560;
 const ATOM_WIDGET_DEFAULT_MARGIN = 24;
 const ATOM_WIDGET_GEOMETRY_SAVE_DEBOUNCE_MS = 400;
+// How close to a work-area edge (in px) the widget needs to land, on release, to snap flush
+// against it. Deliberately not applied on every 'move' tick — only from the 'moved' handler,
+// which macOS fires once the drag actually settles — so it never fights the user's hand mid-drag.
+const ATOM_WIDGET_SNAP_THRESHOLD = 24;
+// Pages inside the popover's horizontal pager (see popover.js's createPager) — kept in one place
+// since both the header's own ⚙ shortcut and the context-menu shortcuts below need to agree on
+// the indices.
+const POPOVER_PAGE_NEWS = 0;
+const POPOVER_PAGE_SETTINGS = 1;
 // A window this transparent would make its own text unreadable — the slider in settings is
 // clamped to this floor too, but the backend re-clamps in case config.json was hand-edited.
 const MIN_WINDOW_OPACITY = 0.4;
@@ -99,6 +109,21 @@ function clampOpacity(value) {
   return Math.min(1, Math.max(MIN_WINDOW_OPACITY, numeric));
 }
 
+// The settings-panel slider only controls width — height derives from the same aspect ratio as
+// the widget's own default (300/260), same as dragging a corner handle would roughly preserve.
+// Both ends are re-clamped here regardless of what the renderer sends, same defense-in-depth as
+// clampOpacity above.
+function clampAtomWidgetSizeForWidth(width) {
+  const numeric = Number(width);
+  const clampedWidth = Math.min(
+    ATOM_WIDGET_MAX_WIDTH,
+    Math.max(ATOM_WIDGET_MIN_WIDTH, Number.isFinite(numeric) ? Math.round(numeric) : ATOM_WIDGET_WIDTH),
+  );
+  const derivedHeight = Math.round(clampedWidth * (ATOM_WIDGET_HEIGHT / ATOM_WIDGET_WIDTH));
+  const clampedHeight = Math.min(ATOM_WIDGET_MAX_HEIGHT, Math.max(ATOM_WIDGET_MIN_HEIGHT, derivedHeight));
+  return { width: clampedWidth, height: clampedHeight };
+}
+
 function createPopover() {
   const config = loadConfig();
   popover = new BrowserWindow({
@@ -154,6 +179,38 @@ function clampPointToVisibleDisplay(x, y, width, height) {
     x: Math.round(Math.min(Math.max(x, workArea.x), workArea.x + workArea.width - width)),
     y: Math.round(Math.min(Math.max(y, workArea.y), workArea.y + workArea.height - height)),
   };
+}
+
+// Called only from the 'moved' listener below (once per completed drag), never mid-gesture.
+// Each axis snaps independently, so a corner release snaps both — same as most window managers'
+// edge-snap behavior.
+function snapAtomWidgetToEdges() {
+  if (!atomWidget || atomWidget.isDestroyed()) {
+    return;
+  }
+  const bounds = atomWidget.getBounds();
+  const workArea = screen.getDisplayMatching(bounds).workArea;
+
+  let { x, y } = bounds;
+  const { width, height } = bounds;
+
+  if (x - workArea.x <= ATOM_WIDGET_SNAP_THRESHOLD) {
+    x = workArea.x;
+  } else if (workArea.x + workArea.width - (x + width) <= ATOM_WIDGET_SNAP_THRESHOLD) {
+    x = workArea.x + workArea.width - width;
+  }
+
+  if (y - workArea.y <= ATOM_WIDGET_SNAP_THRESHOLD) {
+    y = workArea.y;
+  } else if (workArea.y + workArea.height - (y + height) <= ATOM_WIDGET_SNAP_THRESHOLD) {
+    y = workArea.y + workArea.height - height;
+  }
+
+  // Guards against setPosition() re-triggering its own 'moved' event on a no-op move — with
+  // nothing to change, x/y already equal bounds.x/bounds.y, so this simply doesn't fire.
+  if (x !== bounds.x || y !== bounds.y) {
+    atomWidget.setPosition(x, y, false);
+  }
 }
 
 function createAtomWidget() {
@@ -215,15 +272,42 @@ function createAtomWidget() {
   };
   atomWidget.on('move', saveAtomWidgetGeometry);
   atomWidget.on('resize', saveAtomWidgetGeometry);
+  // macOS-only: fires once when a move gesture (drag or programmatic) actually settles, unlike
+  // 'move' above which fires continuously through the whole drag — exactly the "only on release"
+  // timing edge-snapping needs. snapAtomWidgetToEdges()'s own setPosition() call re-enters this
+  // (a no-op the second time, since the position it computes is already what bounds report), and
+  // that second 'move'/'moved' pair is also harmless: saveAtomWidgetGeometry's debounce just ends
+  // up saving the post-snap position instead of the pre-snap one, which is what should be
+  // persisted anyway.
+  atomWidget.on('moved', snapAtomWidgetToEdges);
 
-  // A discoverable way to turn the widget off without needing to know the tray menu exists.
+  // A discoverable way to reach things that would otherwise require knowing the tray menu exists.
   atomWidget.webContents.on('context-menu', () => {
     if (!atomWidget || atomWidget.isDestroyed()) {
       return;
     }
-    Menu.buildFromTemplate([
-      { label: '위젯 숨기기', click: () => setAtomWidgetVisible(false) },
-    ]).popup({ window: atomWidget });
+    const template = [
+      { label: '뉴스 열기', click: () => showPopoverFocusedOnPage(POPOVER_PAGE_NEWS) },
+      { label: '설정 열기', click: () => showPopoverFocusedOnPage(POPOVER_PAGE_SETTINGS) },
+    ];
+    // Only shown once there's something to switch between — mirrors renderPortfolioPicker's own
+    // 2+ gate in popover.js, so the two menus agree on when portfolio-switching is a real feature
+    // versus a single-portfolio workspace where it'd just be a disabled-feeling submenu of one.
+    if (state.portfolios.length >= 2) {
+      template.push({
+        label: '포트폴리오 전환',
+        submenu: state.portfolios.map((portfolio) => ({
+          label: portfolio.name,
+          type: 'radio',
+          checked: portfolio.id === state.selectedPortfolioId,
+          click: () => {
+            void selectPortfolio(portfolio.id);
+          },
+        })),
+      });
+    }
+    template.push({ type: 'separator' }, { label: '위젯 숨기기', click: () => setAtomWidgetVisible(false) });
+    Menu.buildFromTemplate(template).popup({ window: atomWidget });
   });
 
   if (config.atomWidgetVisible) {
@@ -288,6 +372,29 @@ function togglePopover() {
   popover.focus();
 }
 
+// Re-registers from scratch rather than diffing old/new accelerator — globalShortcut has no
+// "update" call, only register/unregister, and this only ever runs at startup (once) or right
+// after the one settings field that can change it, neither of which is hot-path enough to bother
+// optimizing away the unregister-everything-and-redo.
+function registerToggleShortcut() {
+  globalShortcut.unregisterAll();
+  const config = loadConfig();
+  const accelerator = config.toggleShortcut || 'Alt+A';
+  const registered = globalShortcut.register(accelerator, togglePopover);
+  if (!registered) {
+    // Most likely cause: another app already owns this combination. Not fatal — the tray click
+    // and menu bar icon still open the popover, this is just a convenience shortcut.
+    console.error(`[atomfolio] failed to register global shortcut "${accelerator}" (already in use?)`);
+  }
+}
+
+// The stored value is just data until it's actually applied to the OS's Login Items list — this
+// is the one place that happens, called once at startup (so a hand-edited config.json takes
+// effect on next launch) and again from the settings-panel toggle's IPC handler below.
+function applyLaunchAtLoginSetting(value) {
+  app.setLoginItemSettings({ openAtLogin: Boolean(value) });
+}
+
 function showPopoverFocusedOn(articleId) {
   if (!popover) {
     return;
@@ -297,6 +404,20 @@ function showPopoverFocusedOn(articleId) {
   popover.show();
   popover.focus();
   popover.webContents.send('atomfolio:focus-article', articleId);
+}
+
+// Same reveal choreography as showPopoverFocusedOn above, minus the article-specific scroll —
+// used by the widget's context-menu "뉴스 열기"/"설정 열기" shortcuts to land directly on a page
+// instead of always opening onto news (the pager's own default on every popover show).
+function showPopoverFocusedOnPage(pageIndex) {
+  if (!popover) {
+    return;
+  }
+
+  positionPopoverNearTray();
+  popover.show();
+  popover.focus();
+  popover.webContents.send('atomfolio:focus-page', pageIndex);
 }
 
 function createTray() {
@@ -479,6 +600,44 @@ async function refresh({ silent = false } = {}) {
   }
 }
 
+// A minimal analogue of the web app's createManualPortfolioItem (src/App.jsx) — not imported
+// directly since it isn't an exported shared util (it lives inline in that file, not in one of
+// the src/lib modules main.js already reaches into for portfolioTotals/insights), and duplicating
+// its full manual-entry field set here would be overkill for a ticker+quantity-only quick-add.
+// Kept just detailed enough to show up immediately: generateAtomLayout (already bundled and used
+// unmodified in atom-view.jsx) renders every item unconditionally by ticker/stockName, and
+// atom-view.jsx's own selected-item readout falls back to an item's raw fields when it has no
+// computed marketValue yet (a fresh quick-add has no price data until the next quote refresh).
+function buildQuickAddItem(ticker, quantity) {
+  const shares = String(quantity);
+  return {
+    id: randomUUID(),
+    label: ticker,
+    name: ticker,
+    stockName: ticker,
+    stockCode: ticker,
+    ticker,
+    code: ticker,
+    shares,
+    assetClass: '주식',
+    fields: [
+      { label: '종목명', value: ticker },
+      { label: '종목 티커', value: ticker },
+      { label: '보유수량', value: shares },
+    ],
+    metadataSource: 'desktop-quick-add',
+  };
+}
+
+// Shared by the popover's picker (via the IPC handler below) and the widget's context-menu
+// "포트폴리오 전환" submenu (called directly from the main process, no IPC round-trip needed since
+// the click handler already runs there).
+async function selectPortfolio(portfolioId) {
+  const cleanId = String(portfolioId ?? '').trim() || null;
+  saveConfig({ selectedPortfolioId: cleanId });
+  await refresh();
+}
+
 function startPolling() {
   if (pollTimer) {
     clearInterval(pollTimer);
@@ -534,10 +693,65 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('atomfolio:select-portfolio', async (_event, portfolioId) => {
-    const cleanId = String(portfolioId ?? '').trim() || null;
-    saveConfig({ selectedPortfolioId: cleanId });
-    await refresh();
+    await selectPortfolio(portfolioId);
     return { ok: true };
+  });
+
+  // Fetch-append-PUT rather than a dedicated create-item call — see api.mjs's updatePortfolio
+  // comment for why there's no narrower endpoint to call instead. Re-fetches the portfolio fresh
+  // (not off `state.items`, which is the flattened single-portfolio view refresh() already
+  // trimmed down) so the PUT body carries every field the server round-tripped, not just the
+  // subset the desktop app happens to keep around.
+  ipcMain.handle('atomfolio:add-holding', async (_event, payload) => {
+    const portfolioId = String(payload?.portfolioId ?? '').trim();
+    const ticker = String(payload?.ticker ?? '').trim().toUpperCase();
+    const quantity = Number(payload?.quantity);
+
+    if (!portfolioId || !ticker || !Number.isFinite(quantity) || quantity <= 0) {
+      return { ok: false, error: 'invalid-holding' };
+    }
+
+    const config = loadConfig();
+    const api = createApiClient({ apiBaseUrl: config.apiBaseUrl, workspaceId: config.workspaceId });
+
+    try {
+      const { portfolio } = await api.fetchPortfolio(portfolioId);
+      if (!portfolio) {
+        return { ok: false, error: 'portfolio-not-found' };
+      }
+
+      const newItem = buildQuickAddItem(ticker, quantity);
+      // timelineItems (per-date history) mirrors items 1:1 for anything without real history of
+      // its own — only touched if the portfolio already has one, same as the web's own
+      // handleAppendManualHoldings does, so the two don't silently diverge.
+      const nextTimelineItems = portfolio.timelineItems?.length
+        ? [...portfolio.timelineItems, newItem]
+        : portfolio.timelineItems;
+
+      await api.updatePortfolio(portfolioId, {
+        ...portfolio,
+        items: [...(portfolio.items ?? []), newItem],
+        timelineItems: nextTimelineItems,
+      });
+
+      await refresh({ silent: true });
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : 'add-holding-failed' };
+    }
+  });
+
+  ipcMain.handle('atomfolio:search-news', async (_event, query) => {
+    const config = loadConfig();
+    if (!config.workspaceId) {
+      return { items: [] };
+    }
+    const api = createApiClient({ apiBaseUrl: config.apiBaseUrl, workspaceId: config.workspaceId });
+    try {
+      return await api.searchNews(String(query ?? '').trim());
+    } catch {
+      return { items: [] };
+    }
   });
 
   ipcMain.handle('atomfolio:open-external', (_event, url) => {
@@ -556,6 +770,9 @@ function registerIpcHandlers() {
       pollIntervalSec: config.pollIntervalSec,
       popoverOpacity: config.popoverOpacity,
       widgetOpacity: config.widgetOpacity,
+      atomWidgetSize: config.atomWidgetSize ?? { width: ATOM_WIDGET_WIDTH, height: ATOM_WIDGET_HEIGHT },
+      atomWidgetSizeBounds: { minWidth: ATOM_WIDGET_MIN_WIDTH, maxWidth: ATOM_WIDGET_MAX_WIDTH },
+      launchAtLogin: config.launchAtLogin,
     };
   });
 
@@ -570,12 +787,19 @@ function registerIpcHandlers() {
       'pollIntervalSec',
       'popoverOpacity',
       'widgetOpacity',
+      'launchAtLogin',
     ];
     const clean = {};
     for (const key of allowedKeys) {
       if (partial && key in partial) {
         clean[key] = partial[key];
       }
+    }
+    // Handled separately from the generic pass-through above (not just added to allowedKeys) —
+    // unlike the plain numeric settings, this needs its own clamp/derive step rather than being
+    // saved as whatever shape the renderer happens to send.
+    if (partial && 'atomWidgetSize' in partial) {
+      clean.atomWidgetSize = clampAtomWidgetSizeForWidth(partial.atomWidgetSize?.width);
     }
 
     saveConfig(clean);
@@ -588,6 +812,13 @@ function registerIpcHandlers() {
     }
     if ('widgetOpacity' in clean && atomWidget && !atomWidget.isDestroyed()) {
       atomWidget.setOpacity(clampOpacity(clean.widgetOpacity));
+    }
+    if ('atomWidgetSize' in clean && atomWidget && !atomWidget.isDestroyed()) {
+      const { width, height } = clean.atomWidgetSize;
+      atomWidget.setSize(width, height);
+    }
+    if ('launchAtLogin' in clean) {
+      applyLaunchAtLoginSetting(clean.launchAtLogin);
     }
 
     await refresh({ silent: true });
@@ -603,8 +834,10 @@ app.whenReady().then(async () => {
   createPopover();
   createAtomWidget();
   registerIpcHandlers();
+  registerToggleShortcut();
 
   const config = loadConfig();
+  applyLaunchAtLoginSetting(config.launchAtLogin);
   if (config.workspaceId) {
     await refresh();
     startPolling();
@@ -614,4 +847,8 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', (event) => {
   // A tray app has no "last window" to quit on — it lives in the menu bar.
   event.preventDefault();
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });

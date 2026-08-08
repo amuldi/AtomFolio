@@ -4,7 +4,7 @@
 const WORKSPACE_HEADER = 'x-atomfolio-workspace-id';
 const REQUEST_TIMEOUT_MS = 10000;
 
-async function requestJson(baseUrl, pathname, { workspaceId, searchParams } = {}) {
+async function requestJson(baseUrl, pathname, { workspaceId, searchParams, method = 'GET', body } = {}) {
   const url = new URL(pathname, baseUrl);
 
   if (searchParams) {
@@ -20,8 +20,15 @@ async function requestJson(baseUrl, pathname, { workspaceId, searchParams } = {}
 
   try {
     const response = await fetch(url, {
+      method,
       signal: controller.signal,
-      headers: workspaceId ? { [WORKSPACE_HEADER]: workspaceId } : {},
+      headers: {
+        ...(workspaceId ? { [WORKSPACE_HEADER]: workspaceId } : {}),
+        // Only PUT/POST callers below pass a body — a plain GET (the common case) sends none of
+        // this, matching what requestJson always sent before body support existed.
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
     });
 
     if (!response.ok) {
@@ -37,6 +44,20 @@ async function requestJson(baseUrl, pathname, { workspaceId, searchParams } = {}
 export function createApiClient({ apiBaseUrl, workspaceId }) {
   return {
     fetchPortfolios: () => requestJson(apiBaseUrl, '/api/portfolio', { workspaceId }),
+    fetchPortfolio: (portfolioId) =>
+      requestJson(apiBaseUrl, `/api/portfolio/${encodeURIComponent(portfolioId)}`, { workspaceId }),
+    // PUT with the full portfolio document — the same call the web app's own edit flows make
+    // (src/utils/storage.js's updateServerPortfolio) against this same
+    // handlePortfolioItemRequest endpoint (server/apiHandlers.mjs). There's no narrower
+    // single-item-create endpoint on the server; adding one is out of scope here (no new backend
+    // work), so the quick-add flow that calls this (main.js) fetches the portfolio, appends the
+    // new item client-side, and PUTs the whole thing back, exactly as the web does.
+    updatePortfolio: (portfolioId, portfolio) =>
+      requestJson(apiBaseUrl, `/api/portfolio/${encodeURIComponent(portfolioId)}`, {
+        workspaceId,
+        method: 'PUT',
+        body: portfolio,
+      }),
     fetchHoldingNews: (tickers = []) =>
       requestJson(apiBaseUrl, '/api/market/news', {
         workspaceId,
@@ -44,6 +65,14 @@ export function createApiClient({ apiBaseUrl, workspaceId }) {
           mode: 'today',
           tickers: tickers.slice(0, 5).join(','),
         },
+      }),
+    // mode: 'search' (vs. fetchHoldingNews's 'today') — free-text query instead of the connected
+    // portfolio's own tickers. Same /api/market/news endpoint and mode param the web's news
+    // search box sends (src/lib/marketNews.js's fetchMarketNews).
+    searchNews: (query) =>
+      requestJson(apiBaseUrl, '/api/market/news', {
+        workspaceId,
+        searchParams: { mode: 'search', query },
       }),
   };
 }

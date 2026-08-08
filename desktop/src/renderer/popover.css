@@ -372,6 +372,93 @@ body {
   flex: 0 0 auto;
 }
 
+/* ---------- Quick add (ticker + quantity) ---------- */
+
+.quick-add {
+  flex: 0 0 auto;
+  padding: 0 16px 8px;
+}
+
+.quick-add__row {
+  display: flex;
+  gap: 6px;
+}
+
+.quick-add__input {
+  padding: 8px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--hairline);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 140ms var(--ease), background-color 140ms var(--ease);
+}
+
+.quick-add__input:hover {
+  background-color: rgba(255, 255, 255, 0.07);
+}
+
+.quick-add__input:focus {
+  border-color: rgba(250, 246, 240, 0.32);
+}
+
+.quick-add__input:disabled {
+  opacity: 0.5;
+}
+
+/* Ticker gets the room; quantity only ever needs a few digits. */
+.quick-add__input--ticker {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.quick-add__input--qty {
+  flex: 0 0 64px;
+  /* Chrome's default spinner arrows are wide enough at this size to crowd out the digits — the
+     field is only ever a share count, not worth the width they'd cost. */
+  -moz-appearance: textfield;
+}
+
+.quick-add__input--qty::-webkit-outer-spin-button,
+.quick-add__input--qty::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.quick-add__button {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 140ms var(--ease), transform 140ms var(--ease);
+}
+
+.quick-add__button:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.quick-add__button:active {
+  transform: scale(0.97);
+}
+
+.quick-add__button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.quick-add__error {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--loss);
+}
+
 /* ---------- News ---------- */
 
 .news-page {
@@ -379,6 +466,61 @@ body {
   flex-direction: column;
   height: 100%;
   min-height: 0;
+}
+
+.news-search {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 16px 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--hairline);
+  background: rgba(255, 255, 255, 0.045);
+  transition: border-color 140ms var(--ease);
+}
+
+.news-search:focus-within {
+  border-color: rgba(250, 246, 240, 0.32);
+}
+
+.news-search__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.news-search__input::placeholder {
+  color: var(--ink-faint);
+}
+
+/* Safari/WebKit's default magnifier + built-in "clear" glyph on type="search" duplicate the
+   custom clear button below and don't pick up --ink — hidden in favor of the one this file
+   controls the styling of. */
+.news-search__input::-webkit-search-cancel-button,
+.news-search__input::-webkit-search-decoration {
+  display: none;
+}
+
+.news-search__clear {
+  flex: 0 0 auto;
+  border: none;
+  background: none;
+  color: var(--ink-faint);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px;
+}
+
+.news-search__clear:hover {
+  color: var(--ink-dim);
 }
 
 .section-label {

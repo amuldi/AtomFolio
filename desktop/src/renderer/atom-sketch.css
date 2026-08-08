@@ -58,8 +58,16 @@
   stroke-width: 8;
   stroke-linecap: round;
   stroke-linejoin: round;
+  pointer-events: none;
 }
 
+/* Purely decorative — every bond line radiates from (and every center glow/shell layer sits
+   right on top of) the exact same point .center-hit occupies, so without this, clicking there
+   (verified via elementFromPoint at the stage's own center: it resolved to .stroke-shadow, not
+   .center-hit) hits whichever decorative stroke/fill happens to be painted last, not the actual
+   hit target underneath — dead click, neither the drag-to-rotate handler nor AtomSketch's own
+   click handling ever runs. .node-hit/.center-hit (pointer-events: all, below) are the only
+   elements meant to receive pointer input here. */
 .stroke-soft,
 .stroke-shadow,
 .stroke-main,
@@ -76,6 +84,7 @@
 .center-shell-highlight,
 .graphite-dust {
   vector-effect: non-scaling-stroke;
+  pointer-events: none;
 }
 
 .stroke-soft {
