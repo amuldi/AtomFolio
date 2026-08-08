@@ -272,14 +272,11 @@ function createAtomWidget() {
   };
   atomWidget.on('move', saveAtomWidgetGeometry);
   atomWidget.on('resize', saveAtomWidgetGeometry);
-  // macOS-only: fires once when a move gesture (drag or programmatic) actually settles, unlike
-  // 'move' above which fires continuously through the whole drag — exactly the "only on release"
-  // timing edge-snapping needs. snapAtomWidgetToEdges()'s own setPosition() call re-enters this
-  // (a no-op the second time, since the position it computes is already what bounds report), and
-  // that second 'move'/'moved' pair is also harmless: saveAtomWidgetGeometry's debounce just ends
-  // up saving the post-snap position instead of the pre-snap one, which is what should be
-  // persisted anyway.
-  atomWidget.on('moved', snapAtomWidgetToEdges);
+  // Edge-snap is triggered explicitly by the atomfolio:widget-move-end IPC message below (sent
+  // from atom-view.jsx's own pointerup/pointercancel), not from this 'move'/'moved' native window
+  // event — the ⌘-drag itself is driven by a stream of setPosition() calls from
+  // atomfolio:widget-move-by, and snapping on every one of those (if 'moved' fired per call) would
+  // fight the user's hand mid-drag instead of only settling things once, on release.
 
   // A discoverable way to reach things that would otherwise require knowing the tray menu exists.
   atomWidget.webContents.on('context-menu', () => {
@@ -654,6 +651,25 @@ function startPolling() {
 
 function registerIpcHandlers() {
   ipcMain.handle('atomfolio:get-state', () => state);
+
+  // Fire-and-forget (ipcRenderer.send, not invoke) — sent continuously off atom-view.jsx's own
+  // pointermove while ⌘-dragging the widget, so round-trip latency from awaiting a reply on every
+  // single move would be pure waste. dx/dy are screen-space deltas already computed on the
+  // renderer side (see atom-view.jsx for why screen, not client, coordinates).
+  ipcMain.on('atomfolio:widget-move-by', (_event, dx, dy) => {
+    if (!atomWidget || atomWidget.isDestroyed()) {
+      return;
+    }
+    const { x, y } = atomWidget.getBounds();
+    atomWidget.setPosition(Math.round(x + dx), Math.round(y + dy), false);
+  });
+
+  // Sent once, on pointerup/pointercancel — the one moment edge-snapping should actually run (see
+  // snapAtomWidgetToEdges's own comment and createAtomWidget's for why this isn't wired off a
+  // native window event instead).
+  ipcMain.on('atomfolio:widget-move-end', () => {
+    snapAtomWidgetToEdges();
+  });
 
   ipcMain.handle('atomfolio:connect', async (_event, workspaceId) => {
     const cleanId = String(workspaceId ?? '').trim();

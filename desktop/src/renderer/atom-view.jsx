@@ -222,23 +222,22 @@ function AtomView({ items, holdings, activeInsight }) {
   }, []);
 
   // ⌘ gates "move the window" vs "rotate the atom" — without it, grabbing anywhere on the stage
-  // (including the center/bond-lines) behaves like the website's trackball; holding ⌘ turns the
-  // whole stage into a native drag handle instead. This used to be a hand-rolled IPC-driven drag
-  // (tracking screenX/screenY deltas and calling atomfolio.moveWidgetBy on every move) instead of
-  // plain -webkit-app-region: drag, because -webkit-app-region: no-drag on the individual
-  // .node-hit SVG circles turned out not to reliably carve out an exception within a `drag`
-  // ancestor for real (hardware-originated) drags — verified directly with synthetic CGEvent
-  // input. The manual version worked but had a real edge case (see git history): moving the
-  // actual window out from under the cursor mid-drag means the eventual mouseup can land outside
-  // it, so the "drag ended" signal is sometimes missed. Native app-region has neither problem
-  // here, because in move mode we *want* the entire stage draggable, node circles included — no
-  // carve-out needed, so the one thing native app-region couldn't do reliably isn't needed
-  // anymore, and OS-managed drags don't have a "missed the up event" failure mode at all.
-  //
-  // The widget is shown via showInactive() and normally never holds keyboard focus, so a
-  // document-level keydown/keyup listener for ⌘ would frequently just never fire. Reading
-  // event.metaKey directly off pointer events instead works regardless of focus — the OS attaches
-  // current modifier state to every mouse event, not just keyboard ones.
+  // (including the center/bond-lines) behaves like the website's trackball; holding ⌘ moves the
+  // window instead. This still updates .is-move-mode on hover (below) purely for the grab/grabbing
+  // cursor — but actually MOVING the window is done by hand (screenX/screenY deltas -> IPC), not
+  // via -webkit-app-region: drag. A native-app-region version was tried first and reported broken
+  // in real use (window just doesn't move): -webkit-app-region: drag only takes effect for a
+  // mousedown that starts *after* the browser process has already cached that point as a
+  // draggable region from a prior layout pass — the region has to be armed before the click, not
+  // during it. Toggling the class reactively from a pointerdown/pointermove handler is
+  // structurally too late for that same pointerdown (if the region had actually been armed in
+  // time, the native drag would have intercepted the mousedown before it ever reached this JS
+  // handler at all) — it only had a chance of working if the user happened to move the mouse
+  // (hover) with ⌘ already held before pressing, not the more natural press-then-hold-⌘-then-drag
+  // order. Reading event.metaKey off pointer events (below and in handleNodePointerDown) is still
+  // the right way to detect the modifier without keyboard focus — the OS attaches current modifier
+  // state to every mouse event regardless of window focus — it's specifically the "hand the drag
+  // off to app-region" part that didn't hold up.
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) {
@@ -257,6 +256,66 @@ function AtomView({ items, holdings, activeInsight }) {
       stage.removeEventListener('pointermove', syncMoveMode);
       stage.removeEventListener('pointerdown', syncMoveMode);
       stage.removeEventListener('pointerleave', clearMoveMode);
+    };
+  }, []);
+
+  // The actual ⌘-move drag: started from handleStagePointerDown below (background/center/node —
+  // whatever's under the cursor, as long as ⌘ is held), same dragRef + window-level pointermove/up
+  // shape as the rotation drag further down. Tracked via screenX/screenY (not clientX/Y) because
+  // the window itself moves under the cursor as this runs — a client-coordinate delta would be
+  // measuring against a stage that just relocated out from under it; screen coordinates don't have
+  // that problem.
+  const widgetDragRef = useRef({ active: false, pointerId: null, lastScreenX: 0, lastScreenY: 0 });
+
+  const handleStagePointerDown = useCallback((event) => {
+    if (!event.metaKey) {
+      return;
+    }
+    event.preventDefault();
+    widgetDragRef.current = {
+      active: true,
+      pointerId: event.pointerId,
+      lastScreenX: event.screenX,
+      lastScreenY: event.screenY,
+    };
+    try {
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Same rationale as handleNodePointerDown below — capture is a nice-to-have, not required.
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleMove = (event) => {
+      const drag = widgetDragRef.current;
+      if (!drag.active || event.pointerId !== drag.pointerId) {
+        return;
+      }
+      const dx = event.screenX - drag.lastScreenX;
+      const dy = event.screenY - drag.lastScreenY;
+      drag.lastScreenX = event.screenX;
+      drag.lastScreenY = event.screenY;
+      if (dx !== 0 || dy !== 0) {
+        window.atomfolio?.moveWidgetBy?.(dx, dy);
+      }
+    };
+    const handleUp = (event) => {
+      const drag = widgetDragRef.current;
+      if (!drag.active || event.pointerId !== drag.pointerId) {
+        return;
+      }
+      widgetDragRef.current.active = false;
+      // Snap-to-edge (main.js) only fires from this explicit "drag actually ended" signal, not on
+      // every intermediate move — see main.js's atomfolio:widget-move-end handler.
+      window.atomfolio?.moveWidgetEnd?.();
+    };
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+    window.addEventListener('pointercancel', handleUp);
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+      window.removeEventListener('pointercancel', handleUp);
     };
   }, []);
 
@@ -350,13 +409,15 @@ function AtomView({ items, holdings, activeInsight }) {
 
   const handleNodePointerDown = useCallback(
     (atomId, event) => {
-      // ⌘ held means this is a window-move gesture (native -webkit-app-region: drag on the
-      // stage, gated by the .is-move-mode sync effect below), not a rotation — bail out without
-      // touching dragRef/stopPropagation/preventDefault so the native drag region gets a clean,
-      // unobstructed shot at the same pointerdown. Starting rotation tracking here anyway would
-      // risk it never getting a matching pointerup once the native drag takes over the gesture,
-      // leaving dragRef.current.atomId stuck non-null — which would silently disable idle
-      // auto-rotate for good, since the render loop treats a non-null atomId as "still dragging".
+      // ⌘ held means this is a window-move gesture, not a rotation — bail out without touching
+      // dragRef/stopPropagation/preventDefault. Not calling stopPropagation is what lets the event
+      // keep bubbling up to .atom-visual-stage's own onPointerDown (handleStagePointerDown above),
+      // which is what actually starts the move drag — so a ⌘-drag started on a node or the center
+      // moves the window exactly the same as one started on empty stage background. Starting
+      // rotation tracking here anyway would also risk it never getting a matching pointerup once
+      // the window-move drag takes over the gesture, leaving dragRef.current.atomId stuck non-null
+      // — which would silently disable idle auto-rotate for good, since the render loop treats a
+      // non-null atomId as "still dragging".
       if (event.metaKey) {
         return;
       }
@@ -549,6 +610,7 @@ function AtomView({ items, holdings, activeInsight }) {
         className="atom-visual-stage"
         ref={stageRef}
         onPointerDownCapture={dismissHint}
+        onPointerDown={handleStagePointerDown}
         onPointerEnter={handleStagePointerEnter}
         onPointerLeave={handleStagePointerLeave}
       >

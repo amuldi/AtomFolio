@@ -2,6 +2,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('atomfolio', {
   getState: () => ipcRenderer.invoke('atomfolio:get-state'),
+  // Fire-and-forget (send, not invoke) — see main.js's atomfolio:widget-move-by handler for why.
+  moveWidgetBy: (dx, dy) => ipcRenderer.send('atomfolio:widget-move-by', dx, dy),
+  moveWidgetEnd: () => ipcRenderer.send('atomfolio:widget-move-end'),
   connect: (workspaceId) => ipcRenderer.invoke('atomfolio:connect', workspaceId),
   disconnect: () => ipcRenderer.invoke('atomfolio:disconnect'),
   selectPortfolio: (portfolioId) => ipcRenderer.invoke('atomfolio:select-portfolio', portfolioId),

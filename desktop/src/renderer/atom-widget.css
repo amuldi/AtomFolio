@@ -60,9 +60,13 @@ body {
    card, rounded corners) — no card here at all, the atom floats straight over the desktop.
    -webkit-app-region: no-drag by default — grabbing the atom (center, bond-lines, or an
    individual stock node) rotates/selects it, same as the real website's trackball, not the
-   window-hijacking behavior this used to have. Holding ⌘ flips it into a window-move handle
-   instead (.is-move-mode below, toggled by atom-view.jsx reading event.metaKey off pointer
-   events — see that file for why not a keydown listener). */
+   window-hijacking behavior this used to have. Holding ⌘ instead moves the window — but by hand
+   (atom-view.jsx tracks screenX/screenY deltas and calls atomfolio.moveWidgetBy over IPC), not via
+   -webkit-app-region: drag on this element. A native-app-region version was tried first and
+   confirmed broken in real use: that property only takes effect for a mousedown that starts
+   *after* the browser process already has the point cached as a draggable region from a prior
+   layout pass — toggling the class reactively from a pointerdown/pointermove handler is
+   structurally too late to affect that same pointerdown. */
 .atom-visual-stage {
   position: relative;
   flex: 1 1 auto;
@@ -77,15 +81,9 @@ body {
   cursor: default;
 }
 
-/* -webkit-app-region: no-drag on the individual .node-hit SVG circles doesn't reliably carve out
-   an exception within a `drag`-marked ancestor for real (hardware-originated) drags — verified
-   directly with synthetic CGEvent input, not just CDP's synthetic events (which never engage the
-   native window-drag path at all, so they couldn't have caught this). That's fine here: in move
-   mode the *whole* stage, node circles included, is meant to drag the window — there's nothing to
-   carve out. atom-view.jsx's handleNodePointerDown also bails out early when event.metaKey is set
-   so a node's own rotation logic never starts a gesture the native drag is about to take over. */
+/* .is-move-mode itself is still just a hover-reactive cursor cue (toggled by atom-view.jsx reading
+   event.metaKey off pointer events) — the actual window move no longer depends on it. */
 .atom-visual-stage.is-move-mode {
-  -webkit-app-region: drag;
   cursor: grab;
 }
 
