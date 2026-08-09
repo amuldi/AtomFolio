@@ -770,6 +770,46 @@ function renderToggle({ label, checked, onChange }) {
   ]);
 }
 
+// Same shape as renderSlider's own row (label on top, control spanning the full width below) —
+// reads as part of the same list rather than a one-off pattern. Manages its own selected-option
+// class directly on click (like renderToggle's is-on toggle above) rather than expecting a full
+// settings-panel re-render — nothing else in this file re-renders the panel after the initial
+// load either (see ensureSettingsLoaded), every control here is responsible for its own visual
+// state after the first paint.
+function renderSegmented({ label, options, value, onChange }) {
+  let currentValue = value;
+  const buttons = [];
+
+  const applySelection = () => {
+    buttons.forEach((button, index) => {
+      const isSelected = options[index].value === currentValue;
+      button.classList.toggle('is-selected', isSelected);
+      button.setAttribute('aria-pressed', String(isSelected));
+    });
+  };
+
+  for (const option of options) {
+    const button = el('button', 'settings-segmented__option', [option.label]);
+    button.type = 'button';
+    button.addEventListener('click', () => {
+      if (option.value === currentValue) {
+        return;
+      }
+      currentValue = option.value;
+      applySelection();
+      onChange(option.value);
+    });
+    buttons.push(button);
+  }
+
+  applySelection();
+
+  return el('div', 'settings-row', [
+    el('div', 'settings-row__top', [el('span', 'settings-row__label', [label])]),
+    el('div', 'settings-segmented', buttons),
+  ]);
+}
+
 function updateSetting(partial) {
   settingsCache = { ...settingsCache, ...partial };
   void window.atomfolio.updateSettings(partial);
@@ -777,11 +817,23 @@ function updateSetting(partial) {
 
 function renderSettingsPanel(settings) {
   // Two groups, not one flat list of 9 controls — "앱 설정" (how the app itself behaves/looks)
-  // vs. "투자 설정" (thresholds about the portfolio's numbers). Same .section-label pattern the
-  // news page already uses for its own subheading, just reused here (see popover.css for the
-  // settings-panel__body-scoped padding override that pattern needs in this context).
-  const body = el('div', 'settings-panel__body', [
+  // vs. "투자 설정" (thresholds about the portfolio's numbers). Each is its own tinted
+  // .settings-group block (see popover.css) — a label alone read as too weak a separator, but the
+  // background wash is deliberately faint and borderless so it doesn't read as a nested card
+  // (design system's "no card-in-card" rule) the way an outlined box would. Same internal
+  // padding/gap scale on both groups — popover.css doesn't give either one a special case.
+  const appSettingsGroup = el('div', 'settings-group', [
     el('div', 'section-label', ['앱 설정']),
+    renderSegmented({
+      label: '테마',
+      options: [
+        { value: 'system', label: '시스템' },
+        { value: 'light', label: '라이트' },
+        { value: 'dark', label: '다크' },
+      ],
+      value: settings.appearance,
+      onChange: (next) => updateSetting({ appearance: next }),
+    }),
     renderToggle({
       label: '인사이트 알림',
       checked: settings.notificationsEnabled,
@@ -833,6 +885,9 @@ function renderSettingsPanel(settings) {
       checked: settings.launchAtLogin,
       onChange: (next) => updateSetting({ launchAtLogin: next }),
     }),
+  ]);
+
+  const investSettingsGroup = el('div', 'settings-group', [
     el('div', 'section-label', ['투자 설정']),
     renderSlider({
       label: '손절 알림',
@@ -862,6 +917,8 @@ function renderSettingsPanel(settings) {
       onCommit: (v) => updateSetting({ allocationDriftPercent: v }),
     }),
   ]);
+
+  const body = el('div', 'settings-panel__body', [appSettingsGroup, investSettingsGroup]);
 
   return el('div', 'settings-panel', [
     el('div', 'settings-panel__header', [el('span', 'settings-panel__title', ['설정'])]),
@@ -937,7 +994,21 @@ function applyIncomingState(state) {
   render(state);
 }
 
+// data-theme is the only thing popover.css's color tokens actually look at (see its own
+// comment on why not `prefers-color-scheme`) — main.js resolves system/light/dark down to this
+// one boolean (nativeTheme.shouldUseDarkColors) so this file never has to know which of the
+// three settings produced it.
+function applyTheme({ isDark } = {}) {
+  document.documentElement.dataset.theme = isDark ? 'dark' : 'light';
+}
+
 async function bootstrap() {
+  // Fetched alongside (not after) getState, and applied the moment it resolves rather than
+  // waiting on Promise.all for both — theming the page before its first meaningful paint is the
+  // whole point, so it shouldn't be stuck behind the (usually slower) portfolio state round-trip.
+  window.atomfolio.getTheme().then(applyTheme);
+  window.atomfolio.onTheme(applyTheme);
+
   const initialState = await window.atomfolio.getState();
   render(initialState);
   void ensureSettingsLoaded();

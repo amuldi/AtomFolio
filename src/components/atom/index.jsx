@@ -290,6 +290,7 @@ export function AtomSketch({
   ariaLabel,
   highlightActive,
   onCenterClick,
+  onCenterPointerDown,
   onPointerDown,
   onPointerEnter,
   onPointerMove,
@@ -491,6 +492,17 @@ export function AtomSketch({
               cy="0"
               r={standalone ? 60 : 56}
               onPointerDown={(event) => {
+                // Optional escape hatch (unused by the web app — App.jsx never passes this prop,
+                // so onCenterPointerDown?.(event) is always undefined there and this always falls
+                // through to the capture/stopPropagation behavior below, unchanged). Returning
+                // exactly `false` opts out of that default entirely and lets the event keep
+                // bubbling — see desktop/src/renderer/atom-view.jsx's handleCenterPointerDown for
+                // why: a ⌘-held pointerdown on the center needs to reach .atom-visual-stage's own
+                // handler to start a window-move drag, the same as it already does for individual
+                // node hits.
+                if (onCenterPointerDown?.(event) === false) {
+                  return;
+                }
                 event.stopPropagation();
                 event.preventDefault();
                 event.currentTarget.setPointerCapture?.(event.pointerId);

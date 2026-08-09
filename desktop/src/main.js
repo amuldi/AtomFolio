@@ -1,4 +1,15 @@
-import { app, Tray, BrowserWindow, ipcMain, Menu, Notification, shell, screen, globalShortcut } from 'electron';
+import {
+  app,
+  Tray,
+  BrowserWindow,
+  ipcMain,
+  Menu,
+  Notification,
+  shell,
+  screen,
+  globalShortcut,
+  nativeTheme,
+} from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
@@ -335,6 +346,12 @@ function setAtomWidgetVisible(visible) {
   if (visible) {
     cancelPendingWidgetHide?.();
     atomWidget.showInactive();
+    // Mirrors hideAtomWidgetAfterDissolve's 'closing' signal below — without this, a widget shown
+    // again after being dissolved-and-hidden stays stuck at its dissolved (scale 0) state, since
+    // nothing ever tells atom-view.jsx to materialize back in. No ack/timeout needed on this side
+    // the way hiding needs one: there's nothing here that has to wait on the renderer, showing the
+    // (still-transparent-during-materialize) window immediately is correct either way.
+    atomWidget.webContents.send('atomfolio:widget-opening');
     return;
   }
   hideAtomWidgetAfterDissolve();
@@ -437,6 +454,29 @@ function registerToggleShortcut() {
 // effect on next launch) and again from the settings-panel toggle's IPC handler below.
 function applyLaunchAtLoginSetting(value) {
   app.setLoginItemSettings({ openAtLogin: Boolean(value) });
+}
+
+// 'system' | 'light' | 'dark' — these are literally the three values Electron's own
+// nativeTheme.themeSource accepts, so config.appearance maps straight through with no
+// translation. Setting this is what makes nativeTheme.shouldUseDarkColors (and every renderer's
+// own `prefers-color-scheme` media query, though popover.css deliberately doesn't use that —
+// see its own comment) resolve 'system' against the real macOS appearance instead of a fixed
+// choice. Called once at startup and again whenever the setting changes.
+function applyAppearanceSetting(appearance) {
+  nativeTheme.themeSource = ['system', 'light', 'dark'].includes(appearance) ? appearance : 'system';
+}
+
+// Pushed to the popover explicitly (not left to `prefers-color-scheme` alone) so the CSS and the
+// settings panel's own notion of "what's active right now" can never disagree — one resolved
+// value, computed here, is the only source either side reads. Only the popover needs this: the
+// atom widget's own colors are deliberately theme-invariant (see atom-widget.css) — it floats
+// over an arbitrary desktop wallpaper, not this app's own chrome, so "follow the app's light/dark
+// setting" isn't the right behavior for it the way it is for the popover's UI.
+function broadcastTheme() {
+  if (!popover || popover.isDestroyed()) {
+    return;
+  }
+  popover.webContents.send('atomfolio:theme', { isDark: nativeTheme.shouldUseDarkColors });
 }
 
 function showPopoverFocusedOn(articleId) {
@@ -836,8 +876,14 @@ function registerIpcHandlers() {
       atomWidgetSize: config.atomWidgetSize ?? { width: ATOM_WIDGET_WIDTH, height: ATOM_WIDGET_HEIGHT },
       atomWidgetSizeBounds: { minWidth: ATOM_WIDGET_MIN_WIDTH, maxWidth: ATOM_WIDGET_MAX_WIDTH },
       launchAtLogin: config.launchAtLogin,
+      appearance: config.appearance,
     };
   });
+
+  // Separate from get-settings/onState — this is the one value both windows need *before* their
+  // first paint (to avoid a flash of the wrong theme), so it's a dedicated round-trip the
+  // renderer can await right at bootstrap instead of waiting on the heavier state fetch.
+  ipcMain.handle('atomfolio:get-theme', () => ({ isDark: nativeTheme.shouldUseDarkColors }));
 
   // Only these fields — never the workspace/connection ones — are reachable from here, so the
   // settings panel can't accidentally touch anything beyond the thresholds it's meant to control.
@@ -851,6 +897,7 @@ function registerIpcHandlers() {
       'popoverOpacity',
       'widgetOpacity',
       'launchAtLogin',
+      'appearance',
     ];
     const clean = {};
     for (const key of allowedKeys) {
@@ -883,6 +930,14 @@ function registerIpcHandlers() {
     if ('launchAtLogin' in clean) {
       applyLaunchAtLoginSetting(clean.launchAtLogin);
     }
+    if ('appearance' in clean) {
+      applyAppearanceSetting(clean.appearance);
+      // themeSource changing doesn't always change shouldUseDarkColors (e.g. picking 'light'
+      // when the Mac is already in light mode) — nativeTheme's own 'updated' event only fires on
+      // an actual resolved-value change, so broadcast unconditionally here rather than relying on
+      // it to cover this case too.
+      broadcastTheme();
+    }
 
     await refresh({ silent: true });
     return { ok: true };
@@ -893,14 +948,23 @@ app.whenReady().then(async () => {
   // Menu bar only — a Dock icon would make this look like a second, redundant copy of the web app.
   app.dock?.hide();
 
+  // Before either window is created, so nativeTheme.shouldUseDarkColors is already resolved by
+  // the time anything could ask for it (get-theme, the initial broadcastTheme below).
+  applyAppearanceSetting(loadConfig().appearance);
+
   createTray();
   createPopover();
   createAtomWidget();
   registerIpcHandlers();
   registerToggleShortcut();
+  // 'updated' fires whenever the *resolved* dark/light value actually changes — either macOS's
+  // own appearance changing while themeSource is 'system', or applyAppearanceSetting flipping to
+  // a different themeSource that resolves differently. Either way, the popover needs to know.
+  nativeTheme.on('updated', broadcastTheme);
 
   const config = loadConfig();
   applyLaunchAtLoginSetting(config.launchAtLogin);
+  broadcastTheme();
   if (config.workspaceId) {
     await refresh();
     startPolling();

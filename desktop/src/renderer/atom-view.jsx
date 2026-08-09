@@ -233,6 +233,17 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
     });
   }, [dissolveAtom]);
 
+  // Symmetric with onWidgetClosing above — without this, showing the widget again after it was
+  // dissolved-and-hidden left --materialize stuck at 0 (the dissolve's end state) forever, since
+  // nothing ever told the transition to run the other direction. No ack needed here (unlike
+  // closing, main.js isn't waiting on anything before it can proceed — the window is already
+  // shown by the time this fires, just still scaled to 0 until this plays out).
+  useEffect(() => {
+    return window.atomfolio?.onWidgetOpening?.(() => {
+      void materializeAtom();
+    });
+  }, [materializeAtom]);
+
   const baseAtoms = useMemo(
     () => generateAtomLayout(displayedItems).map(createAtomState),
     [displayedItems],
@@ -519,6 +530,21 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
     [clientToLocalPoint, atomTransitionPhase],
   );
 
+  // AtomSketch's own .center-hit unconditionally stopPropagation()s on pointerdown (it has to —
+  // that's what makes a plain click-to-deselect work without also rotating the atom underneath
+  // it), which normally never gives .atom-visual-stage's own onPointerDown a chance to see a
+  // center pointerdown at all. Returning exactly `false` here opts out of that for the ⌘ case
+  // only, letting the event bubble up to handleStagePointerDown — same outcome
+  // handleNodePointerDown above already gives individual nodes. Returning undefined (the ⌘-not-
+  // held path) keeps AtomSketch's existing capture/stopPropagation/onCenterClick behavior exactly
+  // as it always was.
+  const handleCenterPointerDown = useCallback((event) => {
+    if (event.metaKey) {
+      return false;
+    }
+    return undefined;
+  }, []);
+
   useEffect(() => {
     const deltaQuaternion = new THREE.Quaternion();
     const appliedDeltaQuaternion = new THREE.Quaternion();
@@ -697,6 +723,7 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
             ariaLabel="보유 종목 원자"
             highlightActive={false}
             onCenterClick={() => setSelectedAtomId(null)}
+            onCenterPointerDown={handleCenterPointerDown}
             onPointerDown={handleNodePointerDown}
             onPointerEnter={() => {}}
             onPointerMove={() => {}}

@@ -4,6 +4,13 @@
   padding: 0;
 }
 
+/* Dark-first: this app only ever had a dark palette, so the bare :root keeps every existing value
+   completely unchanged (zero regression risk for the common case) and :root[data-theme="light"]
+   below is purely additive. data-theme is set by popover.js from main.js's resolved
+   nativeTheme.shouldUseDarkColors (see main.js's applyAppearanceSetting/broadcastTheme) — not a
+   `@media (prefers-color-scheme)` query — so "시스템/라이트/다크" in settings all funnel through
+   one explicit source of truth instead of the CSS and the settings UI's own idea of the current
+   theme ever being able to disagree. */
 :root {
   color-scheme: dark;
   /* Text alpha steps are matched against macOS's own dark-appearance semantic label colors
@@ -23,11 +30,37 @@
      the separate floating widget now, so the popover has no "media" area to stay consistent with;
      this is just an ordinary dark macOS panel. */
   --chrome-bg: #121317;
+  /* RGB triplet (not a full color) — every field background, hover state, border and the
+     scrollbar thumb throughout this file is `rgba(var(--surface), alpha)` at its own alpha, all
+     sharing this one channel value instead of each hardcoding rgba(255,255,255,...) individually.
+     Flipping this one triplet in the light override below re-tints every one of those surfaces at
+     once (light overlays lighten a dark chrome; dark overlays darken a light one), rather than
+     needing a parallel light-mode rule for each. */
+  --surface: 250, 246, 240;
   /* macOS's dark-mode opaque separator reads closer to ~15% white than 10% — 10% all but
      disappears against a near-black panel background, native ones stay faintly but clearly
      visible. */
-  --hairline: rgba(250, 246, 240, 0.15);
+  --hairline: rgba(var(--surface), 0.15);
   --ease: cubic-bezier(0.2, 0.8, 0.4, 1);
+}
+
+/* Light overrides — same relative alpha steps as the dark set above (see its own comment), just
+   against macOS's light-appearance label colors instead (labelColor/secondaryLabelColor/
+   tertiaryLabelColor in light mode read roughly ~92%/~58%/~32% black). profit/loss get their own
+   darker, more saturated variants rather than reusing the dark set's pastel red/blue verbatim —
+   those are tuned to pop against a near-black chrome and would be low-contrast (light-on-light)
+   against a light one. */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --ink: rgba(23, 21, 19, 0.92);
+  --ink-dim: rgba(23, 21, 19, 0.58);
+  --ink-faint: rgba(23, 21, 19, 0.32);
+  --profit: rgba(199, 53, 41, 1);
+  --profit-bg: rgba(199, 53, 41, 0.12);
+  --loss: rgba(27, 94, 197, 1);
+  --loss-bg: rgba(27, 94, 197, 0.12);
+  --chrome-bg: #f5f3f0;
+  --surface: 20, 18, 16;
 }
 
 html,
@@ -52,7 +85,7 @@ body {
   display: flex;
   flex-direction: column;
   background-color: var(--chrome-bg);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(var(--surface), 0.07);
   border-radius: 14px;
   color: var(--ink);
   overflow: hidden;
@@ -136,18 +169,18 @@ body {
   padding: 0;
   border: none;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(var(--surface), 0.16);
   cursor: pointer;
   transition: width 220ms var(--ease), background-color 220ms var(--ease);
 }
 
 .pager-dot:hover {
-  background: rgba(255, 255, 255, 0.28);
+  background: rgba(var(--surface), 0.28);
 }
 
 .pager-dot.is-active {
   width: 18px;
-  background: rgba(255, 255, 255, 0.75);
+  background: rgba(var(--surface), 0.75);
 }
 
 /* ---------- Header ---------- */
@@ -239,21 +272,27 @@ body {
   padding: 18px 16px;
   display: flex;
   flex-direction: column;
+  gap: 16px;
+}
+
+/* Each group ("앱 설정" / "투자 설정") is a soft-tinted block, not a bordered card — background
+   only, so it doesn't compete with .panel's own outer chrome or read as a card nested inside a
+   card. margin: 0 -16px cancels .settings-panel__body's own 16px inset so the tint bleeds to the
+   panel's edges (the same grouped-section look native macOS Settings panes use), while padding:
+   16px brings the actual label/control text right back to that same 16px baseline — net effect,
+   nothing here moves relative to where it sat as a flat list, only the background changes. */
+.settings-group {
+  display: flex;
+  flex-direction: column;
   gap: 22px;
+  margin: 0 -16px;
+  padding: 16px;
+  border-radius: 10px;
+  background: rgba(var(--surface), 0.03);
 }
 
-/* .section-label reused verbatim for its typography (same small/uppercase/letter-spaced/faint
-   look the news page's own subheading uses) — only the padding needs overriding here, since
-   .settings-panel__body already insets its children 16px horizontally (.section-label's own 16px
-   would double that up). The second (and any later) group gets a hairline divider above it, using
-   the existing 22px flex gap as the divider's own breathing room rather than adding more. */
-.settings-panel__body .section-label {
+.settings-group .section-label {
   padding: 0;
-}
-
-.settings-panel__body .section-label:not(:first-child) {
-  padding-top: 18px;
-  border-top: 1px solid var(--hairline);
 }
 
 .settings-row__top {
@@ -282,7 +321,7 @@ body {
   width: 100%;
   height: 3px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(var(--surface), 0.14);
   outline: none;
   cursor: pointer;
 }
@@ -315,13 +354,13 @@ body {
   padding: 0;
   border: none;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(var(--surface), 0.14);
   cursor: pointer;
   transition: background-color 160ms var(--ease);
 }
 
 .settings-toggle.is-on {
-  background: rgba(250, 246, 240, 0.85);
+  background: rgba(var(--surface), 0.85);
 }
 
 .settings-toggle__knob {
@@ -341,6 +380,39 @@ body {
   transform: translateX(14px);
 }
 
+/* Segmented control (appearance: 시스템/라이트/다크) — same visual language as .settings-toggle
+   (rgba(var(--surface), alpha) tracks, var(--ink) glyphs) rather than a new pattern. */
+.settings-segmented {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+  background: rgba(var(--surface), 0.06);
+}
+
+.settings-segmented__option {
+  flex: 1 1 0;
+  padding: 6px 0;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--ink-dim);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 580;
+  cursor: pointer;
+  transition: background-color 140ms var(--ease), color 140ms var(--ease);
+}
+
+.settings-segmented__option:hover {
+  color: var(--ink);
+}
+
+.settings-segmented__option.is-selected {
+  background: rgba(var(--surface), 0.85);
+  color: var(--chrome-bg);
+}
+
 /* ---------- Portfolio picker ---------- */
 
 .portfolio-picker {
@@ -357,7 +429,7 @@ body {
   background:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6' viewBox='0 0 9 6'%3E%3Cpath d='M1 1l3.5 3.5L8 1' fill='none' stroke='rgba(250,246,240,0.5)' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
       no-repeat right 12px center,
-    rgba(255, 255, 255, 0.045);
+    rgba(var(--surface), 0.045);
   color: var(--ink);
   font-family: inherit;
   font-size: 12px;
@@ -367,20 +439,31 @@ body {
   transition: border-color 140ms var(--ease), background-color 140ms var(--ease);
 }
 
+/* The chevron above is a static data-URI SVG (can't reference CSS custom properties from inside
+   one), so it's re-drawn here in the light palette's ink color instead of just re-tinting —
+   otherwise it'd stay a pale, dark-mode-tuned stroke that all but disappears against a light
+   field background. */
+:root[data-theme='light'] .portfolio-picker select {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6' viewBox='0 0 9 6'%3E%3Cpath d='M1 1l3.5 3.5L8 1' fill='none' stroke='rgba(23,21,19,0.55)' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+      no-repeat right 12px center,
+    rgba(var(--surface), 0.045);
+}
+
 .portfolio-picker select:hover {
-  background-color: rgba(255, 255, 255, 0.07);
+  background-color: rgba(var(--surface), 0.07);
 }
 
 .portfolio-picker select:hover,
 .portfolio-picker select:focus-visible {
-  border-color: rgba(250, 246, 240, 0.32);
+  border-color: rgba(var(--surface), 0.32);
 }
 
 .error-banner {
   margin: 0 16px 10px;
   padding: 8px 12px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--surface), 0.05);
   color: var(--ink-dim);
   font-size: 11.5px;
   flex: 0 0 auto;
@@ -402,7 +485,7 @@ body {
   padding: 9px 12px;
   border-radius: 8px;
   border: 1px solid var(--hairline);
-  background: rgba(255, 255, 255, 0.045);
+  background: rgba(var(--surface), 0.045);
   color: var(--ink);
   font-family: inherit;
   font-size: 12px;
@@ -411,11 +494,11 @@ body {
 }
 
 .quick-add__input:hover {
-  background-color: rgba(255, 255, 255, 0.07);
+  background-color: rgba(var(--surface), 0.07);
 }
 
 .quick-add__input:focus {
-  border-color: rgba(250, 246, 240, 0.32);
+  border-color: rgba(var(--surface), 0.32);
 }
 
 .quick-add__input:disabled {
@@ -446,7 +529,7 @@ body {
   padding: 9px 12px;
   border-radius: 8px;
   border: none;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--surface), 0.1);
   color: var(--ink);
   font-size: 12px;
   font-weight: 600;
@@ -455,7 +538,7 @@ body {
 }
 
 .quick-add__button:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(var(--surface), 0.15);
 }
 
 .quick-add__button:active {
@@ -495,12 +578,12 @@ body {
   padding: 9px 12px;
   border-radius: 8px;
   border: 1px solid var(--hairline);
-  background: rgba(255, 255, 255, 0.045);
+  background: rgba(var(--surface), 0.045);
   transition: border-color 140ms var(--ease);
 }
 
 .news-search:focus-within {
-  border-color: rgba(250, 246, 240, 0.32);
+  border-color: rgba(var(--surface), 0.32);
 }
 
 .news-search__input {
@@ -551,6 +634,10 @@ body {
   flex: 0 0 auto;
 }
 
+/* 8px, not the 16px every other screen's outer gutter uses — deliberately, not a drift.
+   .news-card below adds its own 8px, so the card's actual title text still lands on the same
+   16px baseline as the header/picker/settings text above and below it; the extra 8px here only
+   widens the card's own hover/tap background past the text, not the text itself. */
 .news-list {
   flex: 1 1 auto;
   overflow-y: auto;
@@ -571,7 +658,7 @@ body {
 }
 
 .news-card:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--surface), 0.05);
 }
 
 .news-card__title-row {
@@ -632,7 +719,9 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 24px 22px;
+  /* 22px horizontal was a one-off — every other screen's left/right gutter (header, picker,
+     quick-add, news, settings) is 16px. */
+  padding: 24px 16px;
   gap: 12px;
 }
 
@@ -652,7 +741,7 @@ body {
   padding: 9px 12px;
   border-radius: 8px;
   border: 1px solid var(--hairline);
-  background: rgba(255, 255, 255, 0.045);
+  background: rgba(var(--surface), 0.045);
   color: var(--ink);
   font-size: 12.5px;
   outline: none;
@@ -660,14 +749,14 @@ body {
 }
 
 .connect__input:focus {
-  border-color: rgba(250, 246, 240, 0.32);
+  border-color: rgba(var(--surface), 0.32);
 }
 
 .connect__button {
   padding: 9px 12px;
   border-radius: 8px;
   border: none;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--surface), 0.1);
   color: var(--ink);
   font-size: 12.5px;
   font-weight: 600;
@@ -676,7 +765,7 @@ body {
 }
 
 .connect__button:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(var(--surface), 0.15);
 }
 
 .connect__button:active {
@@ -693,6 +782,6 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(var(--surface), 0.12);
   border-radius: 999px;
 }

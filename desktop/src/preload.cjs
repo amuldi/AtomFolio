@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('atomfolio', {
   openExternal: (url) => ipcRenderer.invoke('atomfolio:open-external', url),
   getSettings: () => ipcRenderer.invoke('atomfolio:get-settings'),
   updateSettings: (partial) => ipcRenderer.invoke('atomfolio:update-settings', partial),
+  // Separate from getSettings — see main.js's atomfolio:get-theme handler for why.
+  getTheme: () => ipcRenderer.invoke('atomfolio:get-theme'),
   onState: (callback) => {
     const listener = (_event, state) => callback(state);
     ipcRenderer.on('atomfolio:state', listener);
@@ -36,5 +38,15 @@ contextBridge.exposeInMainWorld('atomfolio', {
     const listener = () => callback();
     ipcRenderer.on('atomfolio:widget-closing', listener);
     return () => ipcRenderer.removeListener('atomfolio:widget-closing', listener);
+  },
+  onWidgetOpening: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('atomfolio:widget-opening', listener);
+    return () => ipcRenderer.removeListener('atomfolio:widget-opening', listener);
+  },
+  onTheme: (callback) => {
+    const listener = (_event, theme) => callback(theme);
+    ipcRenderer.on('atomfolio:theme', listener);
+    return () => ipcRenderer.removeListener('atomfolio:theme', listener);
   },
 });

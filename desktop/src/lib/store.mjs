@@ -41,6 +41,11 @@ const DEFAULTS = {
   // key-capture UI), but kept as data here rather than a literal in main.js so a future one — or
   // a hand-edited config.json — can repoint it without a code change.
   toggleShortcut: 'Alt+A',
+  // 'system' | 'light' | 'dark' — drives nativeTheme.themeSource (main.js's
+  // applyAppearanceSetting), which is what actually resolves to a light/dark decision (system
+  // reads the real macOS appearance; light/dark pin it regardless of macOS's own setting). The
+  // popover's own CSS never looks at this value directly — see popover.css's data-theme comment.
+  appearance: 'system',
 };
 
 const MAX_SEEN_IDS = 80;
