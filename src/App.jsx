@@ -5401,11 +5401,11 @@ export default function App() {
   const currentTiltRef = useRef({ x: 0, y: 0 });
   // Dissolve/materialize when the main atom's own data changes (a preview-atom click swaps in a
   // different portfolio) — see the click handler below (which drives it) and the rAF loop further
-  // down (which reads rotationSpeedMultiplierRef every frame).
+  // down (which reads transitionAngularVelocityRef every frame).
   const {
     scale: atomTransitionScale,
     phase: atomTransitionPhase,
-    rotationSpeedMultiplierRef: atomRotationSpeedMultiplierRef,
+    transitionAngularVelocityRef: atomTransitionAngularVelocityRef,
     dissolve: dissolveAtom,
     materialize: materializeAtom,
   } = useAtomTransition();
@@ -5894,6 +5894,7 @@ export default function App() {
     const autoRotateY = new THREE.Quaternion();
     const autoRotateX = new THREE.Quaternion();
     const spinQuaternion = new THREE.Quaternion();
+    const transitionSpinY = new THREE.Quaternion();
     const yAxis = new THREE.Vector3(0, 1, 0);
     const xAxis = new THREE.Vector3(1, 0, 0);
 
@@ -5962,13 +5963,22 @@ export default function App() {
       }
 
       if (shouldAutoRotate) {
-        const rotationSpeed = AUTO_ROTATE_SPEED * atomRotationSpeedMultiplierRef.current;
-        autoRotateY.setFromAxisAngle(yAxis, delta * rotationSpeed);
+        autoRotateY.setFromAxisAngle(yAxis, delta * AUTO_ROTATE_SPEED);
         autoRotateX.setFromAxisAngle(xAxis, Math.sin(now * 0.00012) * delta * 0.0038);
         rotationRef.current.target
           .premultiply(autoRotateY)
           .premultiply(autoRotateX)
           .normalize();
+      }
+
+      // Dissolve/materialize's own spin — added on top of (not multiplied into) idle rotation
+      // above, and applies regardless of the drag/reduced-motion gating on that idle rotation:
+      // this is a transition playing out on its own timeline, not ambient drift.
+      // useAtomTransition itself zeroes this out under prefers-reduced-motion, so there's no
+      // separate guard needed here for that.
+      if (atomTransitionAngularVelocityRef.current !== 0) {
+        transitionSpinY.setFromAxisAngle(yAxis, delta * atomTransitionAngularVelocityRef.current);
+        rotationRef.current.target.premultiply(transitionSpinY).normalize();
       }
 
       rotationRef.current.current.slerp(

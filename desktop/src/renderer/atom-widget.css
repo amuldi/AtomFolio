@@ -127,6 +127,30 @@ body {
     0 0 14px rgba(0, 0, 0, 0.4);
 }
 
+/* data-theme is set on <html> by atom-view.jsx from the exact same nativeTheme-driven signal
+   popover.js already applies (main.js's broadcastTheme, now sent to both windows) — one resolved
+   value, not a second opinion. Desktop-widget only: the web app never sets data-theme, so its
+   :root above stays the only rule that ever applies there — a warm-cream atom on the site's own
+   always-dark starfield never needed inverting. --atom-ink (consumed by atom-sketch.css's
+   stroke/fill rules) flips from warm cream to warm charcoal here alongside the readout tokens, so
+   both the atom itself and its value text darken together instead of one lagging the other.
+   --widget-text-shadow flips from a dark halo to a light one for the same reason .atom-hint's own
+   halo direction matters: dark text needs a *light* halo to stay legible against a dark patch of
+   wallpaper, mirroring how light text needed a dark one against a light patch. */
+:root[data-theme='light'] {
+  --atom-ink: 32, 28, 23;
+  --widget-ink: rgba(28, 24, 20, 0.94);
+  --widget-ink-dim: rgba(28, 24, 20, 0.72);
+  --widget-ink-faint: rgba(28, 24, 20, 0.52);
+  /* Same hue/values as popover.css's own light-mode --profit/--loss — one semantic red/blue
+     across the whole app, not a separate tuning for the widget. */
+  --widget-profit: rgb(199, 53, 41);
+  --widget-loss: rgb(27, 94, 197);
+  --widget-text-shadow:
+    0 1px 3px rgba(255, 255, 255, 0.75),
+    0 0 14px rgba(255, 255, 255, 0.55);
+}
+
 .atom-readout {
   flex: 0 0 auto;
   padding: 0 4px;

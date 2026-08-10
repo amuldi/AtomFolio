@@ -423,74 +423,175 @@ function renderHeader(state) {
   ]);
 }
 
-// Only shown once there's something to choose between — a single-portfolio workspace (the common
-// case) has no need for a picker with one disabled-feeling option.
-function renderPortfolioPicker(state) {
-  const portfolios = Array.isArray(state.portfolios) ? state.portfolios : [];
-  if (portfolios.length < 2) {
-    return null;
+// Custom dropdown (not a native <select>) — mounted once at bootstrap, same reasoning as
+// createQuickAddForm/createNewsSearchBar: rebuilding it from scratch on every state push (poll
+// tick, portfolio switch, holding-count tick) would blow away an open dropdown or lost keyboard
+// focus out from under the user. Only shown once there's something to choose between — a
+// single-portfolio workspace (the common case) has no need for a picker with one
+// disabled-feeling option.
+function createPortfolioPicker() {
+  const trigger = el('button', 'portfolio-picker__trigger', []);
+  trigger.type = 'button';
+  trigger.setAttribute('aria-haspopup', 'listbox');
+  trigger.setAttribute('aria-expanded', 'false');
+
+  const listbox = el('div', 'portfolio-picker__listbox', []);
+  listbox.setAttribute('role', 'listbox');
+  listbox.tabIndex = -1;
+  listbox.hidden = true;
+
+  const container = el('div', 'portfolio-picker', [trigger, listbox]);
+  container.hidden = true;
+
+  let portfolios = [];
+  let selectedId = null;
+  let highlightedIndex = -1;
+  let isOpen = false;
+  let closeTimer = null;
+
+  const optionButtons = () => Array.from(listbox.querySelectorAll('.portfolio-picker__option'));
+
+  function setHighlighted(index) {
+    highlightedIndex = index;
+    optionButtons().forEach((button, i) => {
+      button.classList.toggle('is-highlighted', i === index);
+    });
+    optionButtons()[index]?.scrollIntoView({ block: 'nearest' });
   }
 
-  const select = el('select', '', []);
-  for (const portfolio of portfolios) {
-    const option = el('option', '', [`${portfolio.name} · ${portfolio.holdingsCount}개 종목`]);
-    option.value = portfolio.id;
-    option.selected = portfolio.id === state.selectedPortfolioId;
-    select.append(option);
-  }
-
-  select.addEventListener('change', () => {
-    pendingPortfolioSwitch = true;
-    showNewsLoading();
-    void window.atomfolio.selectPortfolio(select.value);
-  });
-
-  return el('div', 'portfolio-picker', [select]);
-}
-
-// Rebuilding the <select> from scratch on every state push (poll, portfolio switch, holding-count
-// tick) resets its native focus/open-dropdown state out from under the user. When the set of
-// portfolios hasn't actually changed, this updates the existing element's option labels and
-// selected value in place instead of tearing it down.
-let currentPickerPortfolioIds = null;
-
-function updatePortfolioPicker(state) {
-  const portfolios = Array.isArray(state.portfolios) ? state.portfolios : [];
-
-  if (portfolios.length < 2) {
-    if (currentPickerPortfolioIds !== null) {
-      setChildren(pickerRoot, null);
-      currentPickerPortfolioIds = null;
-    }
-    return;
-  }
-
-  const newIds = portfolios.map((portfolio) => portfolio.id);
-  const idsMatch =
-    currentPickerPortfolioIds &&
-    newIds.length === currentPickerPortfolioIds.length &&
-    newIds.every((id, index) => id === currentPickerPortfolioIds[index]);
-
-  if (idsMatch) {
-    const select = pickerRoot.querySelector('select');
-    if (select) {
-      const options = select.querySelectorAll('option');
-      portfolios.forEach((portfolio, index) => {
-        const label = `${portfolio.name} · ${portfolio.holdingsCount}개 종목`;
-        if (options[index] && options[index].textContent !== label) {
-          options[index].textContent = label;
+  function renderOptions() {
+    listbox.innerHTML = '';
+    portfolios.forEach((portfolio, index) => {
+      const isSelected = portfolio.id === selectedId;
+      const option = el('button', `portfolio-picker__option${isSelected ? ' is-selected' : ''}`, [
+        el('span', 'portfolio-picker__option-label', [`${portfolio.name} · ${portfolio.holdingsCount}개 종목`]),
+        isSelected ? el('span', 'portfolio-picker__option-check', ['✓']) : null,
+      ]);
+      option.type = 'button';
+      option.setAttribute('role', 'option');
+      option.setAttribute('aria-selected', String(isSelected));
+      option.addEventListener('click', () => choosePortfolio(portfolio.id));
+      option.addEventListener('pointermove', () => {
+        if (highlightedIndex !== index) {
+          setHighlighted(index);
         }
       });
-      if (select.value !== state.selectedPortfolioId) {
-        select.value = state.selectedPortfolioId;
-      }
-    }
-    return;
+      listbox.append(option);
+    });
   }
 
-  setChildren(pickerRoot, renderPortfolioPicker(state));
-  currentPickerPortfolioIds = newIds;
+  function openList() {
+    if (isOpen || portfolios.length < 2) {
+      return;
+    }
+    clearTimeout(closeTimer);
+    isOpen = true;
+    listbox.hidden = false;
+    trigger.classList.add('is-open');
+    trigger.setAttribute('aria-expanded', 'true');
+    // One frame so the opacity/transform transition actually plays from the closed state instead
+    // of the listbox appearing already-open (removing `hidden` and adding the class in the same
+    // tick wouldn't give the browser anything to transition from).
+    requestAnimationFrame(() => listbox.classList.add('is-open'));
+    const currentIndex = portfolios.findIndex((portfolio) => portfolio.id === selectedId);
+    setHighlighted(currentIndex >= 0 ? currentIndex : 0);
+    document.addEventListener('pointerdown', handleOutsidePointerDown, true);
+    document.addEventListener('keydown', handleKeydown, true);
+  }
+
+  function closeList({ refocusTrigger = false } = {}) {
+    if (!isOpen) {
+      return;
+    }
+    isOpen = false;
+    listbox.classList.remove('is-open');
+    trigger.classList.remove('is-open');
+    trigger.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('pointerdown', handleOutsidePointerDown, true);
+    document.removeEventListener('keydown', handleKeydown, true);
+    // hidden=true immediately would cut the closing transition short — wait for it to finish
+    // (matches the CSS's own 130ms) before actually removing the listbox from layout/a11y.
+    clearTimeout(closeTimer);
+    closeTimer = window.setTimeout(() => {
+      listbox.hidden = true;
+    }, 150);
+    if (refocusTrigger) {
+      trigger.focus();
+    }
+  }
+
+  function choosePortfolio(id) {
+    closeList({ refocusTrigger: true });
+    if (id === selectedId) {
+      return;
+    }
+    pendingPortfolioSwitch = true;
+    showNewsLoading();
+    void window.atomfolio.selectPortfolio(id);
+  }
+
+  function handleOutsidePointerDown(event) {
+    if (!container.contains(event.target)) {
+      closeList();
+    }
+  }
+
+  function handleKeydown(event) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setHighlighted(Math.min(portfolios.length - 1, highlightedIndex + 1));
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setHighlighted(Math.max(0, highlightedIndex - 1));
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      const portfolio = portfolios[highlightedIndex];
+      if (portfolio) {
+        choosePortfolio(portfolio.id);
+      }
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      closeList({ refocusTrigger: true });
+    } else if (event.key === 'Tab') {
+      closeList();
+    }
+  }
+
+  trigger.addEventListener('click', () => {
+    if (isOpen) {
+      closeList({ refocusTrigger: true });
+    } else {
+      openList();
+    }
+  });
+
+  function update(state) {
+    portfolios = Array.isArray(state.portfolios) ? state.portfolios : [];
+    selectedId = state.selectedPortfolioId;
+
+    if (portfolios.length < 2) {
+      container.hidden = true;
+      closeList();
+      return;
+    }
+    container.hidden = false;
+
+    const selected = portfolios.find((portfolio) => portfolio.id === selectedId);
+    trigger.textContent = selected
+      ? `${selected.name} · ${selected.holdingsCount}개 종목`
+      : '포트폴리오 선택';
+
+    renderOptions();
+    if (isOpen) {
+      const currentIndex = portfolios.findIndex((portfolio) => portfolio.id === selectedId);
+      setHighlighted(currentIndex >= 0 ? currentIndex : 0);
+    }
+  }
+
+  return { element: container, update };
 }
+
+const portfolioPicker = createPortfolioPicker();
 
 // Shared by both the holdings-scoped list below and the search-results branch (search results
 // carry the same title/link/source/publishedAt shape, just without an isNew flag — that badge is
@@ -834,11 +935,23 @@ function renderSettingsPanel(settings) {
       value: settings.appearance,
       onChange: (next) => updateSetting({ appearance: next }),
     }),
+    // Below the theme picker, grouped by control type rather than the previous
+    // toggle/slider/slider/slider/slider/toggle interleaving — on/off toggles first, then every
+    // slider, so scanning the panel doesn't require re-parsing what kind of control each row is
+    // as you go. The hairline between the two is deliberately just that (see
+    // .settings-subgroup-divider in popover.css) — .settings-group is already its own tinted
+    // section, so a second nested card here would be one grouping frame too many.
     renderToggle({
       label: '인사이트 알림',
       checked: settings.notificationsEnabled,
       onChange: (next) => updateSetting({ notificationsEnabled: next }),
     }),
+    renderToggle({
+      label: '로그인 시 자동 실행',
+      checked: settings.launchAtLogin,
+      onChange: (next) => updateSetting({ launchAtLogin: next }),
+    }),
+    el('div', 'settings-subgroup-divider'),
     renderSlider({
       label: '새로고침 주기',
       format: (v) => `${v}초`,
@@ -879,11 +992,6 @@ function renderSettingsPanel(settings) {
       step: 10,
       value: settings.atomWidgetSize.width,
       onCommit: (v) => updateSetting({ atomWidgetSize: { width: v } }),
-    }),
-    renderToggle({
-      label: '로그인 시 자동 실행',
-      checked: settings.launchAtLogin,
-      onChange: (next) => updateSetting({ launchAtLogin: next }),
     }),
   ]);
 
@@ -944,13 +1052,17 @@ function render(state) {
     appRoot.classList.add('is-hidden');
     pendingPortfolioSwitch = false;
     newsRoot.classList.remove('is-loading');
+    // Also closes/hides it (state.portfolios is always [] while disconnected) — harmless to skip
+    // given #app-root itself is already hidden above, but keeps its internal isOpen state honest
+    // rather than leaving a dropdown "open" that just happens to be invisible.
+    portfolioPicker.update(state ?? {});
     return;
   }
 
   setChildren(connectRoot, null);
   appRoot.classList.remove('is-hidden');
   setChildren(headerRoot, renderHeader(state));
-  updatePortfolioPicker(state);
+  portfolioPicker.update(state);
   pendingPortfolioSwitch = false;
   updateNewsPage(state);
 }
@@ -1009,12 +1121,16 @@ async function bootstrap() {
   window.atomfolio.getTheme().then(applyTheme);
   window.atomfolio.onTheme(applyTheme);
 
+  // All three mounted once, outside render()'s rebuild cycle — see their own comments for why.
+  // Mounted before the first render() call below so that call's portfolioPicker.update() has
+  // somewhere real to write into, rather than a detached node render() happens to reattach after.
+  pickerRoot.append(portfolioPicker.element);
+  quickAddRoot.append(createQuickAddForm());
+  newsSearchRoot.append(createNewsSearchBar());
+
   const initialState = await window.atomfolio.getState();
   render(initialState);
   void ensureSettingsLoaded();
-  // Both mounted once, outside render()'s rebuild cycle — see their own comments for why.
-  quickAddRoot.append(createQuickAddForm());
-  newsSearchRoot.append(createNewsSearchBar());
 
   window.atomfolio.onState((state) => applyIncomingState(state));
   window.atomfolio.onFocusArticle((articleId) => {

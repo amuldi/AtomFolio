@@ -183,7 +183,7 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
   const {
     scale: atomTransitionScale,
     phase: atomTransitionPhase,
-    rotationSpeedMultiplierRef: atomRotationSpeedMultiplierRef,
+    transitionAngularVelocityRef: atomTransitionAngularVelocityRef,
     dissolve: dissolveAtom,
     materialize: materializeAtom,
   } = useAtomTransition();
@@ -420,6 +420,7 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
     const autoRotateY = new THREE.Quaternion();
     const autoRotateX = new THREE.Quaternion();
     const spinQuaternion = new THREE.Quaternion();
+    const transitionSpinY = new THREE.Quaternion();
     const yAxis = new THREE.Vector3(0, 1, 0);
     const xAxis = new THREE.Vector3(1, 0, 0);
 
@@ -444,10 +445,19 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
       if (!isDragging && !prefersReducedMotionRef.current) {
         const engaged = engagementRef.current.hovered || engagementRef.current.focused;
         const idleMultiplier = engaged ? 1 : IDLE_ROTATE_DISENGAGED_MULTIPLIER;
-        const rotationSpeed = AUTO_ROTATE_SPEED * atomRotationSpeedMultiplierRef.current * idleMultiplier;
-        autoRotateY.setFromAxisAngle(yAxis, delta * rotationSpeed);
+        autoRotateY.setFromAxisAngle(yAxis, delta * AUTO_ROTATE_SPEED * idleMultiplier);
         autoRotateX.setFromAxisAngle(xAxis, Math.sin(now * 0.00012) * delta * 0.0038 * idleMultiplier);
         rotationRef.current.target.premultiply(autoRotateY).premultiply(autoRotateX).normalize();
+      }
+
+      // Dissolve/materialize's own spin — added on top of (not multiplied into) idle rotation
+      // above, and applies regardless of hover/focus/reduced-motion gating on that idle rotation:
+      // this is a transition playing out on its own timeline, not ambient drift. useAtomTransition
+      // itself zeroes this out under prefers-reduced-motion, so there's no separate guard needed
+      // here for that.
+      if (atomTransitionAngularVelocityRef.current !== 0) {
+        transitionSpinY.setFromAxisAngle(yAxis, delta * atomTransitionAngularVelocityRef.current);
+        rotationRef.current.target.premultiply(transitionSpinY).normalize();
       }
 
       rotationRef.current.current.slerp(
@@ -755,6 +765,25 @@ function AtomViewRoot() {
       }
     });
     const unsubscribe = window.atomfolio.onState((next) => setState(next));
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, []);
+
+  // Same signal and same data-theme mechanism popover.js uses (main.js's broadcastTheme, sent to
+  // both windows) — atom-widget.css/atom-sketch.css's --atom-ink and --widget-ink* tokens are
+  // what actually react to it, this just carries the resolved value onto <html>.
+  useEffect(() => {
+    let cancelled = false;
+    window.atomfolio.getTheme().then((theme) => {
+      if (!cancelled) {
+        document.documentElement.dataset.theme = theme.isDark ? 'dark' : 'light';
+      }
+    });
+    const unsubscribe = window.atomfolio.onTheme(({ isDark }) => {
+      document.documentElement.dataset.theme = isDark ? 'dark' : 'light';
+    });
     return () => {
       cancelled = true;
       unsubscribe?.();

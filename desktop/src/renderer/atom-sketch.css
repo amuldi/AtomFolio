@@ -1,10 +1,22 @@
-/* Mirrors the atom-visual class names from src/styles.css (the classes SketchAtom/AtomSketch/
+/* Mirrors the atom-visual classes from src/styles.css (the classes SketchAtom/AtomSketch/
    AtomLabel render in src/components/atom/index.jsx) so the popover's atom looks like the real
    dashboard scene. These are a deliberate, curated copy rather than an @import of styles.css
    (which is ~7000 lines covering the whole web app, interleaved with unrelated stage/webgl-preview
    rules around this exact section) — the JS/layout logic driving these shapes is the real shared
    src/ code (see atom-view.jsx), not reimplemented; only these presentation rules are mirrored.
-   Keep in sync by hand if src/styles.css's atom rules change. */
+   Keep in sync by hand if src/styles.css's atom rules change.
+
+   Every stroke/fill color below is rgba(var(--atom-ink), alpha) rather than a hardcoded warm-cream
+   triplet — same RGB-triplet-token technique as popover.css's --surface. --atom-ink itself is
+   defined in atom-widget.css (the file that actually owns light/dark switching for the desktop
+   widget; the web app never sets data-theme at all, so :root's plain warm-cream default is the
+   *only* value that ever applies there, unchanged from before this became a variable). Every
+   alpha value below is untouched from the original hardcoded rules — only the RGB channel was
+   parameterized, so dark mode (the web app's only mode, and the widget's default) renders
+   byte-identical to before. */
+:root {
+  --atom-ink: 250, 240, 220;
+}
 
 .sketch-svg {
   width: 100%;
@@ -25,7 +37,7 @@
 
 .label-main,
 .label-detail {
-  fill: rgba(250, 240, 220, 0.9);
+  fill: rgba(var(--atom-ink), 0.9);
   font-family:
     'Bradley Hand',
     'Marker Felt',
@@ -44,7 +56,7 @@
 }
 
 .label-detail {
-  fill: rgba(250, 240, 220, 0.62);
+  fill: rgba(var(--atom-ink), 0.62);
   /* 14px, not 13.5px's old 10.5px pair — measured against the shared AtomLabel component's own
      internal detail-vs-main scale, the old 10.5px rendered detail text ~40% the height of the main
      label even at the widget's default size, well under comfortable legibility. 14px brings it to
@@ -54,7 +66,7 @@
 
 .aura-line {
   fill: none;
-  stroke: rgba(248, 235, 212, 0.11);
+  stroke: rgba(var(--atom-ink), 0.11);
   stroke-width: 8;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -89,7 +101,7 @@
 
 .stroke-soft {
   fill: none;
-  stroke: rgba(255, 242, 216, 0.31);
+  stroke: rgba(var(--atom-ink), 0.31);
   stroke-width: 1.08;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -97,7 +109,7 @@
 
 .stroke-shadow {
   fill: none;
-  stroke: rgba(246, 233, 208, 0.54);
+  stroke: rgba(var(--atom-ink), 0.54);
   stroke-width: 2.18;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -105,15 +117,15 @@
 
 .stroke-main {
   fill: none;
-  stroke: rgba(249, 239, 218, 0.96);
+  stroke: rgba(var(--atom-ink), 0.96);
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .node-soft {
-  fill: rgba(245, 233, 208, 0.09);
-  stroke: rgba(249, 238, 214, 0.67);
+  fill: rgba(var(--atom-ink), 0.09);
+  stroke: rgba(var(--atom-ink), 0.67);
   stroke-width: 1.2;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -121,19 +133,19 @@
 
 .node-main {
   fill: none;
-  stroke: rgba(250, 240, 220, 0.98);
+  stroke: rgba(var(--atom-ink), 0.98);
   stroke-width: 1.42;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .node-selected-glow {
-  fill: rgba(255, 247, 232, 0.18);
-  stroke: rgba(255, 250, 238, 0.98);
+  fill: rgba(var(--atom-ink), 0.18);
+  stroke: rgba(var(--atom-ink), 0.98);
   stroke-width: 3.2;
   stroke-linecap: round;
   stroke-linejoin: round;
-  filter: drop-shadow(0 0 8px rgba(255, 247, 232, 0.45));
+  filter: drop-shadow(0 0 8px rgba(var(--atom-ink), 0.45));
 }
 
 .node-hit {
@@ -145,9 +157,9 @@
 
 .node-hit:focus-visible {
   outline: none;
-  stroke: rgba(255, 250, 238, 0.92);
+  stroke: rgba(var(--atom-ink), 0.92);
   stroke-width: 2.8;
-  filter: drop-shadow(0 0 8px rgba(255, 247, 232, 0.45));
+  filter: drop-shadow(0 0 8px rgba(var(--atom-ink), 0.45));
 }
 
 .center-hit {
@@ -158,57 +170,57 @@
 }
 
 .center-blot {
-  fill: rgba(248, 237, 216, 0.42);
-  stroke: rgba(249, 239, 218, 0.96);
+  fill: rgba(var(--atom-ink), 0.42);
+  stroke: rgba(var(--atom-ink), 0.96);
   stroke-width: 1.2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .center-glow-outer {
-  fill: rgba(255, 245, 226, 0.24);
-  stroke: rgba(255, 243, 220, 0.34);
+  fill: rgba(var(--atom-ink), 0.24);
+  stroke: rgba(var(--atom-ink), 0.34);
   stroke-width: 0.96;
 }
 
 .center-glow-mid {
-  fill: rgba(255, 246, 228, 0.3);
-  stroke: rgba(255, 246, 230, 0.42);
+  fill: rgba(var(--atom-ink), 0.3);
+  stroke: rgba(var(--atom-ink), 0.42);
   stroke-width: 0.96;
 }
 
 .center-glow-core {
-  fill: rgba(255, 250, 237, 0.68);
+  fill: rgba(var(--atom-ink), 0.68);
   stroke: none;
 }
 
 .center-shell-shadow {
-  fill: rgba(255, 242, 214, 0.2);
-  stroke: rgba(250, 239, 218, 0.46);
+  fill: rgba(var(--atom-ink), 0.2);
+  stroke: rgba(var(--atom-ink), 0.46);
   stroke-width: 1;
 }
 
 .center-shell-rim {
-  fill: rgba(255, 248, 233, 0.1);
-  stroke: rgba(255, 247, 232, 0.68);
+  fill: rgba(var(--atom-ink), 0.1);
+  stroke: rgba(var(--atom-ink), 0.68);
   stroke-width: 1.12;
 }
 
 .center-shell-highlight {
-  fill: rgba(255, 250, 239, 0.54);
+  fill: rgba(var(--atom-ink), 0.54);
   stroke: none;
 }
 
 .center-orbit {
   fill: none;
-  stroke: rgba(250, 240, 220, 0.72);
+  stroke: rgba(var(--atom-ink), 0.72);
   stroke-width: 0.94;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .graphite-dust {
-  fill: rgba(248, 237, 214, 0.88);
+  fill: rgba(var(--atom-ink), 0.88);
 }
 
 .atom-visual-stage {

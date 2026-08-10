@@ -259,6 +259,12 @@ function createAtomWidget() {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      // Unlike the popover (only ever animating while shown and focused), this window is an
+      // always-on-top ambient overlay that's supposed to keep drifting/rotating continuously even
+      // while some other app has focus and even while it's occluded — Chromium's default
+      // background throttling would stall its rAF-driven rotation rig in exactly that situation,
+      // which is the widget's normal resting state, not an edge case.
+      backgroundThrottling: false,
     },
   });
 
@@ -466,17 +472,22 @@ function applyAppearanceSetting(appearance) {
   nativeTheme.themeSource = ['system', 'light', 'dark'].includes(appearance) ? appearance : 'system';
 }
 
-// Pushed to the popover explicitly (not left to `prefers-color-scheme` alone) so the CSS and the
-// settings panel's own notion of "what's active right now" can never disagree — one resolved
-// value, computed here, is the only source either side reads. Only the popover needs this: the
-// atom widget's own colors are deliberately theme-invariant (see atom-widget.css) — it floats
-// over an arbitrary desktop wallpaper, not this app's own chrome, so "follow the app's light/dark
-// setting" isn't the right behavior for it the way it is for the popover's UI.
+// Pushed explicitly (not left to `prefers-color-scheme` alone) so the CSS and the settings
+// panel's own notion of "what's active right now" can never disagree — one resolved value,
+// computed here, is the only source either window reads. Sent to both windows: the popover's
+// whole chrome follows it, and the atom widget follows it for its own ink/stroke palette
+// (atom-widget.css's data-theme override, consumed by atom-sketch.css's --atom-ink) — the atom's
+// *shape* stays exactly what it's always been, only whether it draws in warm cream or warm
+// charcoal changes, since it floats over an arbitrary desktop wallpaper rather than this app's
+// own chrome and needs to stay visible against either a light or dark one.
 function broadcastTheme() {
-  if (!popover || popover.isDestroyed()) {
-    return;
+  const payload = { isDark: nativeTheme.shouldUseDarkColors };
+  if (popover && !popover.isDestroyed()) {
+    popover.webContents.send('atomfolio:theme', payload);
   }
-  popover.webContents.send('atomfolio:theme', { isDark: nativeTheme.shouldUseDarkColors });
+  if (atomWidget && !atomWidget.isDestroyed()) {
+    atomWidget.webContents.send('atomfolio:theme', payload);
+  }
 }
 
 function showPopoverFocusedOn(articleId) {

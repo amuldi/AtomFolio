@@ -11,9 +11,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const DEFAULT_DURATION_MS = 420;
-// How much faster than normal idle rotation gets at the peak of a transition (dissolve ends here,
-// materialize starts here).
-const DEFAULT_ROTATION_BOOST = 3.4;
+// Absolute peak angular velocity (radians/second) a transition spins at — NOT a multiplier on
+// AUTO_ROTATE_SPEED. AUTO_ROTATE_SPEED is tuned for a barely-perceptible ambient drift; even a
+// 3-4x multiplier on that over one ~420ms transition works out to a rotation too small to
+// register (the scale change reads clearly, the spin doesn't). This value is added on top of
+// idle rotation instead, sized against the transition's own duration — independent of whatever
+// AUTO_ROTATE_SPEED happens to be tuned to. For a cubic ease applied over durationMs, the swept
+// angle works out to peakAngularVelocity * durationMs / 4 (the ease curve's average is 1/4 of its
+// peak) — at 90 rad/s and the default 420ms duration that's ~9.4 rad, about 1.5 full turns per
+// dissolve or materialize. Measured directly (accumulating the actual per-frame angle applied in
+// the desktop widget's rotation rig over a live dissolve+materialize) rather than judged by eye,
+// since this environment's screen capture can't be trusted for that; landed in the middle of the
+// "roughly 1-2 revolutions per transition" target.
+const TRANSITION_PEAK_ANGULAR_VELOCITY = 90;
 
 function easeInCubic(t) {
   return t * t * t;
@@ -30,9 +40,9 @@ function prefersReducedMotion() {
 
 /**
  * @returns {{
- *   scale: number,                     // 1 at rest; animates 1->0 dissolving, 0->1 materializing
+ *   scale: number,                        // 1 at rest; animates 1->0 dissolving, 0->1 materializing
  *   phase: 'idle' | 'dissolving' | 'materializing',
- *   rotationSpeedMultiplierRef: {current: number}, // see below for why this one's a ref
+ *   transitionAngularVelocityRef: {current: number}, // radians/second; see below for why a ref
  *   dissolve: () => Promise<void>,
  *   materialize: () => Promise<void>,
  * }}
@@ -42,21 +52,22 @@ function prefersReducedMotion() {
  * their rAF loop specifically so the SVG scene re-renders continuously), so piggybacking one more
  * state value on that existing cadence costs nothing extra.
  *
- * rotationSpeedMultiplier is a ref instead, because it has a different consumer: the *inside* of
- * that same long-lived rAF loop, which reads it every frame to scale AUTO_ROTATE_SPEED. That
- * effect has an empty dependency array (restarting the whole rotation rig every time the
- * multiplier ticked would blow away in-flight rotation/spin state 60 times over one 420ms
- * transition) — a captured useState value in that closure would just be frozen at mount. A ref
- * sidesteps that entirely: the rAF loop reads rotationSpeedMultiplierRef.current fresh every
- * frame, no re-subscription needed.
+ * transitionAngularVelocity is a ref instead, because it has a different consumer: the *inside*
+ * of that same long-lived rAF loop, which reads it every frame to spin the atom an extra
+ * `delta * transitionAngularVelocityRef.current` radians, additively, on top of whatever idle
+ * rotation it already applies. That effect has an empty dependency array (restarting the whole
+ * rotation rig every time this value ticked would blow away in-flight rotation/spin state 60
+ * times over one 420ms transition) — a captured useState value in that closure would just be
+ * frozen at mount. A ref sidesteps that entirely: the rAF loop reads
+ * transitionAngularVelocityRef.current fresh every frame, no re-subscription needed.
  */
 export function useAtomTransition({
   durationMs = DEFAULT_DURATION_MS,
-  rotationBoost = DEFAULT_ROTATION_BOOST,
+  peakAngularVelocity = TRANSITION_PEAK_ANGULAR_VELOCITY,
 } = {}) {
   const [scale, setScale] = useState(1);
   const [phase, setPhase] = useState('idle');
-  const rotationSpeedMultiplierRef = useRef(1);
+  const transitionAngularVelocityRef = useRef(0);
   const frameRef = useRef(null);
 
   const stop = useCallback(() => {
@@ -76,10 +87,11 @@ export function useAtomTransition({
         stop();
 
         if (prefersReducedMotion()) {
-          // Snap straight to the transition's end state — no in-between frames to skip through.
+          // Snap straight to the transition's end state — no in-between frames to skip through,
+          // no spin either.
           setPhase('idle');
           setScale(nextPhase === 'dissolving' ? 0 : 1);
-          rotationSpeedMultiplierRef.current = 1;
+          transitionAngularVelocityRef.current = 0;
           resolve();
           return;
         }
@@ -92,11 +104,16 @@ export function useAtomTransition({
           const eased = nextPhase === 'dissolving' ? easeInCubic(t) : easeOutCubic(t);
 
           if (nextPhase === 'dissolving') {
+            // Spins up from a standstill to peak as it shrinks away — eased *is* how far along
+            // that acceleration is, so it doubles directly as the velocity fraction.
             setScale(1 - eased);
-            rotationSpeedMultiplierRef.current = 1 + eased * (rotationBoost - 1);
+            transitionAngularVelocityRef.current = eased * peakAngularVelocity;
           } else {
+            // Arrives already spinning at peak and decelerates to a standstill as it grows in —
+            // the mirror image of dissolve's ramp-up, so it's peak minus the same eased fraction
+            // rather than a separate curve.
             setScale(eased);
-            rotationSpeedMultiplierRef.current = rotationBoost - eased * (rotationBoost - 1);
+            transitionAngularVelocityRef.current = (1 - eased) * peakAngularVelocity;
           }
 
           if (t < 1) {
@@ -104,6 +121,13 @@ export function useAtomTransition({
           } else {
             frameRef.current = null;
             setPhase('idle');
+            // Materialize's own formula already lands on exactly 0 here, but dissolve's does the
+            // opposite — it *ends* at full peak velocity (still spinning fastest right as it
+            // vanishes) and nothing else ever zeroes it back out. Left alone, the consuming rAF
+            // loop keeps applying that leftover peak spin to a scale-0/invisible atom forever
+            // (the loop itself has no idea the transition "finished", it just keeps reading
+            // whatever's in the ref) — wasted work on a hidden window, not merely a rounding nit.
+            transitionAngularVelocityRef.current = 0;
             resolve();
           }
         };
@@ -116,11 +140,11 @@ export function useAtomTransition({
         // doesn't visibly jump.
         frameRef.current = requestAnimationFrame(step);
       }),
-    [durationMs, rotationBoost, stop],
+    [durationMs, peakAngularVelocity, stop],
   );
 
   const dissolve = useCallback(() => run('dissolving'), [run]);
   const materialize = useCallback(() => run('materializing'), [run]);
 
-  return { scale, phase, rotationSpeedMultiplierRef, dissolve, materialize };
+  return { scale, phase, transitionAngularVelocityRef, dissolve, materialize };
 }

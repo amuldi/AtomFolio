@@ -255,21 +255,31 @@ body {
 
 .settings-panel__header {
   flex: 0 0 auto;
-  padding: 12px 16px 6px;
+  padding: 12px 16px 11px;
+  /* Both this header and .settings-panel__body share the same solid --chrome-bg, so without a
+     seam a scrolled-up .settings-group's tinted background would just abut the header with
+     nothing marking "this part is fixed, that part just scrolled" — a hairline here is what
+     actually makes staying pinned *read* as pinned while scrolling, not just technically be so. */
+  border-bottom: 1px solid var(--hairline);
 }
 
+/* One level up from .section-label's group "eyebrow" style below (10.5px, uppercase, faint) —
+   this used to be typographically identical to it (same size/weight/color/uppercase), which meant
+   nothing distinguished "which page am I on" (this title, pinned above the scrollable body by
+   .settings-panel's own flex layout, so it's visible no matter how far you've scrolled) from
+   "which group within it am I looking at" (the section labels that scroll past with their
+   content). Bigger, full --ink contrast, no uppercase/letter-spacing — reads as a real heading
+   now, not another subsection marker. */
 .settings-panel__title {
-  font-size: 10.5px;
-  font-weight: 640;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
+  font-size: 13px;
+  font-weight: 680;
+  color: var(--ink);
 }
 
 .settings-panel__body {
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: 18px 16px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -293,6 +303,15 @@ body {
 
 .settings-group .section-label {
   padding: 0;
+}
+
+/* Marks the toggle/slider boundary inside .settings-group without a second nested card — just a
+   1px hairline, same token .settings-panel__header already uses for its own scroll-affordance
+   seam. .settings-group's own flex gap (22px) already spaces it from the rows on either side, so
+   this only needs to be the line itself. */
+.settings-subgroup-divider {
+  height: 1px;
+  background: var(--hairline);
 }
 
 .settings-row__top {
@@ -413,15 +432,19 @@ body {
   color: var(--chrome-bg);
 }
 
-/* ---------- Portfolio picker ---------- */
+/* ---------- Portfolio picker (custom dropdown, not a native <select>) ---------- */
 
 .portfolio-picker {
+  position: relative;
   flex: 0 0 auto;
   padding: 0 16px 10px;
 }
 
-.portfolio-picker select {
+/* Same field language every other control in this file uses (border/radius/background), just on
+   a <button> instead of a <select> — carried over verbatim rather than reinvented. */
+.portfolio-picker__trigger {
   appearance: none;
+  display: block;
   width: 100%;
   padding: 9px 30px 9px 12px;
   border-radius: 8px;
@@ -434,29 +457,128 @@ body {
   font-family: inherit;
   font-size: 12px;
   font-weight: 580;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   outline: none;
   cursor: pointer;
-  transition: border-color 140ms var(--ease), background-color 140ms var(--ease);
+  transition: border-color 140ms var(--ease), background-color 140ms var(--ease), transform 140ms var(--ease);
 }
 
 /* The chevron above is a static data-URI SVG (can't reference CSS custom properties from inside
    one), so it's re-drawn here in the light palette's ink color instead of just re-tinting —
    otherwise it'd stay a pale, dark-mode-tuned stroke that all but disappears against a light
    field background. */
-:root[data-theme='light'] .portfolio-picker select {
+:root[data-theme='light'] .portfolio-picker__trigger {
   background:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6' viewBox='0 0 9 6'%3E%3Cpath d='M1 1l3.5 3.5L8 1' fill='none' stroke='rgba(23,21,19,0.55)' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
       no-repeat right 12px center,
     rgba(var(--surface), 0.045);
 }
 
-.portfolio-picker select:hover {
+.portfolio-picker__trigger:hover {
   background-color: rgba(var(--surface), 0.07);
 }
 
-.portfolio-picker select:hover,
-.portfolio-picker select:focus-visible {
+.portfolio-picker__trigger:hover,
+.portfolio-picker__trigger:focus-visible,
+.portfolio-picker__trigger.is-open {
   border-color: rgba(var(--surface), 0.32);
+}
+
+.portfolio-picker__trigger:active {
+  transform: scale(0.99);
+}
+
+/* Rotates to point up while open — the one bit of the trigger's own look that does change with
+   open/closed state, matching the native <select>'s own affordance for "this flips something
+   open". */
+.portfolio-picker__trigger.is-open {
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6' viewBox='0 0 9 6'%3E%3Cpath d='M1 5l3.5 -3.5L8 5' fill='none' stroke='rgba(250,246,240,0.5)' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+:root[data-theme='light'] .portfolio-picker__trigger.is-open {
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6' viewBox='0 0 9 6'%3E%3Cpath d='M1 5l3.5 -3.5L8 5' fill='none' stroke='rgba(23,21,19,0.55)' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+/* Positioned to exactly match the trigger's own rendered width: .portfolio-picker's 16px side
+   padding is this listbox's containing block, so left/right: 16px (measured from the *padding
+   box*, i.e. before that inset) lands the listbox flush under the trigger rather than under
+   .portfolio-picker's full outer width. top: 100% clears the trigger's own height (plus this
+   container's 10px bottom padding, plus 4px extra) before the list starts. */
+.portfolio-picker__listbox {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 16px;
+  right: 16px;
+  z-index: 30;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid var(--hairline);
+  background: var(--chrome-bg);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  transform: translateY(-4px) scale(0.98);
+  transform-origin: top center;
+  /* 120-150ms per the design system's own micro-interaction guidance — short enough to feel like
+     a direct extension of the click, not an animation someone has to wait through. */
+  transition: opacity 130ms var(--ease), transform 130ms var(--ease);
+  pointer-events: none;
+}
+
+:root[data-theme='light'] .portfolio-picker__listbox {
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+}
+
+.portfolio-picker__listbox.is-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.portfolio-picker__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--ink-dim);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms var(--ease), color 120ms var(--ease);
+}
+
+.portfolio-picker__option.is-highlighted {
+  background: rgba(var(--surface), 0.08);
+  color: var(--ink);
+}
+
+.portfolio-picker__option.is-selected {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.portfolio-picker__option-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portfolio-picker__option-check {
+  flex: 0 0 auto;
+  color: var(--ink);
+  font-size: 11px;
 }
 
 .error-banner {
