@@ -269,6 +269,12 @@ function createAtomWidget() {
   });
 
   atomWidget.setOpacity(clampOpacity(config.widgetOpacity));
+  // Without this, the window only actually renders on whichever Space it happened to be created
+  // on — alwaysOnTop keeps it in front of other windows there, but switching to a different
+  // desktop or into a fullscreen app makes it disappear entirely until the user switches back,
+  // even though isVisible()/atomWidgetVisible both still say "shown". An ambient overlay that's
+  // supposed to always be on screen has to actually follow every Space, fullscreen apps included.
+  atomWidget.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   atomWidget.loadFile(path.join(__dirname, 'renderer', 'atom-widget.html'));
 
   // One shared debounce for both events, saving position + size together — not two independent

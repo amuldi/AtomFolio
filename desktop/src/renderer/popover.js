@@ -63,7 +63,7 @@ function prefersReducedMotion() {
 
 // ---------- Pager: pointer drag + trackpad swipe (wheel deltaX) + interruptible spring snap ----------
 
-function createPager({ container, track, dots }) {
+function createPager({ container, track, dots, onChange }) {
   const PAGE_COUNT = dots.querySelectorAll('.pager-dot').length;
   const SPRING_STIFFNESS = 340;
   const SPRING_DAMPING = 32;
@@ -197,8 +197,13 @@ function createPager({ container, track, dots }) {
   }
 
   function goToPage(index, options = {}) {
-    currentIndex = Math.max(0, Math.min(PAGE_COUNT - 1, index));
+    const nextIndex = Math.max(0, Math.min(PAGE_COUNT - 1, index));
+    const changed = nextIndex !== currentIndex;
+    currentIndex = nextIndex;
     updateDots();
+    if (changed) {
+      onChange?.(currentIndex);
+    }
     const target = targetTranslateFor(currentIndex);
     if (options.instant || prefersReducedMotion()) {
       stopSpring();
@@ -342,7 +347,17 @@ function createPager({ container, track, dots }) {
   };
 }
 
-const pager = createPager({ container: pagerEl, track: pagerTrackEl, dots: pagerDotsEl });
+// Quick-add is only ever relevant to the news/holdings page — on settings it's dead space above
+// content that's already cramped into a scrollable strip. Collapsing it out (rather than just
+// leaving it inert) pulls the settings panel up to use that room instead.
+const pager = createPager({
+  container: pagerEl,
+  track: pagerTrackEl,
+  dots: pagerDotsEl,
+  onChange: (index) => {
+    document.body.classList.toggle('is-settings-page', index === 1);
+  },
+});
 
 // Every time the popover is actually shown, land back on the news page — a stale "you left it on
 // settings last time" isn't worth remembering for a menu-bar glance.
