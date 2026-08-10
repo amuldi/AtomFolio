@@ -268,9 +268,17 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
 
   // The atom widget is always on screen (unlike the old popover atom page, only open when
   // clicked), so an ambient full-speed spin runs indefinitely whether or not anyone's looking.
-  // Idle rotation drops to a slow crawl once neither the pointer nor window focus indicates
-  // someone's actually engaged with it, and returns to normal the moment either does.
-  const engagementRef = useRef({ hovered: false, focused: typeof document !== 'undefined' && document.hasFocus() });
+  // Idle rotation drops to a slow crawl until window focus indicates someone's actually engaged
+  // with it, and returns to normal the moment it does.
+  //
+  // This used to also count merely hovering the pointer over the widget as "engaged" (full speed
+  // the instant the cursor entered the stage, no click needed). With backgroundThrottling now
+  // fixed elsewhere so this rAF loop actually runs at full rate in the background, that hover
+  // trigger stopped being the barely-perceptible nudge it read as before and started reading as
+  // "the atom moves just because my cursor is near it" — motion with no action behind it. Focus
+  // (the window actually being interacted with, not just moused-over) is a deliberate enough
+  // signal to keep; hover isn't.
+  const engagementRef = useRef({ focused: typeof document !== 'undefined' && document.hasFocus() });
   useEffect(() => {
     const handleFocus = () => {
       engagementRef.current.focused = true;
@@ -284,12 +292,6 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('blur', handleBlur);
     };
-  }, []);
-  const handleStagePointerEnter = useCallback(() => {
-    engagementRef.current.hovered = true;
-  }, []);
-  const handleStagePointerLeave = useCallback(() => {
-    engagementRef.current.hovered = false;
   }, []);
 
   // ⌘ gates "move the window" vs "rotate the atom" — without it, grabbing anywhere on the stage
@@ -443,7 +445,7 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
       }
 
       if (!isDragging && !prefersReducedMotionRef.current) {
-        const engaged = engagementRef.current.hovered || engagementRef.current.focused;
+        const engaged = engagementRef.current.focused;
         const idleMultiplier = engaged ? 1 : IDLE_ROTATE_DISENGAGED_MULTIPLIER;
         autoRotateY.setFromAxisAngle(yAxis, delta * AUTO_ROTATE_SPEED * idleMultiplier);
         autoRotateX.setFromAxisAngle(xAxis, Math.sin(now * 0.00012) * delta * 0.0038 * idleMultiplier);
@@ -716,8 +718,6 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
         ref={stageRef}
         onPointerDownCapture={dismissHint}
         onPointerDown={handleStagePointerDown}
-        onPointerEnter={handleStagePointerEnter}
-        onPointerLeave={handleStagePointerLeave}
       >
         {/* Dissolve/materialize (useAtomTransition, shared with the web app) — whole-scene scale
             via a CSS custom property, not per-node repositioning. See atom-widget.css for the

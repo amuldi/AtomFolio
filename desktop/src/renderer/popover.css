@@ -593,23 +593,6 @@ body {
 
 /* ---------- Quick add (ticker + quantity) ---------- */
 
-/* Collapses to nothing on the settings page (popover.js toggles this via the pager's onChange) —
-   quick-add is only ever relevant to the news/holdings page, so on settings it's just dead space
-   pushing the already-scrollable settings list down further. max-height (not display:none) is
-   what makes it an actual transition instead of an instant jump; 64px comfortably clears the
-   form's real height with room to spare, it isn't a tight fit that risks clipping. */
-#quick-add-root {
-  overflow: hidden;
-  max-height: 64px;
-  opacity: 1;
-  transition: max-height 180ms var(--ease), opacity 140ms var(--ease);
-}
-
-body.is-settings-page #quick-add-root {
-  max-height: 0;
-  opacity: 0;
-}
-
 .quick-add {
   flex: 0 0 auto;
   padding: 0 16px 10px;
