@@ -39,6 +39,17 @@
   --ui-layer-allocation: 23;
   --ui-layer-tooltip: 26;
   --ui-layer-allocation-active: 27;
+  /* Continues the scale above — .view-mode-overlay needs to sit over every --ui-layer-* (the
+     drawer, docks, tooltips, all still visible/interactive underneath while it's up), and
+     .view-mode-toggle has to clear the overlay specifically, not just those: the toggle is how
+     you get back to explore mode, so it has to keep receiving clicks even while the overlay it's
+     sitting on top of covers the rest of the screen. --z-command-palette stays a four-digit
+     outlier rather than continuing this scale — it has to clear .file-drop-overlay's existing
+     z-index: 9999 (a magic number of its own, out of scope for this pass), and shrinking it to
+     fit alongside 28-32 would put it back underneath that. */
+  --z-view-overlay: 30;
+  --z-view-toggle: 32;
+  --z-command-palette: 10000;
   --profit-color: rgba(255, 92, 82, 0.94);
   --profit-color-strong: rgba(255, 126, 116, 0.98);
   --profit-bg: rgba(255, 78, 68, 0.16);
@@ -72,6 +83,20 @@
      re-themed below. A dark shadow reads correctly under a light panel same as a dark one; this
      was already plain black, not part of the ink/surface system. */
   --frame-void: 0, 0, 0;
+  /* Fixed dark-cosmic tokens — same values as the --frame-* dark baseline above, but never
+     swapped by the light-mode media query below. For content sitting directly over the space
+     scene that's meant to keep the cosmic look regardless of system theme — the same category
+     .view-mode-overlay's own hardcoded rgba(4,4,3,0.86) background already belongs to (see its
+     comment) — but as a named token instead of a repeated literal. The holdings-management-table
+     cells are the first thing that actually needed this: under prefers-color-scheme: light, the
+     regular --frame-* tokens flip to "dark ink for a light panel", but the overlay behind those
+     cells stays permanently near-black either way, so cell text/borders read via --frame-white/
+     --frame-ink-* went nearly invisible — confirmed on a real light-mode system, not merely a
+     sandbox rendering quirk. */
+  --cosmic-ink: 255, 248, 233;
+  --cosmic-hairline: 255, 242, 216;
+  --cosmic-ink-secondary: 226, 226, 226;
+  --cosmic-white: 255, 255, 255;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -3134,8 +3159,25 @@ body::after {
   filter: drop-shadow(0 0 24px rgba(var(--frame-ink-e), 0.24));
 }
 
+/* Always rendered at the full expanded width now, whether open or closed — width used to be the
+   thing that animated between rail-width and full-width, but a `width` transition forces a
+   layout recalculation every single frame (the internal grid re-measures its columns, everything
+   inside reflows), which is exactly what read as stutter when it overlapped with this element's
+   own backdrop-filter/box-shadow/grid. The closed state is now conveyed by clip-path below
+   instead — clip-path animates on the compositor (no layout pass at all).
+   The clip-path lives on THIS element (not .tool-drawer__window, one level in) specifically
+   because .tool-drawer itself also carries its own background in the light-mode override further
+   up this file — clipping only the child would leave that outer background painting across the
+   full width regardless of open state, a translucent cream ghost sitting over the atom stage even
+   while "closed" (caught by actually opening/closing this live, not by reasoning about the CSS —
+   the child's own background/blur/shadow get clipped for free as part of the same ancestor clip,
+   no need to duplicate it there too). */
+/* data-dock defaults to (and this base rule *is*) the left-docked shape — right and bottom below
+   are overrides layered on top, not a parallel/separate system, so left doesn't have to repeat
+   itself in an attribute-selector block of its own. */
 .tool-drawer {
   --tool-drawer-width: 32.625rem;
+  --tool-drawer-height: 23.75rem;
   --tool-drawer-rail-width: 4.55rem;
   position: fixed;
   top: 0;
@@ -3143,26 +3185,63 @@ body::after {
   left: 0;
   z-index: var(--ui-layer-allocation-active);
   display: block;
-  width: var(--tool-drawer-rail-width);
+  width: var(--tool-drawer-width);
+  min-width: var(--tool-drawer-width);
+  max-width: calc(100vw - 0.5rem);
   height: 100vh;
   max-height: none;
   pointer-events: auto;
   opacity: 1;
-  transition:
-    width 320ms cubic-bezier(0.2, 0.78, 0.22, 1),
-    opacity 180ms ease;
+  /* Closed: clipped down to exactly the rail column. inset() is a plain rectangle, which every
+     mainstream engine composites without a layout/paint pass — the actual fix for the diagnosed
+     width-transition stutter. Elements clipped out of view by clip-path also don't receive
+     pointer events in that region, so this alone keeps clicks from reaching a visually-hidden
+     panel — no separate pointer-events juggling needed. */
+  clip-path: inset(0 calc(100% - var(--tool-drawer-rail-width)) 0 0);
+  transition: clip-path 320ms cubic-bezier(0.2, 0.78, 0.22, 1), opacity 180ms ease;
+  will-change: clip-path;
   font-family: var(--ui-font);
-  will-change: width;
 }
 
 .tool-drawer.is-open {
-  width: var(--tool-drawer-width);
-  min-width: var(--tool-drawer-width);
-  max-width: calc(100vw - 0.5rem);
+  clip-path: inset(0 0 0 0);
 }
 
 .tool-drawer.is-resizing {
-  transition: none;
+  transition: opacity 180ms ease;
+}
+
+/* Right dock: mirror of left — anchored to the opposite screen edge, clipped from the opposite
+   side (rail stays flush against the true right edge, panel reveals leftward out from under it). */
+.tool-drawer[data-dock='right'] {
+  left: auto;
+  right: 0;
+  clip-path: inset(0 0 0 calc(100% - var(--tool-drawer-rail-width)));
+}
+
+.tool-drawer[data-dock='right'].is-open {
+  clip-path: inset(0 0 0 0);
+}
+
+/* Bottom dock: the axis swap — width/height and left-right/top-bottom trade places entirely
+   (full viewport width, resizable height, anchored to the bottom edge, clipped from the top so
+   the rail — now a horizontal strip — stays flush against the true bottom edge). */
+.tool-drawer[data-dock='bottom'] {
+  top: auto;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  height: var(--tool-drawer-height);
+  min-height: var(--tool-drawer-height);
+  max-height: calc(100vh - 0.5rem);
+  clip-path: inset(calc(100% - var(--tool-drawer-rail-width)) 0 0 0);
+}
+
+.tool-drawer[data-dock='bottom'].is-open {
+  clip-path: inset(0 0 0 0);
 }
 
 .tool-drawer__window {
@@ -3185,6 +3264,58 @@ body::after {
   pointer-events: auto;
 }
 
+/* Rail and panel are placed explicitly by grid-column/grid-row everywhere (not left to default
+   source-order auto-placement), because that default would put whichever one is FIRST IN THE DOM
+   (the rail — see the JSX) into whichever track is defined FIRST IN grid-template-columns — true
+   by coincidence for left dock (rail already is both), but exactly backwards the moment a track
+   list gets reordered to put the rail on a different physical edge without touching the markup. */
+.tool-drawer__rail {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.tool-drawer__panel {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.tool-drawer[data-dock='right'] .tool-drawer__window {
+  grid-template-columns: minmax(0, 1fr) var(--tool-drawer-rail-width);
+  border-right: none;
+  border-left: 1px solid rgba(var(--frame-hairline), 0.12);
+  box-shadow:
+    -22px 0 64px rgba(var(--frame-void), 0.42),
+    -1px 0 0 rgba(var(--frame-white), 0.035) inset;
+}
+
+.tool-drawer[data-dock='right'] .tool-drawer__rail {
+  grid-column: 2;
+}
+
+.tool-drawer[data-dock='right'] .tool-drawer__panel {
+  grid-column: 1;
+}
+
+.tool-drawer[data-dock='bottom'] .tool-drawer__window {
+  grid-template-columns: 1fr;
+  grid-template-rows: minmax(0, 1fr) var(--tool-drawer-rail-width);
+  border-right: none;
+  border-top: 1px solid rgba(var(--frame-hairline), 0.12);
+  box-shadow:
+    0 -22px 64px rgba(var(--frame-void), 0.42),
+    0 -1px 0 rgba(var(--frame-white), 0.035) inset;
+}
+
+.tool-drawer[data-dock='bottom'] .tool-drawer__rail {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.tool-drawer[data-dock='bottom'] .tool-drawer__panel {
+  grid-column: 1;
+  grid-row: 1;
+}
+
 .tool-drawer__detail-popout {
   position: absolute;
   top: 0.86rem;
@@ -3197,6 +3328,23 @@ body::after {
   animation: detail-popout-in 180ms cubic-bezier(0.2, 0.78, 0.22, 1);
   scrollbar-width: thin;
   scrollbar-color: rgba(var(--frame-ink-a), 0.18) transparent;
+}
+
+/* Mirrors to spill out the panel's other side for right dock, and drops above the panel instead
+   of beside it for bottom dock — same "float just outside the panel, clamped to the viewport"
+   idea as the left-dock default, aimed at whichever edge is actually free in each case. */
+.tool-drawer[data-dock='right'] .tool-drawer__detail-popout {
+  left: auto;
+  right: max(0.75rem, min(calc(100% + 0.7rem), calc(100vw - 23.25rem)));
+}
+
+.tool-drawer[data-dock='bottom'] .tool-drawer__detail-popout {
+  top: auto;
+  bottom: calc(100% + 0.7rem);
+  left: 1rem;
+  right: 1rem;
+  width: auto;
+  max-height: min(22.5rem, calc(100vh - var(--tool-drawer-height) - 1.6rem));
 }
 
 .tool-drawer__detail-popout .tool-drawer__holding-detail {
@@ -3241,6 +3389,60 @@ body::after {
   transition:
     opacity 210ms ease,
     transform 260ms cubic-bezier(0.2, 0.78, 0.22, 1);
+}
+
+.tool-drawer[data-dock='right'] .tool-drawer__rail {
+  border-right: none;
+  border-left: 1px solid rgba(var(--frame-hairline), 0.08);
+  box-shadow: -1px 0 0 rgba(var(--frame-white), 0.025) inset;
+}
+
+/* Icons flow left-to-right in a single horizontal strip instead of top-to-bottom in a vertical
+   one — grid-auto-flow: column sends implicitly-placed children (the tool buttons, none of which
+   declare their own grid-column/row) into new columns instead of new rows; there's no
+   grid-template-columns to size those columns explicitly, so each just sizes to its own
+   3.58rem-square button, exactly like the vertical rail's implicit rows already did. */
+.tool-drawer[data-dock='bottom'] .tool-drawer__rail {
+  border-right: none;
+  border-top: 1px solid rgba(var(--frame-hairline), 0.08);
+  box-shadow: 0 -1px 0 rgba(var(--frame-white), 0.025) inset;
+  grid-auto-flow: column;
+  align-content: center;
+  justify-content: start;
+  padding: 0.42rem 1rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Drag-to-dock grip — always present (open or closed), sitting at the head of the rail. A plain
+   rounded bar rather than an icon: this needs to read as "grabbable" at a glance without
+   competing visually against the actual tool icons right below/beside it. */
+.tool-drawer__dock-handle {
+  width: 1.8rem;
+  height: 0.3rem;
+  margin: 0.15rem auto 0.7rem;
+  border-radius: 999px;
+  background: rgba(var(--frame-ink-c), 0.28);
+  cursor: grab;
+  touch-action: none;
+  transition: background-color 140ms ease, transform 140ms ease;
+}
+
+.tool-drawer__dock-handle:hover,
+.tool-drawer__dock-handle:focus-visible {
+  background: rgba(var(--frame-ink-b), 0.55);
+  outline: none;
+}
+
+.tool-drawer__dock-handle:active {
+  cursor: grabbing;
+  transform: scaleX(1.2);
+}
+
+.tool-drawer[data-dock='bottom'] .tool-drawer__dock-handle {
+  width: 0.3rem;
+  height: 1.8rem;
+  margin: auto 0.7rem auto 0.15rem;
 }
 
 .tool-drawer__button {
@@ -3365,6 +3567,19 @@ body::after {
   stroke-width: 1.6;
 }
 
+/* No more display:none toggle — display can't be transitioned, so animating this in required
+   dropping it in favor of a mechanism that can. clip-path on .tool-drawer__window above already
+   handles the visual + pointer-event hiding (nothing in the clipped-away region is paintable or
+   clickable); this element's own job is just the accessibility half clip-path *doesn't* cover —
+   clipped-out content stays in the tab order unless something also takes it out. visibility does
+   that (unlike display, an element stays laid out but visibility:hidden removes it from both hit
+   testing and focus — belt-and-suspenders with clip-path's own hit-testing behavior, and the part
+   that actually matters for keyboard users). The transition-delay on visibility is what keeps
+   this from just snapping invisible at t=0 and cutting the slide short: closing waits until the
+   320ms transform has actually finished before it takes effect, while opening switches to visible
+   immediately so the panel is interactive from the first frame of the reveal, not just at the end
+   of it. The small translateX adds a touch of its own motion on top of the window's clip-path
+   reveal, rather than the content sitting perfectly still while a mask slides over it. */
 .tool-drawer__panel {
   position: relative;
   display: flex;
@@ -3381,34 +3596,22 @@ body::after {
   box-shadow: none;
   backdrop-filter: none;
   opacity: 1;
+  visibility: hidden;
   pointer-events: auto;
-  transform: none;
+  transform: translateX(-2%);
   transition:
     background 180ms ease,
-    opacity 180ms ease,
-    visibility 180ms ease;
-}
-
-.tool-drawer:not(.is-open) .tool-drawer__panel,
-.tool-drawer:not(.is-open) .tool-drawer__resize-handle {
-  display: none;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
+    transform 320ms cubic-bezier(0.2, 0.78, 0.22, 1),
+    visibility 0s linear 320ms;
 }
 
 .tool-drawer.is-open .tool-drawer__panel {
-  display: flex !important;
-  opacity: 1 !important;
-  visibility: visible !important;
-  pointer-events: auto !important;
-}
-
-.tool-drawer.is-open .tool-drawer__resize-handle {
-  display: block !important;
-  opacity: 1 !important;
-  visibility: visible !important;
-  pointer-events: auto !important;
+  visibility: visible;
+  transform: translateX(0);
+  transition:
+    background 180ms ease,
+    transform 320ms cubic-bezier(0.2, 0.78, 0.22, 1),
+    visibility 0s linear 0s;
 }
 
 .tool-drawer__body {
@@ -5285,6 +5488,25 @@ body::after {
   touch-action: none;
 }
 
+/* Right dock resizes from its left edge (that's the one actually touching the panel — the box
+   itself is anchored to the right of the screen), so the handle moves there too. */
+.tool-drawer[data-dock='right'] .tool-drawer__resize-handle {
+  right: auto;
+  left: -0.26rem;
+}
+
+/* Bottom dock's resizable edge is its top, and the handle rotates from a vertical ew-resize strip
+   into a horizontal ns-resize one to match. */
+.tool-drawer[data-dock='bottom'] .tool-drawer__resize-handle {
+  top: -0.26rem;
+  left: 0;
+  right: 0;
+  bottom: auto;
+  width: 100%;
+  height: 0.52rem;
+  cursor: ns-resize;
+}
+
 .tool-drawer__resize-handle::before {
   content: '';
   position: absolute;
@@ -5300,6 +5522,15 @@ body::after {
     box-shadow 160ms ease;
 }
 
+.tool-drawer[data-dock='bottom'] .tool-drawer__resize-handle::before {
+  top: 0.24rem;
+  bottom: auto;
+  left: 0;
+  right: 0;
+  width: auto;
+  height: 1px;
+}
+
 .tool-drawer__resize-handle:hover::before,
 .tool-drawer__resize-handle:focus-visible::before,
 .tool-drawer.is-resizing .tool-drawer__resize-handle::before {
@@ -5310,6 +5541,55 @@ body::after {
 
 .tool-drawer__resize-handle:focus-visible {
   outline: none;
+}
+
+/* Shown while dragging .tool-drawer__dock-handle, one edge at a time, previewing where the drawer
+   will land if released now. Rendered as .tool-drawer's sibling rather than its child — see the
+   comment where this is mounted in the JSX for why a same-element child can't work here. z-index
+   is a plain literal, not one of the named z-index tokens (--ui-layer-... / --z-...): this is a
+   transient, drag-only overlay that just needs to clear whatever floating UI happens to be open
+   underneath it (the tool-drawer itself tops out at 37 via FLOATING_TOOL_Z_INDEX), not a fixture
+   with a real place in that stacking order. */
+.dock-edge-hint {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  animation: dock-edge-hint-in 140ms ease forwards;
+}
+
+.dock-edge-hint--left,
+.dock-edge-hint--right {
+  top: 0;
+  bottom: 0;
+  width: 14px;
+}
+
+.dock-edge-hint--left {
+  left: 0;
+  background: linear-gradient(90deg, rgba(var(--frame-ink-b), 0.6), transparent);
+}
+
+.dock-edge-hint--right {
+  right: 0;
+  background: linear-gradient(270deg, rgba(var(--frame-ink-b), 0.6), transparent);
+}
+
+.dock-edge-hint--bottom {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 14px;
+  background: linear-gradient(0deg, rgba(var(--frame-ink-b), 0.6), transparent);
+}
+
+@keyframes dock-edge-hint-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .tool-drawer__group-grid {
@@ -7177,15 +7457,15 @@ body::after {
     left: 0;
     top: 0;
     bottom: 0;
-    width: var(--tool-drawer-rail-width);
-    max-width: none;
-    max-height: none;
-  }
-
-  .tool-drawer.is-open {
     width: var(--tool-drawer-width);
     min-width: var(--tool-drawer-width);
     max-width: calc(100vw - 0.35rem);
+    max-height: none;
+    clip-path: inset(0 calc(100% - var(--tool-drawer-rail-width)) 0 0);
+  }
+
+  .tool-drawer.is-open {
+    clip-path: inset(0 0 0 0);
   }
 
   .tool-drawer__window {
@@ -7525,7 +7805,7 @@ body::after {
   position: fixed;
   top: 1.1rem;
   left: 50%;
-  z-index: 45;
+  z-index: var(--z-view-toggle);
   display: flex;
   gap: 0.16rem;
   padding: 0.2rem;
@@ -7536,36 +7816,48 @@ body::after {
   backdrop-filter: blur(8px);
 }
 
+/* Was transparent + 0.5 opacity text at 0.68rem — the pill read as ambient chrome, not a control.
+   A subtle background per option (not a border — bordering each option inside the toggle's own
+   bordered pill would read as a card inside a card) is what makes each one look like its own
+   clickable chip even before hover, and the text opacity/size bump is what makes the label
+   readable at a glance instead of requiring a second look. */
 .view-mode-toggle__option {
-  padding: 0.32rem 0.9rem;
+  padding: 0.36rem 1rem;
   border: none;
   border-radius: 999px;
-  background: transparent;
-  color: rgba(var(--frame-ink-secondary), 0.5);
+  background: rgba(var(--frame-ink-a), 0.05);
+  color: rgba(var(--frame-ink-secondary), 0.78);
   font-family: var(--ui-font);
-  font-size: 0.68rem;
+  font-size: 0.74rem;
   font-weight: 680;
   cursor: pointer;
   transition: background-color 140ms ease, color 140ms ease;
 }
 
 .view-mode-toggle__option:hover {
-  color: rgba(var(--frame-ink-b), 0.8);
+  background: rgba(var(--frame-ink-a), 0.08);
+  color: rgba(var(--frame-ink-b), 0.9);
 }
 
 .view-mode-toggle__option.is-active {
-  background: rgba(var(--frame-ink-a), 0.1);
-  color: rgba(var(--frame-ink-b), 0.94);
+  background: rgba(var(--frame-ink-a), 0.16);
+  color: rgba(var(--frame-ink-b), 0.96);
 }
 
 .view-mode-overlay {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  z-index: var(--z-view-overlay);
   display: flex;
-  align-items: flex-start;
+  /* "safe" is what keeps this centered-when-it-fits without becoming centered-and-partly-
+     unreachable when it doesn't: plain `center` on an overflowing flex item can push its far edge
+     past the scrollport in a way that isn't scrollable back into view in every engine. safe center
+     centers short tables in the middle of the screen like a normal dialog, and falls back to
+     start-alignment (fully scrollable, nothing clipped) the moment a table is tall enough to
+     overflow — long portfolios keep behaving exactly like before this changed. */
+  align-items: safe center;
   justify-content: center;
-  padding: 5.6rem 1.6rem 2rem;
+  padding: 2.5rem 1.6rem;
   background: rgba(4, 4, 3, 0.86);
   backdrop-filter: blur(6px);
   overflow-y: auto;
@@ -7578,14 +7870,36 @@ body::after {
 
 /* ---------- Holdings management table (관리 모드) ---------- */
 
+/* No overflow declared here at all, deliberately — per spec, overflow-x and overflow-y can't be
+   independently visible/non-visible on the same element (a lone overflow-x: auto silently
+   computes overflow-y as auto too, not the visible it's left at), so this can't be "scrolls
+   horizontally, not vertically" on its own no matter which non-visible value is picked for the
+   other axis. Anything other than fully visible/visible here makes this a second scrolling
+   ancestor nested inside .view-mode-overlay's real one, and position:sticky always attaches to
+   the *nearest* one — the header was sticking to this element (which itself never scrolls; its
+   box is always exactly as tall as its content) instead of the overlay that's actually
+   scrolling, so it just scrolled away like any other row. .view-mode-overlay already computes
+   auto on both axes on its own (only overflow-y was ever declared on it, but the same promotion
+   rule applies there too), so it's already the real, sole scroll container for both directions —
+   this element doesn't need to do anything but stay out of its way.
+*/
+/* The card the whole grid sits inside — previously the cells just floated directly on the
+   overlay's own scrim with no containing shape, which read as loose UI rather than a designed
+   surface. Padding here is what gives the sticky header room to feel like it belongs *inside*
+   something at rest; once it actually docks against a scroll, it naturally squares off against the
+   true edge of the overlay, which is expected of a sticky card header, not a bug. */
 .holdings-table {
   width: 100%;
-  overflow-x: auto;
+  padding: 0.9rem;
+  border-radius: 20px;
+  border: 1px solid rgba(var(--cosmic-hairline), 0.14);
+  background: rgba(var(--cosmic-white), 0.028);
+  box-shadow: 0 32px 72px rgba(0, 0, 0, 0.5);
 }
 
 .holdings-table__empty {
   padding: 1.4rem;
-  color: rgba(var(--frame-ink-secondary), 0.44);
+  color: rgba(var(--cosmic-ink-secondary), 0.44);
   font-family: var(--ui-font);
   font-size: 0.76rem;
   text-align: center;
@@ -7594,7 +7908,12 @@ body::after {
 .holdings-table__grid {
   display: grid;
   min-width: 640px;
-  row-gap: 0.24rem;
+  row-gap: 0.32rem;
+  /* Previously unset — with no visual gutter, adjacent columns' 1px hairline borders sat flush
+     against each other and the eye couldn't tell "two bordered cells touching" from "one wide
+     cell", especially at a glance while scanning down a column. A real gap makes each column read
+     as its own lane immediately, independent of how strong the border/background ends up being. */
+  column-gap: 0.5rem;
 }
 
 .holdings-table__head-row,
@@ -7602,23 +7921,65 @@ body::after {
   display: contents;
 }
 
+/* Alternating row background, despite .holdings-table__row being display: contents (so it can't
+   paint its own box). The row still sits in the DOM between the grid and its cells, so a custom
+   property set here still inherits down to .holdings-table__cell below — inheritance follows the
+   DOM tree, not the box/layout tree, so display: contents doesn't block it. This keeps the
+   base .holdings-table__cell rule doing one thing (reading the tint) instead of needing a
+   parallel :hover/:focus override for every parity combination. */
+.holdings-table__row[data-row-parity='even'] {
+  --row-tint: 0.125;
+}
+
+.holdings-table__row[data-row-parity='odd'] {
+  --row-tint: 0.052;
+}
+
+/* Sticky so the column labels stay readable while scrolling a long holdings list — background
+   matches .view-mode-overlay's own scrim exactly (not a token; that scrim is a fixed dark
+   backdrop independent of light/dark theme, same as the atom stage it sits over, so the sticky
+   header needs the identical literal to hide rows scrolling underneath it, not something that'd
+   drift if the frame tokens ever change). Uses --cosmic-* (not --frame-*) for the same reason the
+   background is a raw literal instead of --frame-surface: this whole overlay stays cosmic-dark
+   regardless of system theme, but --frame-* tokens themselves flip under prefers-color-scheme —
+   using them here would put "dark ink for a light panel" text on a permanently near-black
+   background under a light-mode system, which is exactly as unreadable as it sounds.
+   No border-bottom — a border drawn per head-cell can only ever span that one cell's own box, so
+   across five gapped columns it rendered as five short, misaligned dashes instead of one line,
+   which read as broken rather than as a deliberate divider. The header reads as its own band from
+   the opaque background alone; margin-bottom below (on top of the grid's row-gap) is what gives it
+   room to breathe from the body instead of trying to draw a seam that can't actually be continuous
+   here. */
 .holdings-table__head-cell {
-  padding: 0.4rem 0.6rem;
-  color: rgba(var(--frame-ink-secondary), 0.4);
+  position: sticky;
+  top: 0;
+  padding: 0.5rem 0.6rem;
+  margin-bottom: 0.3rem;
+  border-radius: 6px;
+  background: rgba(4, 4, 3, 0.86);
+  color: rgba(var(--cosmic-ink-secondary), 0.68);
   font-family: var(--ui-font);
   font-size: 0.62rem;
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
+/* Was rgba(white, 0.024) with a transparent border — essentially invisible, so the table read as
+   loose numbers scattered on the dark overlay rather than a grid. A steady hairline border (not
+   just on hover/focus) plus a background strong enough to actually separate from the scrim is
+   what makes adjacent cells read as bounded, scannable boxes at rest. Background reads --row-tint
+   (set per-row above) instead of a flat literal so alternating rows land on two clearly different
+   levels instead of one — the fallback only matters for a cell that somehow renders with no
+   parity attribute above it. --cosmic-* rather than --frame-* here too — see the head-cell comment
+   above. */
 .holdings-table__cell {
   min-width: 0;
   padding: 0.5rem 0.6rem;
-  border: 1px solid transparent;
+  border: 1px solid rgba(var(--cosmic-hairline), 0.3);
   border-radius: 8px;
-  background: rgba(var(--frame-white), 0.024);
-  color: rgba(var(--frame-ink-b), 0.9);
+  background: rgba(var(--cosmic-white), var(--row-tint, 0.08));
+  color: rgba(var(--cosmic-ink), 0.9);
   font-family: var(--ui-font);
   font-size: 0.72rem;
   font-weight: 600;
@@ -7627,12 +7988,13 @@ body::after {
 }
 
 .holdings-table__cell:hover {
-  background: rgba(var(--frame-white), 0.04);
+  background: rgba(var(--cosmic-white), 0.18);
+  border-color: rgba(var(--cosmic-hairline), 0.42);
 }
 
 .holdings-table__cell:focus {
-  border-color: rgba(var(--frame-ink-a), 0.32);
-  background: rgba(var(--frame-ink-a), 0.065);
+  border-color: rgba(var(--cosmic-ink), 0.55);
+  background: rgba(var(--cosmic-ink), 0.16);
 }
 
 .holdings-table__delete,
@@ -7640,14 +8002,15 @@ body::after {
   align-self: center;
   justify-self: start;
   padding: 0.3rem 0.5rem;
-  border: 1px solid rgba(var(--frame-hairline), 0.1);
+  border: 1px solid rgba(var(--cosmic-hairline), 0.18);
   border-radius: 999px;
-  background: rgba(var(--frame-ink-a), 0.052);
-  color: rgba(var(--frame-ink-b), 0.78);
+  background: rgba(var(--cosmic-ink), 0.06);
+  color: rgba(var(--cosmic-ink), 0.78);
   font-family: var(--ui-font);
   font-size: 0.64rem;
   font-weight: 700;
   cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 .holdings-table__delete:hover {
@@ -7657,12 +8020,12 @@ body::after {
 }
 
 .holdings-table__add:hover {
-  background: rgba(var(--frame-ink-a), 0.1);
+  background: rgba(var(--cosmic-ink), 0.1);
 }
 
 .holdings-table__row--new .holdings-table__cell {
   border-style: dashed;
-  border-color: rgba(var(--frame-hairline), 0.14);
+  border-color: rgba(var(--cosmic-hairline), 0.24);
   background: transparent;
 }
 
@@ -7671,7 +8034,7 @@ body::after {
 .command-palette-overlay {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  z-index: var(--z-command-palette);
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -7929,6 +8292,7 @@ body::after {
   .allocation-panel,
   .twin-panel,
   .tool-drawer,
+  .dock-edge-hint,
   .stage-breath,
   .stage-breath.is-intro,
   .stage-reveal.is-active,
@@ -7960,6 +8324,11 @@ body::after {
   .twin-action,
   .twin-chip {
     transition-duration: 1ms !important;
+    /* .tool-drawer__panel's own transition delays its visibility switch until the (now near-0ms)
+       transform finishes, so it needs its delay zeroed too here — otherwise reduced motion would
+       still leave the panel sitting visible-but-mid-snap for the original 320ms before this
+       shortened rule's duration change alone would let it disappear. */
+    transition-delay: 0ms !important;
   }
 
   .space-depth__meteor-field {

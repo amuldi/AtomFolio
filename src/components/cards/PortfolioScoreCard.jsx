@@ -80,14 +80,18 @@ export function PortfolioScoreCard({
     1.08,
   );
   const hoveredAxis = axisPoints.find((axis) => axis.key === hoveredMetricKey) ?? null;
+  // Direction must be decided from the same point the hint is actually anchored to (outerX/outerY,
+  // used below in the `left`/`top` style) — deciding from labelX/labelY instead (a different point,
+  // offset by the axis-label's own margin correction) let the two disagree near quadrant boundaries
+  // and push the hint off the card's edge.
   const scoreHintTransform = hoveredAxis
-    ? hoveredAxis.labelY < center - 18
+    ? hoveredAxis.outerY < center - 18
       ? 'translate(-50%, 0.9rem)'
-      : hoveredAxis.labelY > center + 18
+      : hoveredAxis.outerY > center + 18
         ? 'translate(-50%, -115%)'
-        : hoveredAxis.labelX > center + 18
+        : hoveredAxis.outerX > center + 18
           ? 'translate(-100%, -55%)'
-          : hoveredAxis.labelX < center - 18
+          : hoveredAxis.outerX < center - 18
             ? 'translate(0, -55%)'
             : 'translate(-50%, -115%)'
     : '';

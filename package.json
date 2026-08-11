@@ -13,6 +13,7 @@
     "db:migrate": "node scripts/migrate-db.mjs",
     "test": "node --test",
     "lint": "eslint .",
+    "knip": "knip",
     "format": "prettier --write",
     "build": "vite build",
     "preview": "node server/index.mjs --static"
@@ -23,7 +24,6 @@
     "@neondatabase/serverless": "^1.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "recharts": "^3.10.1",
     "three": "^0.168.0"
   },
   "devDependencies": {
@@ -34,6 +34,7 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.9.0",
+    "knip": "^6.32.1",
     "prettier": "^3.9.6",
     "vite": "^5.4.8"
   }

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/main.jsx",
+    "server/dev.mjs",
+    "server/index.mjs",
+    "scripts/migrate-db.mjs",
+    "api/**/*.js",
+    "tests/**/*.test.mjs"
+  ],
+  "project": [
+    "src/**/*.{js,jsx}",
+    "server/**/*.mjs",
+    "api/**/*.js",
+    "scripts/**/*.mjs",
+    "tests/**/*.mjs"
+  ],
+  "ignore": ["dist/**", "desktop/**", "submission/**", "docs/**", "samples/**"],
+  "ignoreDependencies": []
+}

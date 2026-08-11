@@ -1,38 +1,3 @@
-export const MOBILE_BREAKPOINT = 560;
-export const REVIEW_TOOLTIP_MAX_WIDTH = 18 * 16;
-export const REVIEW_TOOLTIP_VIEWPORT_INSET = 18;
-export const REVIEW_TOOLTIP_VERTICAL_GAP = 10;
-export const TOOLTIP_WIDTH = 320;
-export const TOOLTIP_HEIGHT = 260;
-
-export const GROUP_OPTION_KEYS = ['region', 'sector', 'style', 'risk'];
-export const SCORE_AXIS_KEYS = [
-  'profitability',
-  'diversification',
-  'riskManagement',
-  'composition',
-  'timing',
-  'stability',
-];
-
-export const LANGUAGE_OPTIONS = ['ko', 'en'];
-export const ASSET_CLASS_MODE_OPTIONS = ['auto', 'preferOriginal'];
-export const ALLOCATION_WEIGHT_MODE_OPTIONS = ['auto', 'stock', 'assetClass', 'account'];
-export const SCORE_WEIGHT_PRESET_OPTIONS = ['balanced', 'returnFocus', 'longTermReturnFocus', 'stabilityFocus'];
-
-export const STORAGE_KEYS = {
-  language: 'atom-sketch-language',
-  assetClassMode: 'atom-sketch-asset-class-mode',
-  allocationWeightMode: 'atom-sketch-allocation-weight-mode',
-  scoreWeightPreset: 'atom-sketch-score-weight-preset',
-  settingsDockPosition: 'atom-sketch-settings-dock-position',
-  toolTriggerPosition: 'atom-sketch-tool-trigger-position',
-  groupDockPosition: 'atom-sketch-group-dock-position',
-  heatmapDockPosition: 'atom-sketch-heatmap-dock-position',
-  scoreDockPosition: 'atom-sketch-score-dock-position-v2',
-  allocationDockPosition: 'atom-sketch-allocation-dock-position',
-};
-
 export const ALLOCATION_SEGMENT_PALETTE = [
   {
     main: '#f2f2f2',

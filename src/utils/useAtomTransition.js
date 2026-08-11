@@ -8,6 +8,23 @@
 // spins down as it grows into place (like it's decelerating into rest). Dissolve eases in
 // (accelerates); materialize eases out (decelerates) — that pairing is intentional, not
 // interchangeable with a generic spring.
+//
+// This hook does NOT run its own requestAnimationFrame loop. It used to — but both consumers
+// (App.jsx and atom-view.jsx) already run their own long-lived rAF loop for the atom's idle
+// rotation (the one that reads transitionAngularVelocityRef.current every frame to add spin on
+// top of ambient drift). Two independent rAF callbacks racing per frame means two separate
+// React state-update-and-commit passes per frame instead of one — each rAF callback is its own
+// top-level invocation, not something React's automatic batching folds together across callbacks
+// — which is wasted work at 60fps and a plausible source of felt stutter on its own, independent
+// of whatever else is happening that frame. Folding this hook's progression into the consumer's
+// existing loop means exactly one state update pass per frame, from one callback, for both the
+// rotation and the transition.
+//
+// The tradeoff: the consumer is now responsible for calling advanceTransition(now) once per
+// frame, from inside its own rAF callback, passing that callback's own timestamp straight through.
+// Skipping it does nothing catastrophic (dissolve()/materialize() just never progress/resolve),
+// but it does mean this hook is no longer usable by a consumer that isn't already running its own
+// per-frame loop — true of both current consumers, not true in general.
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const DEFAULT_DURATION_MS = 420;
@@ -45,6 +62,7 @@ function prefersReducedMotion() {
  *   transitionAngularVelocityRef: {current: number}, // radians/second; see below for why a ref
  *   dissolve: () => Promise<void>,
  *   materialize: () => Promise<void>,
+ *   advanceTransition: (now: number) => void, // call once per frame from the consumer's own rAF loop
  * }}
  *
  * scale/phase are plain useState — both callers already re-render on every animation frame for
@@ -68,17 +86,28 @@ export function useAtomTransition({
   const [scale, setScale] = useState(1);
   const [phase, setPhase] = useState('idle');
   const transitionAngularVelocityRef = useRef(0);
-  const frameRef = useRef(null);
+  // The in-flight transition's own state, separate from React state: which phase, when it
+  // started (filled in lazily on the first advanceTransition() call after it's requested, since
+  // that's the first point a real rAF timestamp is available — dissolve()/materialize() are
+  // called from ordinary event handlers, not from inside the rAF loop, so there's no timestamp to
+  // anchor "elapsed" against yet at request time), and the promise resolver to call once it's
+  // done. A ref because advanceTransition reads and mutates it every frame without needing a
+  // re-render of its own — scale/phase already trigger the re-render this data needs to show up
+  // in.
+  const activeRef = useRef(null);
 
+  // Abandons whatever transition is in flight without resolving its promise — matches the
+  // original behavior of stop()-then-restart: callers only ever start a fresh dissolve/materialize
+  // once the previous one's promise already resolved, so an abandoned promise here never actually
+  // gets awaited by anything, and this doesn't visibly jump.
   const stop = useCallback(() => {
-    if (frameRef.current != null) {
-      cancelAnimationFrame(frameRef.current);
-      frameRef.current = null;
-    }
+    activeRef.current = null;
   }, []);
 
   // Unmounting mid-transition (widget closed via some other path, component swapped out) must not
-  // leave a dangling rAF callback writing state into a gone component.
+  // leave a dangling in-flight transition writing state into a gone component — advanceTransition
+  // simply won't be called anymore once the consumer's own rAF loop stops, but clearing this too
+  // is a cheap belt-and-suspenders against any straggler call.
   useEffect(() => stop, [stop]);
 
   const run = useCallback(
@@ -97,54 +126,61 @@ export function useAtomTransition({
         }
 
         setPhase(nextPhase);
-        const start = performance.now();
-
-        const step = (now) => {
-          const t = Math.min(1, (now - start) / durationMs);
-          const eased = nextPhase === 'dissolving' ? easeInCubic(t) : easeOutCubic(t);
-
-          if (nextPhase === 'dissolving') {
-            // Spins up from a standstill to peak as it shrinks away — eased *is* how far along
-            // that acceleration is, so it doubles directly as the velocity fraction.
-            setScale(1 - eased);
-            transitionAngularVelocityRef.current = eased * peakAngularVelocity;
-          } else {
-            // Arrives already spinning at peak and decelerates to a standstill as it grows in —
-            // the mirror image of dissolve's ramp-up, so it's peak minus the same eased fraction
-            // rather than a separate curve.
-            setScale(eased);
-            transitionAngularVelocityRef.current = (1 - eased) * peakAngularVelocity;
-          }
-
-          if (t < 1) {
-            frameRef.current = requestAnimationFrame(step);
-          } else {
-            frameRef.current = null;
-            setPhase('idle');
-            // Materialize's own formula already lands on exactly 0 here, but dissolve's does the
-            // opposite — it *ends* at full peak velocity (still spinning fastest right as it
-            // vanishes) and nothing else ever zeroes it back out. Left alone, the consuming rAF
-            // loop keeps applying that leftover peak spin to a scale-0/invisible atom forever
-            // (the loop itself has no idea the transition "finished", it just keeps reading
-            // whatever's in the ref) — wasted work on a hidden window, not merely a rounding nit.
-            transitionAngularVelocityRef.current = 0;
-            resolve();
-          }
-        };
-
-        // Starting a new phase always cancels whatever was running (stop() above) and begins this
-        // one from t=0 — the minimum bar for "interruptible" (a stray in-flight animation can
-        // never keep fighting a new one), not a seamless crossfade from wherever the old one's
-        // scale/rotation happened to be. In practice callers only ever start a fresh
-        // dissolve/materialize once the previous one's promise has already resolved, so this
-        // doesn't visibly jump.
-        frameRef.current = requestAnimationFrame(step);
+        // start stays null until the first advanceTransition(now) call anchors it — see the
+        // activeRef comment above.
+        activeRef.current = { phase: nextPhase, start: null, resolve };
       }),
-    [durationMs, peakAngularVelocity, stop],
+    [stop],
+  );
+
+  // The consumer calls this once per frame from inside its own rAF callback, passing that
+  // callback's own `now` timestamp straight through — this hook never schedules a frame itself.
+  // A no-op (cheap early return) whenever no transition is in flight, so consumers can call it
+  // unconditionally every frame without checking phase first.
+  const advanceTransition = useCallback(
+    (now) => {
+      const active = activeRef.current;
+      if (!active) {
+        return;
+      }
+      if (active.start == null) {
+        active.start = now;
+      }
+
+      const t = Math.min(1, (now - active.start) / durationMs);
+      const eased = active.phase === 'dissolving' ? easeInCubic(t) : easeOutCubic(t);
+
+      if (active.phase === 'dissolving') {
+        // Spins up from a standstill to peak as it shrinks away — eased *is* how far along that
+        // acceleration is, so it doubles directly as the velocity fraction.
+        setScale(1 - eased);
+        transitionAngularVelocityRef.current = eased * peakAngularVelocity;
+      } else {
+        // Arrives already spinning at peak and decelerates to a standstill as it grows in — the
+        // mirror image of dissolve's ramp-up, so it's peak minus the same eased fraction rather
+        // than a separate curve.
+        setScale(eased);
+        transitionAngularVelocityRef.current = (1 - eased) * peakAngularVelocity;
+      }
+
+      if (t >= 1) {
+        activeRef.current = null;
+        setPhase('idle');
+        // Materialize's own formula already lands on exactly 0 here, but dissolve's does the
+        // opposite — it *ends* at full peak velocity (still spinning fastest right as it
+        // vanishes) and nothing else ever zeroes it back out. Left alone, the consuming rAF loop
+        // keeps applying that leftover peak spin to a scale-0/invisible atom forever (the loop
+        // itself has no idea the transition "finished", it just keeps reading whatever's in the
+        // ref) — wasted work on a hidden window, not merely a rounding nit.
+        transitionAngularVelocityRef.current = 0;
+        active.resolve();
+      }
+    },
+    [durationMs, peakAngularVelocity],
   );
 
   const dissolve = useCallback(() => run('dissolving'), [run]);
   const materialize = useCallback(() => run('materializing'), [run]);
 
-  return { scale, phase, transitionAngularVelocityRef, dissolve, materialize };
+  return { scale, phase, transitionAngularVelocityRef, dissolve, materialize, advanceTransition };
 }

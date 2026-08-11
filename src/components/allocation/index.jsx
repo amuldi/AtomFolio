@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { clamp } from '../../utils/math.js';
 import {
   textFor,
@@ -11,17 +11,7 @@ import {
   buildBlotPath,
   buildLoopPath,
 } from '../../utils/scene.js';
-import {
-  uiInsetFor,
-  stackDockBelow,
-  stackDockBelowRect,
-  toolTriggerSizeFor,
-  scoreDockSizeFor,
-  allocationWidgetSizeFor,
-  floatingPanelSideFor,
-} from '../../utils/layout.js';
-import { ALLOCATION_SEGMENT_PALETTE, MOBILE_BREAKPOINT, STORAGE_KEYS } from '../../constants/ui.js';
-import { useFloatingHandle } from '../../hooks/useFloatingHandle.js';
+import { ALLOCATION_SEGMENT_PALETTE } from '../../constants/ui.js';
 
 export function PortfolioAllocationRing({
   allocation,
@@ -228,12 +218,16 @@ export function PortfolioAllocationCard({
     const bounds = panelRef.current?.getBoundingClientRect();
 
     if (!bounds) {
-      return { x: 96, y: 34 };
+      return { x: 96, y: 78 };
     }
 
     return {
       x: clamp(clientX - bounds.left, 84, bounds.width - 84),
-      y: clamp(clientY - bounds.top - 16, 48, bounds.height - 24),
+      // The tooltip anchors here but then rises by its own full height plus 10px
+      // (`.allocation-panel__tooltip`'s `translate(-50%, calc(-100% - 10px))`) — a 48px floor left
+      // barely more than half the tooltip's actual rendered height (~55-65px) above it, so it could
+      // clip through the panel's own top edge. 78px leaves real headroom for that upward shift.
+      y: clamp(clientY - bounds.top - 16, 78, bounds.height - 24),
     };
   };
 
@@ -333,206 +327,3 @@ export function PortfolioAllocationCard({
   );
 }
 
-export function PortfolioAllocationWidget({
-  allocation,
-  language,
-  anchorRef,
-  anchorSelector,
-  anchorPosition,
-  anchorSize,
-  anchorSteps = 1,
-  resetSignal,
-  visible = true,
-  settingsOpen = false,
-  onInteract,
-}) {
-  const text = textFor(language);
-  const [open, setOpen] = useState(false);
-  const pendingResetRef = useRef(0);
-
-  const allocationDock = useFloatingHandle({
-    initialPosition: (win) => {
-      const size = allocationWidgetSizeFor(win.innerWidth);
-      const currentAnchorSize = anchorSize ?? scoreDockSizeFor(win.innerWidth);
-      const rect =
-        anchorRef?.current?.getBoundingClientRect() ??
-        (anchorSelector && typeof document !== 'undefined'
-          ? document.querySelector(anchorSelector)?.getBoundingClientRect()
-          : null);
-
-      if (rect) {
-        return stackDockBelowRect(
-          rect,
-          currentAnchorSize,
-          size,
-          win.innerWidth,
-          win.innerHeight,
-          anchorSteps,
-        );
-      }
-
-      if (anchorPosition) {
-        return stackDockBelow(
-          anchorPosition.x,
-          anchorPosition.y,
-          currentAnchorSize,
-          size,
-          win.innerWidth,
-          win.innerHeight,
-          anchorSteps,
-        );
-      }
-
-      const inset = uiInsetFor(win.innerWidth);
-
-      return stackDockBelow(
-        inset,
-        inset,
-        toolTriggerSizeFor(win.innerWidth),
-        size,
-        win.innerWidth,
-        win.innerHeight,
-        4,
-      );
-    },
-    fallbackSize: (width) => {
-      const size = allocationWidgetSizeFor(width);
-      return { width: size, height: size };
-    },
-    measureBounds: ({ container, fallback, viewportWidth, nextX }) => {
-      if (!open) {
-        return fallback;
-      }
-
-      const panel = container?.querySelector('.allocation-panel');
-      const panelWidth = panel?.offsetWidth ?? Math.min(13.8 * 16, viewportWidth - 32);
-      const panelHeight = panel?.offsetHeight ?? 0;
-      const panelOffset = (viewportWidth <= MOBILE_BREAKPOINT ? 0.34 : 0.55) * 16;
-      const panelReachX = Math.max(0, panelWidth + panelOffset - fallback.width);
-      const panelSide = floatingPanelSideFor(nextX ?? container?.getBoundingClientRect().left ?? 0, fallback.width, viewportWidth);
-
-      return {
-        width: fallback.width + panelReachX,
-        height: Math.max(fallback.height, panelHeight + panelOffset),
-        offsetX: panelSide === 'left' ? -panelReachX : 0,
-        offsetY: 0,
-      };
-    },
-    onInteract,
-    onPress: () => {
-      setOpen((current) => !current);
-    },
-    continuousFollow: true,
-    storageKey: STORAGE_KEYS.allocationDockPosition,
-  });
-
-  useEffect(() => {
-    if (!resetSignal) {
-      return;
-    }
-
-    pendingResetRef.current = resetSignal;
-    setOpen(false);
-  }, [resetSignal]);
-
-  useEffect(() => {
-    if (!pendingResetRef.current || !resetSignal || typeof window === 'undefined') {
-      return undefined;
-    }
-
-    let outerFrameId = 0;
-    let innerFrameId = 0;
-
-    outerFrameId = window.requestAnimationFrame(() => {
-      innerFrameId = window.requestAnimationFrame(() => {
-        if (pendingResetRef.current !== resetSignal) {
-          return;
-        }
-
-        allocationDock.snapToInitial();
-        pendingResetRef.current = 0;
-      });
-    });
-
-    return () => {
-      window.cancelAnimationFrame(outerFrameId);
-      window.cancelAnimationFrame(innerFrameId);
-    };
-  }, [
-    allocationDock.snapToInitial,
-    anchorPosition?.x,
-    anchorPosition?.y,
-    anchorSteps,
-    resetSignal,
-  ]);
-
-  useEffect(() => {
-    if (!open || !visible) {
-      return undefined;
-    }
-
-    const handleKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        setOpen(false);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [open, visible]);
-
-  const panelSide =
-    typeof window === 'undefined'
-      ? 'right'
-      : floatingPanelSideFor(
-          allocationDock.position.x,
-          allocationWidgetSizeFor(window.innerWidth),
-          window.innerWidth,
-        );
-
-  return (
-    <div
-      ref={allocationDock.containerRef}
-      className={`allocation-widget${panelSide === 'left' ? ' is-flipped' : ''}${open ? ' is-open' : ''}${allocationDock.dragging ? ' is-dragging' : ''}${visible ? '' : ' is-hidden'}`}
-      style={{
-        transform: `translate3d(${allocationDock.position.x}px, ${allocationDock.position.y}px, 0)`,
-      }}
-    >
-      <button
-        type="button"
-        className={`allocation-toggle${open ? ' is-open' : ''}`}
-        aria-label={text.allocationChartAria}
-        aria-expanded={open}
-        onPointerDown={allocationDock.handlePointerDown}
-        onClick={(event) => {
-          if (event.detail !== 0) {
-            return;
-          }
-
-          onInteract?.();
-          setOpen((current) => !current);
-        }}
-      >
-        <PortfolioAllocationRing
-          allocation={allocation}
-          language={language}
-          className="allocation-toggle__icon"
-          decorative
-          compact
-        />
-      </button>
-
-      {open ? (
-        <PortfolioAllocationCard
-          allocation={allocation}
-          language={language}
-          onInteract={onInteract}
-          onPointerDown={allocationDock.handleDragPointerDown}
-        />
-      ) : null}
-    </div>
-  );
-}

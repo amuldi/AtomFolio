@@ -11,10 +11,6 @@ export function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-export function damp(current, target, lambda, delta) {
-  return current + (target - current) * (1 - Math.exp(-lambda * delta));
-}
-
 export function format(value) {
   return Math.round(value * 100) / 100;
 }

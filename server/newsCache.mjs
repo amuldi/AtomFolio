@@ -60,10 +60,3 @@ export async function getMarketNewsWithCache(
   }
 }
 
-export function getNewsCacheStats() {
-  return { entries: state.size, freshTtlMs: FRESH_TTL_MS };
-}
-
-export function resetNewsCache() {
-  state.clear();
-}

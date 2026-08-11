@@ -646,8 +646,3 @@ export function createPortfolioAnalyticsSummary(items = [], timelineItems = [], 
     },
   };
 }
-
-export const portfolioAnalyticsSummaryFormatters = {
-  parseNumber,
-  parsePercent,
-};

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { createPortfolioHeatmap } from './lib/portfolioHeatmap.js';
 import { createPortfolioAllocation } from './lib/portfolioAllocation.js';
@@ -117,6 +117,7 @@ const STORAGE_KEYS = {
   allocationDockPosition: 'atom-sketch-allocation-dock-position',
   twinDockPosition: 'atom-sketch-twin-dock-position',
   atomHintDismissed: 'atom-sketch-atom-hint-dismissed',
+  toolDrawerDock: 'atom-sketch-tool-drawer-dock',
 };
 const SHOOTING_STAR_INTERVAL_MS = 30000;
 const SHOOTING_STAR_CLEAR_BUFFER_MS = 420;
@@ -144,6 +145,16 @@ const FLOATING_TOOL_Z_INDEX = {
 };
 const TOOL_DRAWER_DEFAULT_WIDTH = 522;
 const TOOL_DRAWER_MAX_WIDTH = 760;
+// Bottom dock resizes by height instead of width — same idea, its own numbers (a portfolio tool
+// panel reads comfortably shorter-but-wider at the bottom of the screen than it does narrow-but-
+// tall on a side, so this isn't just TOOL_DRAWER_DEFAULT_WIDTH's value reused on the other axis).
+const TOOL_DRAWER_DEFAULT_HEIGHT = 380;
+const TOOL_DRAWER_MAX_HEIGHT = 620;
+const TOOL_DRAWER_DOCK_OPTIONS = ['left', 'right', 'bottom'];
+// How close the cursor has to get to a screen edge, while dragging the drawer's dock handle,
+// before that edge highlights as the drop target. Top is deliberately never a candidate — there's
+// nothing at the top of this app worth docking under (the 탐색/관리 toggle lives there).
+const DOCK_EDGE_HOVER_THRESHOLD_PX = 80;
 const SERVER_SYNC_DEBOUNCE_MS = 850;
 const DAILY_SNAPSHOT_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 const DEFAULT_REBALANCE_TARGET_WEIGHTS = {
@@ -3458,6 +3469,11 @@ function ToolSideDrawer({
   pendingManualTicker = null,
   drawerWidth = TOOL_DRAWER_DEFAULT_WIDTH,
   onDrawerWidthChange,
+  drawerHeight = TOOL_DRAWER_DEFAULT_HEIGHT,
+  onDrawerHeightChange,
+  dock = 'left',
+  onDockChange,
+  onDockDragHoverEdgeChange,
   language,
   baseCurrency = 'KRW',
   fxRates = DEFAULT_DISPLAY_FX_RATES,
@@ -3575,6 +3591,21 @@ function ToolSideDrawer({
     return clamp(nextWidth, minWidth, maxWidth);
   }, []);
 
+  // Same idea as clampDrawerWidth, on the other axis — bottom dock resizes by height, with its
+  // own headroom (leaves at least ~80px of atom stage visible above it, same spirit as width's
+  // "leave 34px of screen visible past the drawer").
+  const clampDrawerHeight = useCallback((nextHeight) => {
+    if (typeof window === 'undefined') {
+      return clamp(nextHeight, 220, TOOL_DRAWER_MAX_HEIGHT);
+    }
+
+    const viewportHeight = window.innerHeight;
+    const minHeight = Math.min(220, Math.max(180, viewportHeight - 160));
+    const maxHeight = Math.max(minHeight, Math.min(TOOL_DRAWER_MAX_HEIGHT, viewportHeight - 80));
+
+    return clamp(nextHeight, minHeight, maxHeight);
+  }, []);
+
   useEffect(() => {
     if (typeof window === 'undefined') {
       return undefined;
@@ -3582,6 +3613,7 @@ function ToolSideDrawer({
 
     const handleResize = () => {
       onDrawerWidthChange?.((current) => clampDrawerWidth(current));
+      onDrawerHeightChange?.((current) => clampDrawerHeight(current));
     };
 
     window.addEventListener('resize', handleResize);
@@ -3589,7 +3621,7 @@ function ToolSideDrawer({
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [clampDrawerWidth, onDrawerWidthChange]);
+  }, [clampDrawerHeight, clampDrawerWidth, onDrawerHeightChange, onDrawerWidthChange]);
 
   useEffect(() => {
     manualDraftRef.current = {
@@ -3753,13 +3785,26 @@ function ToolSideDrawer({
       event.stopPropagation();
       onInteract?.();
 
-      const startX = event.clientX;
-      const startWidth = drawerWidth;
+      const isBottom = dock === 'bottom';
+      const startPos = isBottom ? event.clientY : event.clientX;
+      const startSize = isBottom ? drawerHeight : drawerWidth;
+      // Which physical drag direction grows the panel depends on which edge the resize handle
+      // sits on, which depends on dock: left dock's handle is on the panel's right edge (drag
+      // right to grow, the original/only behavior this used to be); right dock's handle is on the
+      // left edge (drag left to grow); bottom dock's handle is on the top edge (drag up to grow).
+      // Left is the only one where screen-direction and "growing" point the same way.
+      const sign = dock === 'left' ? 1 : -1;
       setResizing(true);
 
       const handlePointerMove = (moveEvent) => {
         moveEvent.preventDefault();
-        onDrawerWidthChange?.(clampDrawerWidth(startWidth + moveEvent.clientX - startX));
+        const pos = isBottom ? moveEvent.clientY : moveEvent.clientX;
+        const nextSize = startSize + sign * (pos - startPos);
+        if (isBottom) {
+          onDrawerHeightChange?.(clampDrawerHeight(nextSize));
+        } else {
+          onDrawerWidthChange?.(clampDrawerWidth(nextSize));
+        }
       };
 
       const stopResize = () => {
@@ -3773,7 +3818,17 @@ function ToolSideDrawer({
       window.addEventListener('pointerup', stopResize);
       window.addEventListener('pointercancel', stopResize);
     },
-    [clampDrawerWidth, drawerWidth, onDrawerWidthChange, onInteract, open],
+    [
+      clampDrawerHeight,
+      clampDrawerWidth,
+      dock,
+      drawerHeight,
+      drawerWidth,
+      onDrawerHeightChange,
+      onDrawerWidthChange,
+      onInteract,
+      open,
+    ],
   );
 
   const handleResizeKeyDown = useCallback(
@@ -3782,17 +3837,85 @@ function ToolSideDrawer({
         return;
       }
 
-      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+      // Keyboard grow/shrink stays on a fixed pair of keys regardless of which edge the drawer is
+      // actually docked to — unlike the drag handle (a direct-manipulation gesture where physical
+      // direction has to match the cursor), a keyboard shortcut that flipped meaning depending on
+      // dock side would be the opposite of predictable.
+      const isBottom = dock === 'bottom';
+      const growKey = isBottom ? 'ArrowUp' : 'ArrowRight';
+      const shrinkKey = isBottom ? 'ArrowDown' : 'ArrowLeft';
+      if (event.key !== growKey && event.key !== shrinkKey) {
         return;
       }
 
       event.preventDefault();
       onInteract?.();
-      onDrawerWidthChange?.((current) =>
-        clampDrawerWidth(current + (event.key === 'ArrowRight' ? 24 : -24)),
-      );
+      const delta = event.key === growKey ? 24 : -24;
+      if (isBottom) {
+        onDrawerHeightChange?.((current) => clampDrawerHeight(current + delta));
+      } else {
+        onDrawerWidthChange?.((current) => clampDrawerWidth(current + delta));
+      }
     },
-    [clampDrawerWidth, onDrawerWidthChange, onInteract, open],
+    [clampDrawerHeight, clampDrawerWidth, dock, onDrawerHeightChange, onDrawerWidthChange, onInteract, open],
+  );
+
+  // Drag-to-dock: grab the handle at the top of the rail (always present, open or closed —
+  // re-docking isn't something you should have to open the drawer first to do) and drag toward
+  // whichever screen edge it should snap to. Top is deliberately never a candidate edge.
+  const handleDockDragPointerDown = useCallback(
+    (event) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      event.preventDefault();
+      onInteract?.();
+
+      const computeHoverEdge = (clientX, clientY) => {
+        const distanceToEdge = {
+          left: clientX,
+          right: window.innerWidth - clientX,
+          bottom: window.innerHeight - clientY,
+        };
+        let nearestEdge = null;
+        let nearestDistance = DOCK_EDGE_HOVER_THRESHOLD_PX;
+        for (const edge of Object.keys(distanceToEdge)) {
+          const distance = distanceToEdge[edge];
+          if (distance <= nearestDistance) {
+            nearestEdge = edge;
+            nearestDistance = distance;
+          }
+        }
+        return nearestEdge;
+      };
+
+      const handlePointerMove = (moveEvent) => {
+        moveEvent.preventDefault();
+        onDockDragHoverEdgeChange?.(computeHoverEdge(moveEvent.clientX, moveEvent.clientY));
+      };
+
+      const finishDrag = (finalEdge) => {
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('pointerup', handlePointerUp);
+        window.removeEventListener('pointercancel', handlePointerCancel);
+        if (finalEdge && finalEdge !== dock) {
+          onDockChange?.(finalEdge);
+        }
+        onDockDragHoverEdgeChange?.(null);
+      };
+      // pointerup commits whatever edge was last hovered (null if the cursor never got close
+      // enough to any candidate edge — dragging and releasing in the middle of the screen is a
+      // no-op, not an accidental dock change). pointercancel aborts without committing anything,
+      // same as letting go of a drag that got interrupted should.
+      const handlePointerUp = (upEvent) => finishDrag(computeHoverEdge(upEvent.clientX, upEvent.clientY));
+      const handlePointerCancel = () => finishDrag(null);
+
+      window.addEventListener('pointermove', handlePointerMove, { passive: false });
+      window.addEventListener('pointerup', handlePointerUp);
+      window.addEventListener('pointercancel', handlePointerCancel);
+    },
+    [dock, onDockChange, onDockDragHoverEdgeChange, onInteract],
   );
 
   const hasAtomName = manualAccountName.trim().length > 0;
@@ -5172,15 +5295,30 @@ function ToolSideDrawer({
   return (
     <aside
       className={`tool-drawer${open ? ' is-open' : ''}${open && resolvedTool ? ' has-panel' : ''}${resizing ? ' is-resizing' : ''}`}
+      data-dock={dock}
       style={{
         ...layerStyle,
+        // Always the full expanded size now — open/closed no longer toggles this element's own
+        // box size at all (that was the width-transition perf problem); see .tool-drawer's CSS
+        // for how the closed state is conveyed instead (a clip-path). Both vars are always set
+        // (not just the one the current dock uses) since dock can change while open/mid-drag —
+        // no reason the unused axis' value should ever be stale.
         '--tool-drawer-width': `${drawerWidth}px`,
-        width: open ? `${drawerWidth}px` : undefined,
-        minWidth: open ? `${drawerWidth}px` : undefined,
+        '--tool-drawer-height': `${drawerHeight}px`,
       }}
     >
       <div className="tool-drawer__window">
         <div className="tool-drawer__rail" aria-label={text.toolMenuAria}>
+          <div
+            className="tool-drawer__dock-handle"
+            role="button"
+            tabIndex={0}
+            aria-label={
+              language === 'en' ? 'Drag to move this panel to an edge' : '드래그해서 패널 위치를 옮기기'
+            }
+            title={language === 'en' ? 'Drag to dock left, right, or bottom' : '드래그해서 좌/우/하단에 도킹'}
+            onPointerDown={handleDockDragPointerDown}
+          />
           {tools.filter((tool) => !tool.hidden).map((tool) => (
             <button
               key={tool.key}
@@ -5215,8 +5353,16 @@ function ToolSideDrawer({
         <div
           className="tool-drawer__resize-handle"
           role="separator"
-          aria-label={language === 'en' ? 'Resize tool panel' : '도구 패널 너비 조절'}
-          aria-orientation="vertical"
+          aria-label={
+            dock === 'bottom'
+              ? language === 'en'
+                ? 'Resize tool panel'
+                : '도구 패널 높이 조절'
+              : language === 'en'
+                ? 'Resize tool panel'
+                : '도구 패널 너비 조절'
+          }
+          aria-orientation={dock === 'bottom' ? 'horizontal' : 'vertical'}
           tabIndex={open ? 0 : -1}
           onPointerDown={handleResizePointerDown}
           onKeyDown={handleResizeKeyDown}
@@ -5253,6 +5399,15 @@ export default function App() {
   const atomsRef = useRef(
     generateAtomLayout([], { resolveLabel: resolveAtomStockDisplayName }).map(createAtomState),
   );
+  // Layout for the *next* portfolio, computed ahead of time during dissolve instead of at the
+  // swap instant — see switchToPortfolio (which fills this in as soon as the target portfolio is
+  // known, well before the swap) and the atomsRef-filling effect further down (which reads it
+  // instead of calling generateAtomLayout fresh, when it's for the portfolio actually being
+  // switched to). entryId doubles as the "is this still valid" check: a live quote refresh
+  // on the *current* portfolio also changes portfolioItems without going through this precompute
+  // path at all, so its entryId simply won't match and the effect falls back to computing fresh,
+  // the same as before this existed.
+  const precomputedAtomLayoutRef = useRef({ entryId: null, atoms: null });
   const cameraRef = useRef(createSceneCameraRig());
   const rotationRef = useRef({
     current: new THREE.Quaternion(),
@@ -5276,15 +5431,16 @@ export default function App() {
   const frameCommitRef = useRef(0);
   const targetTiltRef = useRef({ x: 0, y: 0 });
   const currentTiltRef = useRef({ x: 0, y: 0 });
-  // Dissolve/materialize when the main atom's own data changes (a preview-atom click swaps in a
-  // different portfolio) — see the click handler below (which drives it) and the rAF loop further
-  // down (which reads transitionAngularVelocityRef every frame).
+  // Dissolve/materialize when the main atom's own data changes (a user-initiated portfolio
+  // switch) — see switchToPortfolio below (which drives it) and the rAF loop further down (which
+  // reads transitionAngularVelocityRef every frame).
   const {
     scale: atomTransitionScale,
     phase: atomTransitionPhase,
     transitionAngularVelocityRef: atomTransitionAngularVelocityRef,
     dissolve: dissolveAtom,
     materialize: materializeAtom,
+    advanceTransition: advanceAtomTransition,
   } = useAtomTransition();
   const pendingHoverInfoRef = useRef(null);
   const restoredPortfolioStateRef = useRef(null);
@@ -5301,15 +5457,32 @@ export default function App() {
   const [activePortfolioId, setActivePortfolioId] = useState(
     () => restoredPortfolioState.activePortfolioId,
   );
-  // Preview atoms (small drifting portfolio thumbnails floating around the main one) swap the
-  // main atom to their own portfolio when clicked — dissolve the current one, swap the data via
-  // the exact same setActivePortfolioId the existing portfolio switcher already uses, then
-  // materialize the new one, rather than snapping straight to it.
-  const handleSelectPreviewPortfolio = useCallback(
+  // The single dissolve -> swap -> materialize path for every *user-initiated* portfolio switch
+  // (preview-atom click, the accounts list / comparison table pickers, command-palette "go to
+  // holding" landing on a different portfolio, creating a new portfolio and jumping to it, ...) —
+  // originally written just for the preview-atom click, generalized here so every one of those
+  // plays the same transition instead of only that one path snapping instantly like the rest used
+  // to. Deliberately NOT used for programmatic changes (initial load, delete-fallback, background
+  // server-merge reconciliation) — those still call setActivePortfolioId directly further down;
+  // animating those would read as a flicker at exactly the moment (delete, load) it'd be most
+  // jarring, not as a deliberate transition.
+  const switchToPortfolio = useCallback(
     async (entryId) => {
       if (!entryId || entryId === activePortfolioId || atomTransitionPhase !== 'idle') {
         return;
       }
+      // Compute the target portfolio's layout now, in parallel with the dissolve that's about to
+      // play, instead of leaving it for the swap-effect to compute at the dissolve->materialize
+      // handoff (previously the one moment this synchronous work could actually land as a felt
+      // hitch — right as the atom needs to start growing back in). ~420ms of dissolve is plenty
+      // of headroom for a layout pass over any realistic holdings count.
+      const targetEntry = portfolioEntriesRef.current.find((entry) => entry.id === entryId);
+      precomputedAtomLayoutRef.current = {
+        entryId,
+        atoms: generateAtomLayout(targetEntry?.items ?? [], {
+          resolveLabel: resolveAtomStockDisplayName,
+        }).map(createAtomState),
+      };
       await dissolveAtom();
       setActivePortfolioId(entryId);
       await materializeAtom();
@@ -5323,6 +5496,16 @@ export default function App() {
   const [toolTrayOpen, setToolTrayOpen] = useState(false);
   const [activeDrawerTool, setActiveDrawerTool] = useState(null);
   const [toolDrawerWidth, setToolDrawerWidth] = useState(TOOL_DRAWER_DEFAULT_WIDTH);
+  const [toolDrawerHeight, setToolDrawerHeight] = useState(TOOL_DRAWER_DEFAULT_HEIGHT);
+  const [toolDrawerDock, setToolDrawerDock] = useState(() =>
+    readStoredOption(STORAGE_KEYS.toolDrawerDock, TOOL_DRAWER_DOCK_OPTIONS, 'left'),
+  );
+  // Which screen edge is currently highlighted while dragging the drawer's dock handle — null
+  // outside of an active drag. Lifted up here (rather than kept local to ToolSideDrawer) because
+  // the highlight itself has to render as a full screen-edge bar *outside* .tool-drawer — that
+  // element has its own clip-path now (see Stage 1), which would clip a same-element child down
+  // to the rail too, same problem as the light-mode background bleed that turned up there.
+  const [dockDragHoverEdge, setDockDragHoverEdge] = useState(null);
   // Cmd+K palette (search/add/move/delete holdings in one place) and the pending-ticker handoff
   // into the existing manual-entry form when the palette's "add" row is chosen — see
   // openManualToolWithTicker below for why this is a prop into ToolSideDrawer rather than lifting
@@ -5886,6 +6069,12 @@ export default function App() {
           .normalize();
       }
 
+      // Drives useAtomTransition's own progress — this loop is the only rAF loop either of them
+      // runs now, so this is the one place that has to call it. A no-op whenever no
+      // dissolve()/materialize() is in flight. Must run before the read below, so that read sees
+      // this frame's velocity rather than last frame's.
+      advanceAtomTransition(now);
+
       // Dissolve/materialize's own spin — added on top of (not multiplied into) idle rotation
       // above, and applies regardless of the drag/reduced-motion gating on that idle rotation:
       // this is a transition playing out on its own timeline, not ambient drift.
@@ -6029,6 +6218,14 @@ export default function App() {
 
     window.localStorage.setItem(STORAGE_KEYS.baseCurrency, baseCurrency);
   }, [baseCurrency]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(STORAGE_KEYS.toolDrawerDock, toolDrawerDock);
+  }, [toolDrawerDock]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -6380,6 +6577,19 @@ export default function App() {
     portfolioEntries.find((entry) => entry.id === activePortfolioId) ?? portfolioEntries[0] ?? null;
   const portfolioItems = activePortfolio?.items ?? [];
   const portfolioTimelineItems = activePortfolio?.timelineItems ?? portfolioItems;
+  // Deferred counterparts feed only the side-panel analytics below (heatmap/allocation/scorecard/
+  // analytics summary) — never the atom's own geometry (that reads the immediate portfolioItems
+  // directly, via the effect that fills atomsRef.current), so the materialize animation always
+  // grows into the *correct* new shape right away. Those four memos walk the full timeline —
+  // thousands of rows for some accounts — which used to run synchronously in the same commit as
+  // switching portfolios, freezing the main thread for a felt beat right in the middle of the
+  // dissolve/materialize sequence. useDeferredValue lets that render happen at low priority
+  // instead: React keeps showing the previous portfolio's analytics uninterrupted (not blank,
+  // not stale-looking — genuinely still valid until the moment it's replaced) while the urgent
+  // render (atom shape, scale, rotation) keeps painting every frame, then swaps the panels in
+  // once the heavy recompute finishes a few frames later instead of one long blocking one.
+  const deferredPortfolioItems = useDeferredValue(portfolioItems);
+  const deferredPortfolioTimelineItems = useDeferredValue(portfolioTimelineItems);
   // Read from a ref inside the interval below rather than depending on portfolioItems/
   // portfolioTimelineItems directly — those are fresh array references on every render (the atom
   // scene's RAF loop re-renders far more often than every 90s), so depending on them would reset
@@ -6421,9 +6631,19 @@ export default function App() {
   );
 
   useEffect(() => {
-    atomsRef.current = generateAtomLayout(portfolioItems, {
-      resolveLabel: resolveAtomStockDisplayName,
-    }).map(createAtomState);
+    // Reuse the layout switchToPortfolio already computed during the dissolve that just played,
+    // if this is that same swap landing — entryId mismatch (a live quote refresh on the
+    // still-active portfolio, the very first mount, a programmatic switch that never went through
+    // switchToPortfolio's precompute path at all) falls back to computing it fresh right here,
+    // exactly as before this existed.
+    const precomputed = precomputedAtomLayoutRef.current;
+    precomputedAtomLayoutRef.current = { entryId: null, atoms: null };
+    atomsRef.current =
+      precomputed.entryId != null && precomputed.entryId === activePortfolioId
+        ? precomputed.atoms
+        : generateAtomLayout(portfolioItems, { resolveLabel: resolveAtomStockDisplayName }).map(
+            createAtomState,
+          );
     dragRef.current.atomId = null;
     dragRef.current.moved = false;
     rotationRef.current.spinVelocity = 0;
@@ -6434,7 +6654,7 @@ export default function App() {
     document.body.style.cursor = '';
     setSelectedAtomId(null);
     setHoverInfo(null);
-  }, [portfolioItems]);
+  }, [portfolioItems, activePortfolioId]);
 
   useEffect(() => {
     if (!portfolioEntries.length) {
@@ -7057,8 +7277,14 @@ export default function App() {
     );
     const entry = createPortfolioEntryFromPayload(payload, entryId);
 
-    setPortfolioEntries((current) => [...current, entry].slice(0, MAX_PORTFOLIOS));
-    setActivePortfolioId(entryId);
+    // Ref updated synchronously alongside state (not via a functional setPortfolioEntries
+    // updater) so switchToPortfolio's own portfolioEntriesRef.current lookup — called right
+    // below, before this render has committed — already sees this brand-new entry instead of
+    // computing its precomputed layout from a still-stale, entry-less ref.
+    const nextEntries = [...portfolioEntries, entry].slice(0, MAX_PORTFOLIOS);
+    portfolioEntriesRef.current = nextEntries;
+    setPortfolioEntries(nextEntries);
+    void switchToPortfolio(entryId);
     setToolTrayOpen(true);
     setActiveDrawerTool('accounts');
   };
@@ -7113,8 +7339,11 @@ export default function App() {
     );
     const entry = createPortfolioEntryFromPayload(payload, entryId);
 
-    setPortfolioEntries((current) => [...current, entry].slice(0, MAX_PORTFOLIOS));
-    setActivePortfolioId(entryId);
+    // See handleCreateManualAtom just above for why the ref is updated synchronously here too.
+    const nextEntries = [...portfolioEntries, entry].slice(0, MAX_PORTFOLIOS);
+    portfolioEntriesRef.current = nextEntries;
+    setPortfolioEntries(nextEntries);
+    void switchToPortfolio(entryId);
     setToolTrayOpen(true);
     setActiveDrawerTool('accounts');
   };
@@ -7131,42 +7360,45 @@ export default function App() {
     noteInteraction();
     clearPortfolioError();
 
-    setPortfolioEntries((current) =>
-      current.map((entry) => {
-        if (entry.id !== entryId) {
-          return entry;
-        }
+    // Computed from the closure's own portfolioEntries (not a functional setPortfolioEntries
+    // updater) so the ref can be updated with this exact same value, synchronously — see
+    // handleCreateManualAtom above for why switchToPortfolio needs that.
+    const nextEntries = portfolioEntries.map((entry) => {
+      if (entry.id !== entryId) {
+        return entry;
+      }
 
-        const safeAccountName =
-          String(accountName ?? '').trim() ||
-          summarizePortfolioEntryAccounts(entry, language).accountText ||
-          '직접 입력 포트폴리오';
-        const sourceItems = (entry.timelineItems?.length ? entry.timelineItems : entry.items) ?? [];
-        const nextItems = [
-          ...sourceItems,
-          ...cleanedRows.map((row, index) =>
-            createManualPortfolioItem(
-              {
-                ...row,
-                accountName: String(row?.accountName ?? '').trim() || safeAccountName,
-              },
-              sourceItems.length + index,
-            ),
+      const safeAccountName =
+        String(accountName ?? '').trim() ||
+        summarizePortfolioEntryAccounts(entry, language).accountText ||
+        '직접 입력 포트폴리오';
+      const sourceItems = (entry.timelineItems?.length ? entry.timelineItems : entry.items) ?? [];
+      const nextItems = [
+        ...sourceItems,
+        ...cleanedRows.map((row, index) =>
+          createManualPortfolioItem(
+            {
+              ...row,
+              accountName: String(row?.accountName ?? '').trim() || safeAccountName,
+            },
+            sourceItems.length + index,
           ),
-        ];
+        ),
+      ];
 
-        return {
-          ...entry,
-          items: collapsePortfolioItemsForDisplayShared(nextItems),
-          timelineItems: nextItems,
-          parserDiagnostics: {
-            ...(entry.parserDiagnostics ?? {}),
-            reviewStatus: entry.parserDiagnostics?.reviewStatus ?? 'ok',
-          },
-        };
-      }),
-    );
-    setActivePortfolioId(entryId);
+      return {
+        ...entry,
+        items: collapsePortfolioItemsForDisplayShared(nextItems),
+        timelineItems: nextItems,
+        parserDiagnostics: {
+          ...(entry.parserDiagnostics ?? {}),
+          reviewStatus: entry.parserDiagnostics?.reviewStatus ?? 'ok',
+        },
+      };
+    });
+    portfolioEntriesRef.current = nextEntries;
+    setPortfolioEntries(nextEntries);
+    void switchToPortfolio(entryId);
   };
 
   const handleUpdatePortfolioHolding = ({ entryId, itemId, itemIndex, accountName, row }) => {
@@ -7177,6 +7409,12 @@ export default function App() {
     noteInteraction();
     clearPortfolioError();
 
+    // Deliberately still plain setActivePortfolioId, not switchToPortfolio — editing one field on
+    // one holding (from the management table or a drawer form) isn't a "switch portfolios" moment
+    // even on the rare path where entryId isn't already the active one; dissolving/materializing
+    // the whole atom over a single-field edit would read as a strange overreaction to it, not a
+    // transition. This also keeps handleMoveHolding below race-free: it composes this + append,
+    // and only one of the two should actually animate.
     setPortfolioEntries((current) =>
       current.map((entry) => {
         if (entry.id !== entryId) {
@@ -7229,6 +7467,11 @@ export default function App() {
 
     noteInteraction();
     clearPortfolioError();
+
+    // Plain setActivePortfolioId, not switchToPortfolio — same reasoning as
+    // handleUpdatePortfolioHolding just above: a single-holding delete isn't a portfolio switch,
+    // and handleMoveHolding below relies on this staying instant (it composes this with an append
+    // that *does* animate — two animated calls back to back would race each other).
 
     setPortfolioEntries((current) =>
       current.map((entry) => {
@@ -7467,35 +7710,35 @@ export default function App() {
     </div>
   );
   const contributionPreview = useMemo(
-    () => createContributionPreview(portfolioItems),
-    [portfolioItems],
+    () => createContributionPreview(deferredPortfolioItems),
+    [deferredPortfolioItems],
   );
   const portfolioAllocation = useMemo(
     () =>
-      createPortfolioAllocation(portfolioItems, {
+      createPortfolioAllocation(deferredPortfolioItems, {
         classificationMode: assetClassMode,
         weightMode: allocationWeightMode,
       }),
-    [allocationWeightMode, assetClassMode, portfolioItems],
+    [allocationWeightMode, assetClassMode, deferredPortfolioItems],
   );
   const portfolioAnalyticsSummary = useMemo(() => {
     if (!hasPortfolio) {
       return null;
     }
 
-    return createPortfolioAnalyticsSummary(portfolioItems, portfolioTimelineItems, {
+    return createPortfolioAnalyticsSummary(deferredPortfolioItems, deferredPortfolioTimelineItems, {
       period: 'month',
       topN: 5,
       targetBucketWeights: DEFAULT_REBALANCE_TARGET_WEIGHTS,
     });
-  }, [hasPortfolio, portfolioItems, portfolioTimelineItems]);
+  }, [hasPortfolio, deferredPortfolioItems, deferredPortfolioTimelineItems]);
   const portfolioHeatmap = useMemo(
     () =>
-      createPortfolioHeatmap(portfolioTimelineItems, {
+      createPortfolioHeatmap(deferredPortfolioTimelineItems, {
         weeks: 24,
         today: nowForDateBasis(dateBasis),
       }),
-    [portfolioTimelineItems, dateBasis],
+    [deferredPortfolioTimelineItems, dateBasis],
   );
   const drawerHeatmap = useMemo(
     () =>
@@ -7524,10 +7767,10 @@ export default function App() {
       return null;
     }
 
-    return createPortfolioScorecard(portfolioItems, language, {
+    return createPortfolioScorecard(deferredPortfolioItems, language, {
       weightPreset: scoreWeightPreset,
     });
-  }, [hasPortfolio, language, portfolioItems, scoreWeightPreset]);
+  }, [hasPortfolio, language, deferredPortfolioItems, scoreWeightPreset]);
   const overallPortfolioScorecard = useMemo(() => {
     if (!allPortfolioItems.length) {
       return null;
@@ -7544,10 +7787,17 @@ export default function App() {
     setActiveGroupKey(null);
   };
   const handleFocusPortfolioHolding = useCallback(
-    ({ entryId, item, itemIndex }) => {
+    async ({ entryId, item, itemIndex }) => {
       noteInteraction();
       if (entryId && entryId !== activePortfolioId) {
-        setActivePortfolioId(entryId);
+        // Awaited deliberately: atomsRef.current below is only correct for the *new* portfolio
+        // once its materialize has actually run (the effect that repopulates it keys off
+        // activePortfolioId/portfolioItems, which only update after switchToPortfolio's own
+        // setActivePortfolioId commits) — resolving the atom to select before that would still be
+        // looking at the outgoing portfolio's shapes. materializeAtom's own ~420ms is comfortably
+        // longer than the render+effect flush it's implicitly waiting on here, so this isn't a
+        // race so much as it looks like one at a glance.
+        await switchToPortfolio(entryId);
       }
 
       const atomId = resolveHoldingAtomId(atomsRef.current, item, itemIndex);
@@ -7556,7 +7806,7 @@ export default function App() {
         setActiveGroupKey(null);
       }
     },
-    [activePortfolioId],
+    [activePortfolioId, switchToPortfolio],
   );
   const triggerIntroCenterBurst = () => {
     noteInteraction();
@@ -7586,7 +7836,18 @@ export default function App() {
     ),
     '--camera-stage-roll': `${format(cameraMotion.roll * 0.46)}deg`,
     '--camera-glow': format(0.28 + cameraMotion.focus * 0.5),
-    '--tool-drawer-current-width': toolTrayOpen ? `${toolDrawerWidth}px` : '0px',
+    // Bottom dock doesn't eat horizontal space at all, so this (and the shift it drives below)
+    // both collapse to 0 there — a bottom-docked drawer shouldn't push the atom sideways just
+    // because it happens to be open.
+    '--tool-drawer-current-width':
+      toolTrayOpen && toolDrawerDock !== 'bottom' ? `${toolDrawerWidth}px` : '0px',
+    // Which direction to push the atom to keep it visually centered in whatever space the open
+    // drawer leaves behind depends on which side it's docked to — left dock pushes the atom
+    // right (positive), right dock pushes it left (negative), bottom dock doesn't push it at all.
+    '--stage-panel-shift':
+      toolTrayOpen && toolDrawerDock !== 'bottom'
+        ? `${(toolDrawerDock === 'right' ? -1 : 1) * (toolDrawerWidth / 2)}px`
+        : '0px',
   };
   const shootingStarStyle = useMemo(() => {
     if (!shootingStar) {
@@ -7783,7 +8044,7 @@ export default function App() {
             portfolioEntries={portfolioEntries}
             activePortfolio={activePortfolio}
             activePortfolioId={activePortfolio?.id ?? activePortfolioId}
-            onSelectPortfolio={setActivePortfolioId}
+            onSelectPortfolio={switchToPortfolio}
             onFocusHolding={handleFocusPortfolioHolding}
             onClearHoldingFocus={clearCenterSelection}
             onClearPortfolio={handleClearPortfolio}
@@ -7796,6 +8057,11 @@ export default function App() {
             pendingManualTicker={pendingManualTicker}
             drawerWidth={toolDrawerWidth}
             onDrawerWidthChange={setToolDrawerWidth}
+            drawerHeight={toolDrawerHeight}
+            onDrawerHeightChange={setToolDrawerHeight}
+            dock={toolDrawerDock}
+            onDockChange={setToolDrawerDock}
+            onDockDragHoverEdgeChange={setDockDragHoverEdge}
             language={language}
             baseCurrency={baseCurrency}
             fxRates={displayFxRates}
@@ -7804,6 +8070,14 @@ export default function App() {
             onInteract={interactWithDrawerTool}
             renderSettingsPanel={renderSettingsPanel}
           />
+        ) : null}
+
+        {dockDragHoverEdge ? (
+          // Rendered as .tool-drawer's own sibling, not its child — .tool-drawer carries a
+          // clip-path now (Stage 1), which clips its entire subtree down to the rail while
+          // closed; a same-element child here would only ever be visible in the same sliver the
+          // rail already occupies, never able to paint the full opposite/bottom edge this needs.
+          <div className={`dock-edge-hint dock-edge-hint--${dockDragHoverEdge}`} aria-hidden="true" />
         ) : null}
 
         <div className="upload-anchor">
@@ -7875,8 +8149,8 @@ export default function App() {
                     {portfolioEntries
                       // The active portfolio is already the atom in the center — showing it a
                       // second time as one of its own orbiting "switch to this" previews was
-                      // just a redundant, non-functional button (handleSelectPreviewPortfolio's
-                      // own entryId === activePortfolioId guard already no-ops a click on it, but
+                      // just a redundant, non-functional button (switchToPortfolio's own
+                      // entryId === activePortfolioId guard already no-ops a click on it, but
                       // nothing kept it out of the layer visually). With N total portfolios this
                       // should read as N-1 other-portfolio previews, not N.
                       .filter((entry) => entry.id !== activePortfolioId)
@@ -7886,7 +8160,7 @@ export default function App() {
                           key={entry.id}
                           entry={entry}
                           slot={PORTFOLIO_PREVIEW_SLOTS[index]}
-                          onSelect={handleSelectPreviewPortfolio}
+                          onSelect={switchToPortfolio}
                         />
                       ))}
                   </div>

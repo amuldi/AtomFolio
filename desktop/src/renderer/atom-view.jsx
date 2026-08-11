@@ -186,6 +186,7 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
     transitionAngularVelocityRef: atomTransitionAngularVelocityRef,
     dissolve: dissolveAtom,
     materialize: materializeAtom,
+    advanceTransition: advanceAtomTransition,
   } = useAtomTransition();
 
   // What the scene actually renders — deliberately not just `items` directly. On a portfolio
@@ -196,6 +197,13 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
   // of the swap happening invisibly out from under an already-in-flight dissolve.
   const [displayedItems, setDisplayedItems] = useState(items);
   const previousPortfolioIdRef = useRef(selectedPortfolioId);
+  // Layout for the *next* portfolio, computed as soon as the switch is known rather than left for
+  // baseAtoms' own useMemo to compute fresh at the swap instant below — see baseAtoms, which reads
+  // this instead of calling generateAtomLayout itself when it matches. Keyed by items reference
+  // (main.js has already swapped state.items to the target portfolio's by the time this effect
+  // sees selectedPortfolioId change, so `items` here already *is* the target — setDisplayedItems
+  // is later called with this exact same reference, which is what the match is against).
+  const precomputedBaseAtomsRef = useRef({ items: null, atoms: null });
 
   useEffect(() => {
     if (previousPortfolioIdRef.current === selectedPortfolioId) {
@@ -205,6 +213,10 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
       return undefined;
     }
     previousPortfolioIdRef.current = selectedPortfolioId;
+    // Runs in parallel with the dissolve about to play below, instead of landing as synchronous
+    // work exactly at the dissolve->materialize handoff (previously the one moment it could read
+    // as a felt hitch — right as the atom needs to start growing back in).
+    precomputedBaseAtomsRef.current = { items, atoms: generateAtomLayout(items).map(createAtomState) };
     let cancelled = false;
     (async () => {
       await dissolveAtom();
@@ -245,7 +257,14 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
   }, [materializeAtom]);
 
   const baseAtoms = useMemo(
-    () => generateAtomLayout(displayedItems).map(createAtomState),
+    () => {
+      const precomputed = precomputedBaseAtomsRef.current;
+      if (precomputed.items === displayedItems && precomputed.atoms) {
+        precomputedBaseAtomsRef.current = { items: null, atoms: null };
+        return precomputed.atoms;
+      }
+      return generateAtomLayout(displayedItems).map(createAtomState);
+    },
     [displayedItems],
   );
 
@@ -451,6 +470,12 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
         autoRotateX.setFromAxisAngle(xAxis, Math.sin(now * 0.00012) * delta * 0.0038 * idleMultiplier);
         rotationRef.current.target.premultiply(autoRotateY).premultiply(autoRotateX).normalize();
       }
+
+      // Drives useAtomTransition's own progress — this loop is the only rAF loop either of them
+      // runs now, so this is the one place that has to call it. A no-op whenever no
+      // dissolve()/materialize() is in flight. Must run before the read below, so that read sees
+      // this frame's velocity rather than last frame's.
+      advanceAtomTransition(now);
 
       // Dissolve/materialize's own spin — added on top of (not multiplied into) idle rotation
       // above, and applies regardless of hover/focus/reduced-motion gating on that idle rotation:

@@ -121,7 +121,18 @@ export function HoldingsManagementTable({
         </div>
 
         {rows.map((row, rowIndex) => (
-          <div className="holdings-table__row" key={row.key}>
+          // display: contents rows can't carry their own background/border (they don't generate a
+          // box at all — only their children do), so the odd/even read has to reach the cells some
+          // other way. A data attribute on this element still cascades a CSS custom property down
+          // to its children (custom-property inheritance follows the DOM tree, not the box tree —
+          // display: contents doesn't interrupt it), so .holdings-table__cell can just read
+          // --row-tint per row without any specificity fight against :hover/:focus, which set their
+          // own background directly and keep working unchanged.
+          <div
+            className="holdings-table__row"
+            data-row-parity={rowIndex % 2 === 0 ? 'even' : 'odd'}
+            key={row.key}
+          >
             {COLUMNS.map((column) => (
               <input
                 key={column.key}
@@ -156,7 +167,10 @@ export function HoldingsManagementTable({
           </div>
         ))}
 
-        <div className="holdings-table__row holdings-table__row--new">
+        <div
+          className="holdings-table__row holdings-table__row--new"
+          data-row-parity={rows.length % 2 === 0 ? 'even' : 'odd'}
+        >
           {COLUMNS.map((column) => (
             <input
               key={column.key}

@@ -2127,10 +2127,6 @@ function buildPortfolioParseDiagnostics(inspection, items) {
   };
 }
 
-export function parsePortfolioText(text) {
-  return parsePortfolioTextDetailed(text).items;
-}
-
 export function parsePortfolioTextDetailed(text) {
   const inspection = inspectPortfolioTable(text);
   const items = buildParsedItems(inspection);

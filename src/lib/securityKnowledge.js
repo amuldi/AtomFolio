@@ -104,10 +104,6 @@ export function resolveExactSecurityReferenceCode(identifiers) {
   return findExactSecurityReference(Array.isArray(identifiers) ? identifiers : [identifiers])?.code ?? '';
 }
 
-export function resolveSecurityReferenceCode(identifiers) {
-  return findSecurityReference(Array.isArray(identifiers) ? identifiers : [identifiers])?.code ?? '';
-}
-
 function upsertField(fields, label, value, options = {}) {
   const { overwrite = false } = options;
 
