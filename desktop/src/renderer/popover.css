@@ -99,6 +99,21 @@ body {
   min-height: 0;
 }
 
+/* #app-root (above) gets an explicit height so it fills .panel as a flex item; this sibling
+   never had the same treatment, so it only ever sized to its own content instead of the panel's
+   full height — .connect's own `justify-content: center` had nothing to center *within*, so the
+   connect screen sat pinned at the top instead of centered in the panel. Scoped to :has(.connect)
+   rather than unconditional — #connect-root is emptied (not removed) once connected, and giving
+   an empty flex item flex-grow:1 unconditionally would fight #app-root for space in the normal,
+   connected state this bug never actually affected. */
+#connect-root:has(.connect) {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+}
+
 .app-root.is-hidden {
   display: none;
 }
@@ -345,6 +360,17 @@ body {
   cursor: pointer;
 }
 
+/* outline:none above drops the platform's native ring entirely (range inputs' default focus
+   outline hugs the whole element's box, which for a 3px-tall track reads as a barely-there
+   sliver anyway) with nothing standing in for it — Tab-focusing a slider showed no indicator at
+   all. An explicit ring around the track, offset so it doesn't collide with the thumb, is what
+   .portfolio-picker__trigger already does with a border-color shift; a slider has no usable
+   border of its own to shift; this is the same idea via outline instead. */
+.settings-slider:focus-visible {
+  outline: 2px solid rgba(var(--surface), 0.42);
+  outline-offset: 4px;
+}
+
 .settings-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 15px;
@@ -581,11 +607,18 @@ body {
   font-size: 11px;
 }
 
+/* Same neutral rgba(var(--surface), 0.05) tint as ordinary chrome (.quick-add__input,
+   .news-search, etc.) used to double as this banner's background — meaning "the data you're
+   looking at might be stale" had exactly the same visual weight as a plain text input, easy to
+   miss entirely. --loss-bg/--loss (already used for the loss/error side of --profit/--loss
+   throughout the app, not a new color) gives it an actual accent instead of relying on the
+   sentence alone to signal something's wrong. */
 .error-banner {
   margin: 0 16px 10px;
   padding: 8px 12px;
-  border-radius: 8px;
-  background: rgba(var(--surface), 0.05);
+  border-left: 2px solid var(--loss);
+  border-radius: 6px 8px 6px 8px;
+  background: var(--loss-bg);
   color: var(--ink-dim);
   font-size: 11.5px;
   flex: 0 0 auto;

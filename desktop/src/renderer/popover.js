@@ -583,8 +583,14 @@ function createPortfolioPicker() {
 
     renderOptions();
     if (isOpen) {
-      const currentIndex = portfolios.findIndex((portfolio) => portfolio.id === selectedId);
-      setHighlighted(currentIndex >= 0 ? currentIndex : 0);
+      // renderOptions() just rebuilt the list from scratch, which drops the .is-highlighted class
+      // along with every other node — this re-adds it, but at the *preserved* index, not a reset
+      // back to whatever's currently selected. update() runs on every state push, poll ticks
+      // included; resetting here meant a poll tick landing between a user's arrow-key press and
+      // their Enter could silently snap the highlight back to the original selection, so Enter
+      // picked something other than what was visibly highlighted a moment earlier. Only clamps
+      // if the list itself got shorter (portfolio removed while the picker was open).
+      setHighlighted(Math.min(highlightedIndex, portfolios.length - 1));
     }
   }
 

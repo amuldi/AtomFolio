@@ -12,6 +12,17 @@ import { createPortfolioAnalyticsSummary } from './lib/portfolioAnalyticsSummary
 import { enrichPortfolioItem, resolveExactSecurityReferenceCode } from './lib/securityKnowledge.js';
 import { useAtomTransition } from './utils/useAtomTransition.js';
 import {
+  normalizeDisplayKey,
+  getItemFieldValue,
+  resolveHoldingName,
+  resolveHoldingTicker,
+  resolveHoldingAccount,
+  buildGroupedHoldingItems,
+  formatHoldingListMeta,
+  resolveHoldingAtomId,
+  resolveHoldingMetric,
+} from './utils/holdings.js';
+import {
   fetchLiveMarketData,
   fetchMarketSymbolSuggestions,
   formatMarketChange,
@@ -52,6 +63,8 @@ import { PortfolioAllocationCard as PortfolioAllocationCardView } from './compon
 import DigitalTwinPanel from './components/panels/DigitalTwinPanel.jsx';
 import { AuthPanel } from './components/auth/AuthPanel.jsx';
 import { AtomDetailPanel } from './components/panels/AtomDetailPanel.jsx';
+import { CommandPalette } from './components/command-palette/CommandPalette.jsx';
+import { HoldingsManagementTable } from './components/management-table/HoldingsManagementTable.jsx';
 import { AtomCanvas } from './scene/index.js';
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? '';
@@ -1174,14 +1187,6 @@ function concentrationLevelLabel(level, language = 'ko') {
   }
 
   return level === 'high' ? '높음' : level === 'medium' ? '보통' : '낮음';
-}
-
-function normalizeDisplayKey(value) {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/^\ufeff/, '')
-    .replace(/[\s_.\-/%()[\]]+/g, '');
 }
 
 const LEGACY_ATOM_TERM_PATTERN = new RegExp(`원${'자'}(?!재)`, 'g');
@@ -2935,152 +2940,6 @@ function MarketLivePreview({
   );
 }
 
-function getItemFieldValue(item, labels) {
-  const normalizedLabels = labels.map(normalizeDisplayKey);
-
-  for (const field of item?.fields ?? []) {
-    if (normalizedLabels.includes(normalizeDisplayKey(field?.label))) {
-      return String(field?.value ?? '').trim();
-    }
-  }
-
-  return '';
-}
-
-function resolveHoldingName(item) {
-  return (
-    String(item?.companyName ?? item?.name ?? item?.stockName ?? item?.label ?? '').trim() ||
-    getItemFieldValue(item, ['종목명', 'stockName', 'name', 'companyName']) ||
-    resolveHoldingTicker(item) ||
-    '종목'
-  );
-}
-
-function resolveHoldingTicker(item) {
-  return (
-    String(item?.ticker ?? item?.stockCode ?? item?.code ?? '').trim() ||
-    getItemFieldValue(item, ['종목 티커', '종목코드', '티커', 'ticker', 'code', 'symbol'])
-  );
-}
-
-function resolveHoldingAccount(item) {
-  return (
-    String(item?.accountType ?? item?.accountName ?? '').trim() ||
-    getItemFieldValue(item, ['포트폴리오 유형', '포트폴리오명', '계좌유형', '계좌명', 'accountType', 'accountName']) ||
-    '포트폴리오'
-  );
-}
-
-function resolveHoldingGroupKey(item, index = 0) {
-  const tickerKey = normalizeDisplayKey(resolveHoldingTicker(item));
-
-  if (tickerKey) {
-    return `code:${tickerKey}`;
-  }
-
-  const nameKey = normalizeDisplayKey(resolveHoldingName(item));
-
-  if (nameKey) {
-    return `name:${nameKey}`;
-  }
-
-  return `row:${index}`;
-}
-
-function buildGroupedHoldingItems(items) {
-  const sourceItems = Array.isArray(items) ? items : [];
-
-  if (sourceItems.length <= 1) {
-    return sourceItems.map((item, index) => ({
-      ...item,
-      holdingGroupKey: resolveHoldingGroupKey(item, index),
-      groupedSourceItemIds: [String(item?.id ?? '').trim()].filter(Boolean),
-      groupedSourceItemIndexes: [index],
-      groupedRowCount: 1,
-    }));
-  }
-
-  const groupedItems = new Map();
-  sourceItems.forEach((item, index) => {
-    const key = resolveHoldingGroupKey(item, index);
-    const bucket = groupedItems.get(key);
-    const nextEntry = { item, index };
-
-    if (bucket) {
-      bucket.push(nextEntry);
-      return;
-    }
-
-    groupedItems.set(key, [nextEntry]);
-  });
-
-  return [...groupedItems.entries()].map(([key, group]) => {
-    const groupItems = group.map((entry) => entry.item);
-    const representative =
-      collapsePortfolioItemsForDisplayShared(groupItems)[0] ?? groupItems[groupItems.length - 1];
-    const groupedSourceItemIds = group
-      .map((entry) => String(entry.item?.id ?? '').trim())
-      .filter(Boolean);
-
-    return {
-      ...representative,
-      holdingGroupKey: key,
-      groupedSourceItemIds,
-      groupedSourceItemIndexes: group.map((entry) => entry.index),
-      groupedRowCount: group.length,
-    };
-  });
-}
-
-function formatHoldingListMeta(item, language = 'ko') {
-  const ticker = resolveHoldingTicker(item) || resolveHoldingAccount(item);
-  const rowCount = Number(item?.groupedRowCount ?? 1);
-
-  if (rowCount > 1) {
-    const rowText = language === 'en' ? `${rowCount} rows` : `${rowCount}개 행`;
-    return ticker ? `${ticker} · ${rowText}` : rowText;
-  }
-
-  return ticker;
-}
-
-function resolveHoldingAtomId(atoms, item, itemIndex) {
-  const itemId = String(item?.id ?? '').trim();
-  const tickerKey = normalizeDisplayKey(resolveHoldingTicker(item));
-  const nameKey = normalizeDisplayKey(resolveHoldingName(item));
-
-  if (itemId) {
-    const byId = atoms.find((atom) => String(atom.sourceItemId ?? '').trim() === itemId);
-    if (byId) {
-      return byId.id;
-    }
-  }
-
-  if (tickerKey) {
-    const byTicker = atoms.find((atom) =>
-      [atom.ticker, atom.stockCode, atom.code].some((value) => normalizeDisplayKey(value) === tickerKey),
-    );
-    if (byTicker) {
-      return byTicker.id;
-    }
-  }
-
-  if (nameKey) {
-    const byName = atoms.find((atom) =>
-      [atom.stockName, atom.name, atom.label].some((value) => normalizeDisplayKey(value) === nameKey),
-    );
-    if (byName) {
-      return byName.id;
-    }
-  }
-
-  return atoms[itemIndex]?.id ?? null;
-}
-
-function resolveHoldingMetric(item, labels) {
-  return getItemFieldValue(item, labels) || '';
-}
-
 function StockDetailCard({
   item,
   language,
@@ -3596,6 +3455,7 @@ function ToolSideDrawer({
   onAppendManualHoldings,
   onUpdatePortfolioHolding,
   onRemovePortfolioHolding,
+  pendingManualTicker = null,
   drawerWidth = TOOL_DRAWER_DEFAULT_WIDTH,
   onDrawerWidthChange,
   language,
@@ -3634,6 +3494,23 @@ function ToolSideDrawer({
     buyPrice: '',
     returnRate: '',
   });
+  // Command palette's "add" hands off here rather than reimplementing ticker lookup itself — see
+  // App.jsx's openManualToolWithTicker. requestedAt (not just the ticker string) is what the
+  // effect keys off of, so asking to add the same ticker twice in a row still seeds the field a
+  // second time instead of being a no-op prop change on an unchanged string.
+  const lastAppliedManualTickerRequestRef = useRef(null);
+  useEffect(() => {
+    if (!pendingManualTicker || lastAppliedManualTickerRequestRef.current === pendingManualTicker.requestedAt) {
+      return;
+    }
+    lastAppliedManualTickerRequestRef.current = pendingManualTicker.requestedAt;
+    setEditingHolding(null);
+    setManualRows([]);
+    setManualAccountName('');
+    setManualStockName('');
+    setManualSuggestionLocked(false);
+    setManualTicker(pendingManualTicker.ticker ?? '');
+  }, [pendingManualTicker]);
   const tools = [
     {
       key: 'accounts',
@@ -5446,6 +5323,13 @@ export default function App() {
   const [toolTrayOpen, setToolTrayOpen] = useState(false);
   const [activeDrawerTool, setActiveDrawerTool] = useState(null);
   const [toolDrawerWidth, setToolDrawerWidth] = useState(TOOL_DRAWER_DEFAULT_WIDTH);
+  // Cmd+K palette (search/add/move/delete holdings in one place) and the pending-ticker handoff
+  // into the existing manual-entry form when the palette's "add" row is chosen — see
+  // openManualToolWithTicker below for why this is a prop into ToolSideDrawer rather than lifting
+  // its whole manual-form state up here.
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [pendingManualTicker, setPendingManualTicker] = useState(null);
+  const [viewMode, setViewMode] = useState('explore'); // 'explore' (atom scene) | 'manage' (table)
   const [, setShowGroupDock] = useState(() => restoredPortfolioState.entries.length > 0);
   const [, setShowScoreDock] = useState(() => restoredPortfolioState.entries.length > 0);
   const [, setGroupDockSpawn] = useState(null);
@@ -5567,6 +5451,37 @@ export default function App() {
     noteInteraction();
     fileInputRef.current?.click();
   };
+
+  // Global Cmd+K / Ctrl+K toggle. Bound at the window level (not a specific input) so it opens
+  // from anywhere — the atom scene, the tool drawer, mid-scroll in the news list — the same way
+  // it does in Raycast/Linear/Notion.
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      const isPaletteShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k';
+      if (!isPaletteShortcut) {
+        return;
+      }
+      event.preventDefault();
+      noteInteraction();
+      setCommandPaletteOpen((current) => !current);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // The manual-entry form's ticker/name/etc. state lives inside ToolSideDrawer, not up here (it's
+  // a large, self-contained form with its own market-lookup effects) — rather than lifting all of
+  // that just so one new caller can seed one field, ToolSideDrawer takes this as a prop and
+  // applies+clears it itself the moment it sees a new value (see its own effect for
+  // pendingManualTicker). Bumping a counter alongside the ticker string is what makes re-picking
+  // the *same* ticker twice in a row (add "AAPL", cancel, immediately add "AAPL" again) still
+  // register as a fresh request instead of a no-op prop change.
+  const openManualToolWithTicker = useCallback((ticker) => {
+    noteInteraction();
+    setPendingManualTicker({ ticker, requestedAt: Date.now() });
+    setActiveDrawerTool('manual');
+    setToolTrayOpen(true);
+  }, []);
 
   const loadWorkspaceSession = useCallback(async () => {
     try {
@@ -7356,6 +7271,38 @@ export default function App() {
     setActivePortfolioId(entryId);
   };
 
+  // "이동" in the command palette — there's no dedicated move operation in storage, but remove +
+  // append already fully round-trip a holding's data, so composing them here is the whole
+  // implementation; no new state-shape or persistence path needed. Defined here (after both
+  // pieces it composes) rather than up near the palette's other handlers so its useCallback deps
+  // don't reference consts that haven't been declared yet in source order.
+  const handleMoveHolding = useCallback(
+    ({ sourceEntryId, targetEntryId, item, itemId, itemIds, itemIndex, itemIndexes }) => {
+      if (!sourceEntryId || !targetEntryId || sourceEntryId === targetEntryId) {
+        return;
+      }
+      const targetEntry = portfolioEntries.find((entry) => entry.id === targetEntryId);
+      const row = {
+        stockName: resolveHoldingName(item),
+        ticker: resolveHoldingTicker(item),
+        buyPrice: resolveHoldingMetric(item, ['매수가', 'buyPrice', 'purchasePrice']),
+        shares: resolveHoldingMetric(item, ['보유수량', 'shares', 'quantity']),
+        returnRate:
+          String(item?.detail ?? item?.return ?? '').trim() ||
+          resolveHoldingMetric(item, ['수익률', 'return']),
+        assetClass: String(item?.assetClass ?? '').trim() || '주식',
+      };
+      handleRemovePortfolioHolding({ entryId: sourceEntryId, itemId, itemIds, itemIndex, itemIndexes });
+      handleAppendManualHoldings({
+        entryId: targetEntryId,
+        accountName:
+          targetEntry?.fileName?.replace(/\.manual\.csv$/i, '').replace(/\.csv$/i, '') || '',
+        rows: [row],
+      });
+    },
+    [portfolioEntries, handleRemovePortfolioHolding, handleAppendManualHoldings],
+  );
+
   const hasPortfolio = portfolioEntries.length > 0;
   const hasPortfolioItems = portfolioItems.length > 0;
   const showToolDrawer = true;
@@ -7757,6 +7704,63 @@ export default function App() {
         <div className="space-depth__halo" />
       </div>
 
+      <div className="view-mode-toggle" role="tablist" aria-label={language === 'en' ? 'View mode' : '보기 모드'}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={viewMode === 'explore'}
+          className={`view-mode-toggle__option${viewMode === 'explore' ? ' is-active' : ''}`}
+          onClick={() => {
+            noteInteraction();
+            setViewMode('explore');
+          }}
+        >
+          {language === 'en' ? 'Explore' : '탐색'}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={viewMode === 'manage'}
+          className={`view-mode-toggle__option${viewMode === 'manage' ? ' is-active' : ''}`}
+          onClick={() => {
+            noteInteraction();
+            setViewMode('manage');
+          }}
+        >
+          {language === 'en' ? 'Manage' : '관리'}
+        </button>
+      </div>
+
+      <CommandPalette
+        open={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        portfolioEntries={portfolioEntries}
+        language={language}
+        onGoToHolding={({ entryId, item, itemIndex }) => {
+          setViewMode('explore');
+          handleFocusPortfolioHolding({ entryId, item, itemIndex });
+        }}
+        onDeleteHolding={handleRemovePortfolioHolding}
+        onMoveHolding={handleMoveHolding}
+        onAddNew={openManualToolWithTicker}
+      />
+
+      {viewMode === 'manage' ? (
+        // An overlay over the still-mounted atom scene, not a route swap that tears the scene
+        // down — cheaper to toggle back and forth, and the scene's own rAF/effect state (camera
+        // drift, selection, in-flight transitions) never has to be torn down and rebuilt just
+        // because the user glanced at the table for a second.
+        <div className="view-mode-overlay">
+          <HoldingsManagementTable
+            activePortfolio={activePortfolio}
+            language={language}
+            onUpdateHolding={handleUpdatePortfolioHolding}
+            onDeleteHolding={handleRemovePortfolioHolding}
+            onAppendHolding={handleAppendManualHoldings}
+          />
+        </div>
+      ) : null}
+
       <div className="floating-ui-layer">
         {showToolDrawer ? (
           <ToolSideDrawer
@@ -7789,6 +7793,7 @@ export default function App() {
             onAppendManualHoldings={handleAppendManualHoldings}
             onUpdatePortfolioHolding={handleUpdatePortfolioHolding}
             onRemovePortfolioHolding={handleRemovePortfolioHolding}
+            pendingManualTicker={pendingManualTicker}
             drawerWidth={toolDrawerWidth}
             onDrawerWidthChange={setToolDrawerWidth}
             language={language}

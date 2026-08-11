@@ -764,6 +764,15 @@ function registerIpcHandlers() {
     if (!atomWidget || atomWidget.isDestroyed()) {
       return;
     }
+    // setPosition() throws (crashing the whole main process, not just this handler — an
+    // uncaught exception here takes the entire app down) if it gets anything that doesn't
+    // convert to an integer. dx/dy come from the renderer's own pointermove-diff computation,
+    // which should always be finite numbers, but this is a fire-and-forget `send` — nothing
+    // upstream stops a malformed or stale message from reaching this handler, so the guard has
+    // to live here rather than trusting the sender.
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) {
+      return;
+    }
     const { x, y } = atomWidget.getBounds();
     atomWidget.setPosition(Math.round(x + dx), Math.round(y + dy), false);
   });
@@ -780,6 +789,22 @@ function registerIpcHandlers() {
 
     if (!cleanId) {
       return { ok: false, error: 'workspace-id-required' };
+    }
+
+    // Probe with this ID before saving config or calling the shared refresh() — refresh() sets
+    // connected:true as a side effect even when it fails (right for a *silent* poll keeping an
+    // already-working connection alive through a network blip; wrong here, since it briefly
+    // flips the main view on and then this handler flips it back off for a workspace ID that was
+    // never valid to begin with — a flash, not a clean "that ID didn't work"). Validating first,
+    // before touching config/state at all, means a bad ID never gets past the connect screen in
+    // the first place: no flash, and .connect__error's message actually reaches the button that
+    // triggered it instead of racing a state-broadcast re-render that replaces it out from
+    // under the pending promise.
+    try {
+      const probeApi = createApiClient({ apiBaseUrl: loadConfig().apiBaseUrl, workspaceId: cleanId });
+      await probeApi.fetchPortfolios();
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : 'atomfolio-connect-failed' };
     }
 
     saveConfig({ workspaceId: cleanId, lastSeenArticleIds: [] });
