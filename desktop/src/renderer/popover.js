@@ -525,7 +525,6 @@ function createPortfolioPicker() {
     if (id === selectedId) {
       return;
     }
-    pendingPortfolioSwitch = true;
     showNewsLoading();
     void window.atomfolio.selectPortfolio(id);
   }
@@ -813,11 +812,6 @@ function createQuickAddForm() {
   ]);
 }
 
-// True from the moment the picker's `change` fires until the resulting state push is rendered —
-// distinguishes "this render is the direct result of a portfolio switch" (worth the loading dim
-// + crossfade) from an ordinary background poll tick (which shouldn't flicker on every refresh).
-let pendingPortfolioSwitch = false;
-
 function showNewsLoading() {
   if (prefersReducedMotion()) {
     return;
@@ -1056,7 +1050,6 @@ function render(state) {
   if (!state?.connected) {
     setChildren(connectRoot, renderConnect(state));
     appRoot.classList.add('is-hidden');
-    pendingPortfolioSwitch = false;
     newsRoot.classList.remove('is-loading');
     // Also closes/hides it (state.portfolios is always [] while disconnected) — harmless to skip
     // given #app-root itself is already hidden above, but keeps its internal isOpen state honest
@@ -1069,7 +1062,6 @@ function render(state) {
   appRoot.classList.remove('is-hidden');
   setChildren(headerRoot, renderHeader(state));
   portfolioPicker.update(state);
-  pendingPortfolioSwitch = false;
   updateNewsPage(state);
 }
 
