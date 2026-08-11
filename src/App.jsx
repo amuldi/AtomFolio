@@ -7873,6 +7873,13 @@ export default function App() {
                 {portfolioEntries.length ? (
                   <div className="portfolio-preview-layer">
                     {portfolioEntries
+                      // The active portfolio is already the atom in the center — showing it a
+                      // second time as one of its own orbiting "switch to this" previews was
+                      // just a redundant, non-functional button (handleSelectPreviewPortfolio's
+                      // own entryId === activePortfolioId guard already no-ops a click on it, but
+                      // nothing kept it out of the layer visually). With N total portfolios this
+                      // should read as N-1 other-portfolio previews, not N.
+                      .filter((entry) => entry.id !== activePortfolioId)
                       .slice(0, PORTFOLIO_PREVIEW_SLOTS.length)
                       .map((entry, index) => (
                         <PortfolioPreviewAtomView
