@@ -52,6 +52,7 @@ import {
   projectPoint,
   trackballVector,
 } from './utils/scene.js';
+import { isPortfolioAtomItem, explainExcludedPortfolioAtomItem } from './utils/portfolioItems.js';
 import {
   AtomSketch as AtomSketchView,
   PortfolioPreviewAtom as PortfolioPreviewAtomView,
@@ -2425,13 +2426,52 @@ function summarizePortfolioEntryAccounts(entry, language) {
       ? 'Unclassified portfolio'
       : '포트폴리오 정보 없음';
   const rowCount = sourceItems.length;
-  const securityCount = entry?.items?.length ?? 0;
+  const items = entry?.items ?? [];
+  const securityCount = items.length;
+  const atomVisibleItems = items.filter((item) => isPortfolioAtomItem(item));
+  const atomVisibleCount = atomVisibleItems.length;
+  // Only populated when something was actually excluded — summarizePortfolioEntryAccounts runs on
+  // every render of every account-list card, so skip building the reason list on the (common) path
+  // where every parsed item made it into the atom scene.
+  const excludedItems =
+    atomVisibleCount < securityCount
+      ? items
+          .filter((item) => !isPortfolioAtomItem(item))
+          .map((item) => ({
+            label: item?.label || item?.stockName || item?.name || '(이름 없음)',
+            reason: explainExcludedPortfolioAtomItem(item),
+          }))
+      : [];
 
   return {
     accountText,
     rowCount,
     securityCount,
+    atomVisibleCount,
+    excludedItems,
   };
+}
+
+function excludedAtomReasonLabel(reason, language) {
+  if (language === 'en') {
+    switch (reason) {
+      case 'non-stock-asset-class':
+        return 'not a stock/ETF asset class';
+      case 'invalid-item':
+        return 'unreadable row';
+      default:
+        return 'no recognizable name, ticker, or holding data';
+    }
+  }
+
+  switch (reason) {
+    case 'non-stock-asset-class':
+      return '주식/ETF 자산군이 아님';
+    case 'invalid-item':
+      return '읽을 수 없는 행';
+    default:
+      return '알아볼 수 있는 이름·티커·보유 데이터 없음';
+  }
 }
 
 function createManualPortfolioItem(row, index) {
@@ -5098,6 +5138,24 @@ function ToolSideDrawer({
                           </ul>
                         ) : null}
                       </div>
+                    ) : null}
+                    {accountSummary.excludedItems.length ? (
+                      <details className="tool-drawer__account-review">
+                        <summary>
+                          {language === 'en'
+                            ? `${accountSummary.atomVisibleCount}/${accountSummary.securityCount} shown as atoms`
+                            : `${accountSummary.securityCount}개 종목 중 ${accountSummary.atomVisibleCount}개만 원자로 표시됨`}
+                        </summary>
+                        <ul>
+                          {accountSummary.excludedItems.map((excluded, excludedIndex) => (
+                            <li key={`${excluded.label}-${excludedIndex}`}>
+                              {excluded.label}
+                              {' — '}
+                              {excludedAtomReasonLabel(excluded.reason, language)}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
                     ) : null}
                   </article>
                 );
