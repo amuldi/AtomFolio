@@ -99,21 +99,8 @@ const DEFAULT_DISPLAY_FX_RATES = {
 };
 const DATE_BASIS_OPTIONS = ['kst', 'local'];
 const SETTING_TOGGLE_OPTIONS = ['on', 'off'];
-// Mirrors desktop's own appearance setting (desktop/src/lib/store.mjs) one-for-one — same three
-// options, same 'system' default, same name. 'system' means "no opinion, let the media query
-// decide" rather than a resolved value in its own right, which is exactly what clearing
-// document.documentElement.dataset.theme (see the effect that applies this) achieves.
-const THEME_OPTIONS = ['system', 'light', 'dark'];
-// Must match --atom-ink-alpha-boost's light-mode value in styles.css. The CSS variable only
-// reaches colors declared as rgba(var(--atom-ink), ...); a lot of the atom's actual visible
-// contrast comes from a *second*, independent opacity layer set as plain SVG attributes in
-// src/components/atom/index.jsx (per-node/per-line "hand-drawn" opacity jitter), which the CSS
-// variable can never touch. atomInkAlphaBoost (below) is that same multiplier applied on the JS
-// side so light mode doesn't end up with a technically-black-but-nearly-transparent atom.
-const ATOM_INK_ALPHA_BOOST_LIGHT = 2.4;
 const STORAGE_KEYS = {
   language: 'atom-sketch-language',
-  theme: 'atom-sketch-theme',
   assetClassMode: 'atom-sketch-asset-class-mode',
   allocationWeightMode: 'atom-sketch-allocation-weight-mode',
   scoreWeightPreset: 'atom-sketch-score-weight-preset',
@@ -220,10 +207,6 @@ const UI_TEXT = {
     english: '영어',
     settingsAria: '설정 열기',
     settingsSectionLanguage: '언어',
-    settingsSectionTheme: '테마',
-    themeSystem: '시스템',
-    themeLight: '라이트',
-    themeDark: '다크',
     settingsSectionBaseCurrency: '기준 통화',
     settingsCurrencyKrw: 'KRW',
     settingsCurrencyUsd: 'USD',
@@ -346,10 +329,6 @@ const UI_TEXT = {
     english: 'English',
     settingsAria: 'Open settings',
     settingsSectionLanguage: 'Language',
-    settingsSectionTheme: 'Theme',
-    themeSystem: 'System',
-    themeLight: 'Light',
-    themeDark: 'Dark',
     settingsSectionBaseCurrency: 'Base Currency',
     settingsCurrencyKrw: 'KRW',
     settingsCurrencyUsd: 'USD',
@@ -5700,18 +5679,6 @@ export default function App() {
     return readStoredOption(STORAGE_KEYS.language, LANGUAGE_OPTIONS, 'ko');
   });
   const text = textFor(language);
-  const [theme, setTheme] = useState(() =>
-    readStoredOption(STORAGE_KEYS.theme, THEME_OPTIONS, 'system'),
-  );
-  // Tracks the OS-level preference live (not just at mount) so theme === 'system' keeps the JS-side
-  // atomInkAlphaBoost below in sync with the CSS media query if the user flips their OS appearance
-  // without touching this app's own theme setting.
-  const [systemPrefersLight, setSystemPrefersLight] = useState(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-      return false;
-    }
-    return window.matchMedia('(prefers-color-scheme: light)').matches;
-  });
   const [baseCurrency, setBaseCurrency] = useState(() =>
     readStoredOption(STORAGE_KEYS.baseCurrency, BASE_CURRENCY_OPTIONS, 'KRW'),
   );
@@ -6357,43 +6324,20 @@ export default function App() {
     document.documentElement.lang = language === 'en' ? 'en' : 'ko';
   }, [language]);
 
-  // Same mechanism desktop already uses (atom-widget.css's :root[data-theme='light'], set from
-  // main.js's resolved appearance setting): 'light'/'dark' write the attribute directly so CSS can
-  // target it unconditionally; 'system' removes it entirely so the plain
-  // @media (prefers-color-scheme) rules take back over on their own, no attribute forcing either
-  // direction. style.colorScheme mirrors the same resolution for native form controls/scrollbars —
-  // cleared (not just left at the CSS file's own unconditional 'dark') for 'system' so those also
-  // genuinely follow the OS preference instead of stubbornly staying dark-styled forever.
+  // Dark is the only mode this app renders (see styles.css's base :root) — no light/dark toggle,
+  // no system-preference detection. This one-time cleanup just erases any 'light'/'dark' choice a
+  // now-removed settings toggle may have written to a browser in an earlier build, so a returning
+  // visitor's page doesn't carry over a stale data-theme attribute that no longer has any matching
+  // CSS rule to key off (harmless either way, but no reason to leave it sitting there).
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }
 
-    if (theme === 'system') {
-      delete document.documentElement.dataset.theme;
-    } else {
-      document.documentElement.dataset.theme = theme;
-    }
-    document.documentElement.style.colorScheme = theme === 'system' ? '' : theme;
-    window.localStorage.setItem(STORAGE_KEYS.theme, theme);
-  }, [theme]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-      return;
-    }
-
-    const query = window.matchMedia('(prefers-color-scheme: light)');
-    const handleChange = (event) => setSystemPrefersLight(event.matches);
-
-    query.addEventListener('change', handleChange);
-    return () => query.removeEventListener('change', handleChange);
+    delete document.documentElement.dataset.theme;
+    document.documentElement.style.colorScheme = 'dark';
+    window.localStorage.removeItem('atom-sketch-theme');
   }, []);
-
-  // Same precedence as the CSS: an explicit 'light'/'dark' choice always wins; 'system' defers to
-  // the live OS preference tracked above.
-  const isLightAtomTheme = theme === 'light' || (theme === 'system' && systemPrefersLight);
-  const atomInkAlphaBoost = isLightAtomTheme ? ATOM_INK_ALPHA_BOOST_LIGHT : 1;
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -7757,17 +7701,6 @@ export default function App() {
       })),
     },
     {
-      key: 'theme',
-      title: text.settingsSectionTheme,
-      options: THEME_OPTIONS.map((option) => ({
-        key: option,
-        label:
-          option === 'system' ? text.themeSystem : option === 'light' ? text.themeLight : text.themeDark,
-        active: theme === option,
-        onSelect: () => setTheme(option),
-      })),
-    },
-    {
       key: 'base-currency',
       title: text.settingsSectionBaseCurrency,
       options: BASE_CURRENCY_OPTIONS.map((option) => ({
@@ -8319,7 +8252,6 @@ export default function App() {
                     ariaLabel={text.atomAria}
                     highlightActive={highlightActive}
                     centerFocusActive={Boolean(selectedAtomId)}
-                    inkBoost={atomInkAlphaBoost}
                     onCenterClick={hasPortfolioItems ? clearCenterSelection : triggerIntroCenterBurst}
                     onPointerDown={handleNodePointerDown}
                     onPointerEnter={handleNodeEnter}
@@ -8350,7 +8282,6 @@ export default function App() {
                           entry={entry}
                           slot={PORTFOLIO_PREVIEW_SLOTS[index]}
                           onSelect={switchToPortfolio}
-                          inkBoost={atomInkAlphaBoost}
                         />
                       ))}
                   </div>

@@ -13,18 +13,12 @@ import {
 export function SketchAtom({
   atom,
   phase,
-  inkBoost = 1,
   onPointerDown,
   onPointerEnter,
   onPointerMove,
   onPointerLeave,
   onKeyboardSelect,
 }) {
-  // inkBoost mirrors --atom-ink-alpha-boost from styles.css (1 dark / 2.4 light): these path/node
-  // opacities are plain SVG attributes, not part of the .stroke-*/.node-* rgba() color, so the
-  // CSS-side boost never reached them on its own — a light-mode stroke color of near-opaque black
-  // still rendered nearly invisible once one of these ~0.3-0.8 JS opacities was layered on top of
-  // it. Applying the same boost here keeps the two systems in sync instead of only half-fixing it.
   const softOpacity = 0.1 + atom.depth * 0.19 + atom.hoverMix * 0.07;
   const shadowOpacity = 0.18 + atom.depth * 0.3 + atom.hoverMix * 0.08;
   const mainOpacity = 0.3 + atom.depth * 0.48 + atom.hoverMix * 0.08;
@@ -43,33 +37,25 @@ export function SketchAtom({
   ];
   const dimFactor = atom.dimmed ? 0.18 : 1;
   const focusBoost = atom.isSelected ? 1.08 : atom.isGroupMatch ? 1.04 : 1;
-  // Light mode (inkBoost > 1): the depth/hoverMix-based formula is a 3D depth cue (atoms rotated
-  // toward the back read as fainter) that's fine layered on top of dark-mode's already-bright base,
-  // but combined with anti-aliasing on a thin stroke and the group's own smudge blur (see the
-  // <g filter> below), it was enough to make the *foreground* line — the one thing that has to read
-  // as solidly visible regardless of rotation — drop back into "faint" territory. Only the two
-  // background/secondary layers keep the depth-based falloff; the main line goes flat opaque
-  // (still respecting dimFactor, so search/group dimming still works).
-  const isLightMode = inkBoost > 1;
 
   return (
     <>
       <path
         className="stroke-soft"
         d={lineLayers[2]}
-        opacity={Math.min(1, softOpacity * dimFactor * focusBoost * inkBoost)}
+        opacity={Math.min(1, softOpacity * dimFactor * focusBoost)}
         strokeWidth={0.88 + scale * 0.3}
       />
       <path
         className="stroke-shadow"
         d={lineLayers[1]}
-        opacity={Math.min(1, shadowOpacity * dimFactor * focusBoost * inkBoost)}
+        opacity={Math.min(1, shadowOpacity * dimFactor * focusBoost)}
         strokeWidth={1.3 + scale * 0.58}
       />
       <path
         className="stroke-main"
         d={lineLayers[0]}
-        opacity={isLightMode ? dimFactor : Math.min(1, mainOpacity * dimFactor * focusBoost)}
+        opacity={Math.min(1, mainOpacity * dimFactor * focusBoost)}
         strokeWidth={0.98 + scale * 0.46}
       />
 
@@ -84,18 +70,17 @@ export function SketchAtom({
           d={atom.nodePaths[0]}
           opacity={Math.min(
             1,
-            (0.3 + atom.depth * 0.26 + atom.hoverMix * 0.12) * dimFactor * focusBoost * inkBoost,
+            (0.3 + atom.depth * 0.26 + atom.hoverMix * 0.12) * dimFactor * focusBoost,
           )}
           strokeWidth={1.08}
         />
         <path
           className="node-main"
           d={atom.nodePaths[1]}
-          opacity={
-            isLightMode
-              ? dimFactor
-              : Math.min(1, (0.48 + atom.depth * 0.38 + atom.hoverMix * 0.08) * dimFactor * focusBoost)
-          }
+          opacity={Math.min(
+            1,
+            (0.48 + atom.depth * 0.38 + atom.hoverMix * 0.08) * dimFactor * focusBoost,
+          )}
           strokeWidth={1.24}
         />
         <circle
@@ -126,7 +111,7 @@ export function SketchAtom({
   );
 }
 
-export function SketchAura({ atom, phase, inkBoost = 1 }) {
+export function SketchAura({ atom, phase }) {
   const dimFactor = atom.dimmed ? 0.12 : 1;
   const focusBoost = atom.isSelected ? 1.18 : atom.isGroupMatch ? 1.08 : 1;
 
@@ -136,14 +121,14 @@ export function SketchAura({ atom, phase, inkBoost = 1 }) {
       d={buildBondPath(atom, 0, phase)}
       opacity={Math.min(
         0.22,
-        (0.03 + atom.depth * 0.04 + atom.dragMix * 0.05) * dimFactor * focusBoost * inkBoost,
+        (0.03 + atom.depth * 0.04 + atom.dragMix * 0.05) * dimFactor * focusBoost,
       )}
       strokeWidth={5.4 + atom.scale * 2.5}
     />
   );
 }
 
-export function AtomLabel({ atom, inkBoost = 1 }) {
+export function AtomLabel({ atom }) {
   const length = Math.hypot(atom.x, atom.y) || 1;
   const direction = {
     x: atom.x / length,
@@ -154,17 +139,9 @@ export function AtomLabel({ atom, inkBoost = 1 }) {
   const baseX = direction.x > 0.24 ? 10 : direction.x < -0.24 ? -10 : 0;
   const noteX = atom.x + direction.x * atom.labelOffset;
   const noteY = atom.y + direction.y * atom.labelOffset + jitter(atom.seed + 601, 4);
-  // Same "no formula" call as .stroke-main/.node-main in SketchAtom above: in light mode the label
-  // goes flat opaque (still respecting the dimmed state) instead of the depth/hover-based falloff.
   const opacity =
-    inkBoost > 1
-      ? (atom.dimmed ? 0.24 : 1)
-      : Math.min(
-          1,
-          (0.48 + atom.depth * 0.32 + atom.hoverMix * 0.08) *
-            (atom.dimmed ? 0.24 : atom.isSelected ? 1.06 : atom.isGroupMatch ? 1.03 : 1) *
-            inkBoost,
-        );
+    (0.48 + atom.depth * 0.32 + atom.hoverMix * 0.08) *
+    (atom.dimmed ? 0.24 : atom.isSelected ? 1.06 : atom.isGroupMatch ? 1.03 : 1);
 
   return (
     <g
@@ -186,7 +163,7 @@ export function AtomLabel({ atom, inkBoost = 1 }) {
   );
 }
 
-export function PortfolioPreviewAtom({ entry, slot, onSelect, inkBoost = 1 }) {
+export function PortfolioPreviewAtom({ entry, slot, onSelect }) {
   const atoms = generateAtomLayout(entry.items).slice(0, 9);
   const previewNodes = atoms.map((atom, index) => {
     const direction = new THREE.Vector3(...atom.direction).normalize();
@@ -252,7 +229,7 @@ export function PortfolioPreviewAtom({ entry, slot, onSelect, inkBoost = 1 }) {
             )} ${format(node.y)}`;
 
             return (
-              <g key={node.id} opacity={Math.min(1, (0.46 + node.depth * 0.38 + index * 0.02) * inkBoost)}>
+              <g key={node.id} opacity={0.46 + node.depth * 0.38 + index * 0.02}>
                 <path className="portfolio-preview__bond-ghost" d={path} />
                 <path className="portfolio-preview__bond-soft" d={path} />
                 <path className="portfolio-preview__bond-main" d={path} />
@@ -312,7 +289,6 @@ export function AtomSketch({
   svgRef,
   ariaLabel,
   highlightActive,
-  inkBoost = 1,
   onCenterClick,
   onCenterPointerDown,
   onPointerDown,
@@ -404,26 +380,19 @@ export function AtomSketch({
         ) : null}
 
         {backAtoms.map((atom) => (
-          <SketchAura key={`back-aura-${atom.id}`} atom={atom} phase={phase} inkBoost={inkBoost} />
+          <SketchAura key={`back-aura-${atom.id}`} atom={atom} phase={phase} />
         ))}
         {frontAtoms.map((atom) => (
-          <SketchAura key={`front-aura-${atom.id}`} atom={atom} phase={phase} inkBoost={inkBoost} />
+          <SketchAura key={`front-aura-${atom.id}`} atom={atom} phase={phase} />
         ))}
       </g>
 
-      {/* The smudge blur is a dark-mode pencil-sketch touch (softening bright lines against a near-
-          black stage) that works against light mode's goal of a crisp, unambiguously-dark line: a
-          group-level Gaussian blur spreads a thin stroke's peak intensity across its neighboring
-          pixels, which measurably reduces how dark any single pixel along that stroke ends up,
-          compounding with anti-aliasing on top of an already-thin line. Skipped entirely once
-          inkBoost signals light mode rather than trying to tune the blur radius down instead. */}
-      <g className="sketch-core" filter={inkBoost > 1 ? undefined : 'url(#smudge)'}>
+      <g className="sketch-core" filter="url(#smudge)">
         {backAtoms.map((atom) => (
           <SketchAtom
             key={`back-${atom.id}`}
             atom={atom}
             phase={phase}
-            inkBoost={inkBoost}
             onPointerDown={(event) => onPointerDown(atom.id, event)}
             onPointerEnter={(event) => onPointerEnter(atom.id, event)}
             onPointerMove={(event) => onPointerMove(atom.id, event)}
@@ -552,7 +521,6 @@ export function AtomSketch({
             key={`front-${atom.id}`}
             atom={atom}
             phase={phase}
-            inkBoost={inkBoost}
             onPointerDown={(event) => onPointerDown(atom.id, event)}
             onPointerEnter={(event) => onPointerEnter(atom.id, event)}
             onPointerMove={(event) => onPointerMove(atom.id, event)}
@@ -564,7 +532,7 @@ export function AtomSketch({
 
       <g className="label-layer">
         {atoms.map((atom) => (
-          <AtomLabel key={`label-${atom.id}`} atom={atom} inkBoost={inkBoost} />
+          <AtomLabel key={`label-${atom.id}`} atom={atom} />
         ))}
       </g>
     </svg>

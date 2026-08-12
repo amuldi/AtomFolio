@@ -1,11 +1,7 @@
 :root {
-  /* 'light dark' (not a bare 'dark') so native form controls/scrollbars actually follow the OS
-     preference when the app's own theme setting is 'system' — App.jsx's theme effect sets
-     style.colorScheme to a forced 'light' or 'dark' for a manual selection, and clears it back to
-     nothing (falling through to this stylesheet value) for 'system', so this is what 'system'
-     itself resolves to. A bare 'dark' here would mean 'system' still forced dark native chrome
-     regardless of what the OS actually says — the opposite of what 'system' is supposed to mean. */
-  color-scheme: light dark;
+  /* Dark is the only mode this app renders — no light/dark toggle, no prefers-color-scheme
+     branching. Native form controls/scrollbars stay forced dark to match. */
+  color-scheme: dark;
   --app-bg: #000000;
   font-family:
     'Iowan Old Style',
@@ -66,16 +62,8 @@
   --loss-border: rgba(104, 174, 255, 0.42);
   /* "Frame" colors — every panel around the atom stage (tool drawer, settings, command palette,
      news, simulation, etc.), as opposed to the stage/space scene itself, which keeps this exact
-     dark cosmic palette permanently regardless of theme (see the light override below, which
-     deliberately never touches the space-depth, stage, node, label, stroke, or center rules).
-     RGB triples, not full colors, so every existing rgba(var(--frame-ink-a), 0.06)-style
-     declaration keeps its own hand-tuned alpha untouched — only the base hue swaps per theme.
-     These values ARE the site's current hardcoded dark-mode colors verbatim, so defining them
-     here changes nothing yet; the @media block further down is what actually turns on light
-     mode. --frame-surface is the one exception that also needs its alpha bumped per-rule in
-     that block — at dark-mode's low alphas (many panels sit at 0.16–0.32 over the space scene on
-     purpose, so cosmic depth reads through) the same alpha in a light hue would just look like
-     grayish haze, not a clean light panel. */
+     dark cosmic palette permanently. RGB triples, not full colors, so every existing
+     rgba(var(--frame-ink-a), 0.06)-style declaration keeps its own hand-tuned alpha. */
   --frame-ink-a: 255, 248, 233;
   --frame-ink-b: 255, 247, 232;
   --frame-ink-c: 250, 240, 220;
@@ -85,20 +73,13 @@
   --frame-ink-secondary: 226, 226, 226;
   --frame-white: 255, 255, 255;
   --frame-surface: 5, 5, 5;
-  /* Shadow/scrim color only (box-shadow, drop-shadow, modal backdrops) — deliberately NOT
-     re-themed below. A dark shadow reads correctly under a light panel same as a dark one; this
-     was already plain black, not part of the ink/surface system. */
+  /* Shadow/scrim color only (box-shadow, drop-shadow, modal backdrops) — plain black, not part of
+     the ink/surface system above. */
   --frame-void: 0, 0, 0;
-  /* Fixed dark-cosmic tokens — same values as the --frame-* dark baseline above, but never
-     swapped by the light-mode media query below. For content sitting directly over the space
-     scene that's meant to keep the cosmic look regardless of system theme — the same category
-     .view-mode-overlay's own hardcoded rgba(4,4,3,0.86) background already belongs to (see its
-     comment) — but as a named token instead of a repeated literal. The holdings-management-table
-     cells are the first thing that actually needed this: under prefers-color-scheme: light, the
-     regular --frame-* tokens flip to "dark ink for a light panel", but the overlay behind those
-     cells stays permanently near-black either way, so cell text/borders read via --frame-white/
-     --frame-ink-* went nearly invisible — confirmed on a real light-mode system, not merely a
-     sandbox rendering quirk. */
+  /* Fixed dark-cosmic tokens — same values as the --frame-* dark baseline above, as a named token
+     instead of a repeated literal, for content sitting directly over the space scene (the same
+     category .view-mode-overlay's own hardcoded rgba(4,4,3,0.86) background already belongs to —
+     see its comment). */
   --cosmic-ink: 255, 248, 233;
   --cosmic-hairline: 255, 242, 216;
   --cosmic-ink-secondary: 226, 226, 226;
@@ -107,216 +88,18 @@
      .center-*, .graphite-dust, .label-*, .aura-line) used to be a hardcoded warm-cream rgba()
      triplet per rule, each hand-tuned within a few RGB units of the others (245-255 range across
      all of them) — close enough to be visually indistinguishable, so consolidating them into one
-     shared token here changes nothing perceptible in dark mode. Same token name as desktop's own
-     --atom-ink (atom-sketch.css), though the two dark values are independent — only the *light*
-     value is required to match desktop's (see the light blocks below); this dark one is just
-     whatever the site's own pre-existing cream already was. */
+     shared token here changes nothing perceptible. Same token name as desktop's own --atom-ink
+     (atom-sketch.css), though the two values are independently chosen. */
   --atom-ink: 250, 240, 220;
   /* Multiplies every one of the atom's own alpha values below (see rgba(var(--atom-ink),
      calc(alpha times var(--atom-ink-alpha-boost))) throughout the stroke, node, center, label, and
-     dust rules) — 1 here is a no-op, so dark mode's actual per-element alphas (each hand-tuned in
-     the 0.09-0.98 range for a bright-ink-on-black look) are completely unchanged. Light mode
-     redefines this alone rather than touching two dozen individual alpha values a second time:
-     alpha-blending a low-alpha dark color over a light background reads far fainter than the same
-     alpha of a light color over black ever did (a near-black at 0.3 alpha over white barely reads
-     as gray; the equivalent bright-on-black easily reads as a clear line) — confirmed on a real
-     light-mode screen, where the untouched dark-mode alphas made the whole atom look like a ghost.
-     One shared multiplier fixes all of them in lockstep and keeps their relative soft/main/shadow
-     layering intact, rather than needing an independent light-mode value hand-picked per rule. */
+     dust rules) — always 1, a permanent no-op, now that this app only ever renders one theme. Kept
+     as a token (rather than inlining each rule back to a bare alpha) so the rgba(var(--atom-ink),
+     calc(...)) call sites don't all need touching for what would be a purely cosmetic simplification. */
   --atom-ink-alpha-boost: 1;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-/* Light theme — frame panels, the atom stage's own ink, the stage background (--app-bg), and the
-   star/nebula field, applied via two parallel mechanisms that need to stay in lockstep:
-     1. @media (prefers-color-scheme: light), scoped to :not([data-theme='dark']) — system-level
-        light, EXCEPT when a manual 'dark' choice should override it.
-     2. :root[data-theme='light'] — a manual light choice, which must win even if the system
-        itself is reporting dark (a bare media query alone can never do that; media conditions
-        don't know about this app's own theme state).
-   Both blocks carry the exact same declarations on purpose — CSS has no "media query OR attribute
-   selector" combinator, so there's no way to write this once. data-theme itself is written by
-   App.jsx's theme effect: 'light'/'dark' set the attribute directly, 'system' removes it so only
-   mechanism 1 is ever in play. There is no equivalent :root[data-theme='dark'] block below — a
-   manual dark choice needs no override rules of its own, since the unconditional :root block above
-   already *is* the dark value; [data-theme='dark'] only ever needs to keep mechanism 1 from firing
-   over top of it, which :not([data-theme='dark']) already handles.
-   Still deliberately excluded from both mechanisms: .atom-webgl-*, .portfolio-preview*, and
-   .atom-hint. .atom-hint stays fixed-dark on purpose, same call desktop already made for its
-   identical element — it overlays the atom stage directly, and its own literal dark backdrop was
-   never tied to --app-bg in the first place, so it keeps reading correctly regardless of theme
-   (the same reasoning that made it correctly exempt on desktop). */
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme='dark']) {
-    --frame-ink-a: 26, 22, 16;
-    --frame-ink-b: 32, 27, 20;
-    --frame-ink-c: 54, 47, 36;
-    --frame-ink-d: 74, 64, 48;
-    --frame-ink-e: 92, 80, 60;
-    --frame-hairline: 20, 16, 10;
-    --frame-ink-secondary: 70, 66, 60;
-    --frame-white: 24, 20, 15;
-    --frame-surface: 250, 246, 240;
-    /* A true near-black, not desktop's "dark ink" (rgba(28, 24, 20, 0.94), a warm dark brown) —
-       this app's own light mode calls for the atom to read as unambiguous black against its now-
-       bright stage, closer to print ink than desktop's softer warm-dark. Picked by eye against
-       --app-bg below, with headroom to go darker still if a real display ever shows it reading as
-       anything other than black. */
-    --atom-ink: 10, 8, 6;
-    /* See the base :root's own comment on --atom-ink-alpha-boost for why this needs to exist at
-       all — 2.4 was picked so even the faintest dark-mode alpha (0.09, on .node-soft's fill) clears
-       0.2 here, while everything already at or above ~0.42 simply clamps to fully opaque (rgba()
-       alpha silently clamps values over 1), which is the intended outcome for "make it read as
-       unambiguous black" rather than a half-measure. */
-    --atom-ink-alpha-boost: 2.4;
-    /* Same hex as --frame-surface above (250, 246, 240), just spelled as a color instead of an RGB
-       triplet — --app-bg is consumed directly as `background: var(--app-bg)`, not through
-       rgba(var(--x), alpha) like the --frame-* tokens are, so it needs its own literal rather than
-       being able to reference --frame-surface directly. Sharing the exact same value (not just a
-       similar one) is what guarantees the stage background and every card/panel sitting on it read
-       as one coherent light surface instead of two independently-chosen off-whites. */
-    --app-bg: #faf6f0;
-  }
-
-  /* The nebula/star field was tuned entirely for one job: brightening small patches of an
-     otherwise near-black void so it reads as depth. Against a light stage background that same
-     low-alpha warm/cool tinting reads as faint haze, not stars — there's no version of "visible
-     stars" that makes sense against daylight, so rather than inventing light-mode "dark stars"
-     (which would look like smudges, not a designed effect), these fade down to a much subtler
-     presence: enough that the parallax drift is still faintly there on close inspection, not
-     enough to read as an odd tint across the page. .space-depth__halo and .space-depth__meteor are
-     deliberately untouched — the halo reads as a soft glow behind the atom either way (arguably
-     more coherent in light mode, like sunlight), and meteors are a rare, already-transient detail
-     that doesn't carry the same "stars in daytime" mismatch. */
-  :root:not([data-theme='dark']) .space-depth__nebula--far {
-    opacity: calc(0.06 + var(--camera-focus) * 0.04) !important;
-  }
-
-  :root:not([data-theme='dark']) .space-depth__stars--far {
-    opacity: calc(0.05 + var(--camera-focus) * 0.02) !important;
-  }
-
-  :root:not([data-theme='dark']) .space-depth__stars--mid {
-    opacity: calc(0.06 + var(--camera-focus) * 0.02) !important;
-  }
-
-  :root:not([data-theme='dark']) .space-depth__stars--near {
-    opacity: calc(0.07 + var(--camera-focus) * 0.03) !important;
-  }
-
-  /* These three sit directly over the space scene and were tuned, in dark mode, to sit at a low
-     alpha on purpose (cosmic depth reading through a near-black panel). The same low alpha in a
-     light hue over a black backdrop reads as grayish haze, not a clean panel — so light mode
-     boosts just these to something close to opaque. Every other rule using --frame-surface is a
-     smaller element already sitting on top of one of these (an input pill, a metric card, a
-     compare row), so it inherits a solid backdrop for free once its parent is fixed. */
-  :root:not([data-theme='dark']) .tool-drawer {
-    background: rgba(var(--frame-surface), 0.94) !important;
-  }
-
-  :root:not([data-theme='dark']) .tool-drawer__panel {
-    background: rgba(var(--frame-surface), 0.97) !important;
-  }
-
-  :root:not([data-theme='dark']) .hover-card {
-    background: rgba(var(--frame-surface), 0.96) !important;
-  }
-
-  /* A CSS class rule always wins over the SVG stroke-width *attribute* SketchAtom computes in JS
-     (author stylesheet beats presentation attribute in the cascade), so the base .stroke-main /
-     .node-main rules above are what actually render — not whatever index.jsx passed as
-     strokeWidth={...}. --atom-ink-alpha-boost already pushes these strokes to ~full alpha in light
-     mode, but a fully-opaque 1.5px/1.42px line is still thin enough that anti-aliased edge pixels
-     (never truly (10,8,6)) make up a large share of what the eye actually sees, reading as "thin
-     and pale" rather than solid — thickening just the two foreground layers compensates for that
-     without touching the softer background layers, which are meant to stay secondary either way. */
-  /* No more rgba(var(--atom-ink), ...) formula for these three — pure #000 at forced full opacity,
-     no boost multiplier, no depth-based falloff, nothing left to under-shoot. This is deliberately
-     the blunt version: everything more "considered" (alpha boost, then stroke-width, then dropping
-     the smudge blur filter, then bypassing the depth-opacity formula in index.jsx) was tried first
-     and still weren't unmistakably solid black on a real screen, so this replaces all of that
-     guesswork for these three elements with a value that cannot be miscalculated. */
-  :root:not([data-theme='dark']) .stroke-main {
-    stroke: #000 !important;
-    stroke-width: 2.6;
-  }
-
-  :root:not([data-theme='dark']) .node-main {
-    stroke: #000 !important;
-    stroke-width: 2.4;
-  }
-
-  :root:not([data-theme='dark']) .label-main,
-  :root:not([data-theme='dark']) .label-detail {
-    fill: #000 !important;
-    font-weight: 700;
-  }
-}
-
-/* Manual light selection — exact duplicate of the media block above (see its own comment for why
-   this can't be unified into one rule), minus the media condition, so it applies even when the
-   system itself is reporting dark. */
-:root[data-theme='light'] {
-  --frame-ink-a: 26, 22, 16;
-  --frame-ink-b: 32, 27, 20;
-  --frame-ink-c: 54, 47, 36;
-  --frame-ink-d: 74, 64, 48;
-  --frame-ink-e: 92, 80, 60;
-  --frame-hairline: 20, 16, 10;
-  --frame-ink-secondary: 70, 66, 60;
-  --frame-white: 24, 20, 15;
-  --frame-surface: 250, 246, 240;
-  --atom-ink: 10, 8, 6;
-  --atom-ink-alpha-boost: 2.4;
-  --app-bg: #faf6f0;
-}
-
-:root[data-theme='light'] .space-depth__nebula--far {
-  opacity: calc(0.06 + var(--camera-focus) * 0.04) !important;
-}
-
-:root[data-theme='light'] .space-depth__stars--far {
-  opacity: calc(0.05 + var(--camera-focus) * 0.02) !important;
-}
-
-:root[data-theme='light'] .space-depth__stars--mid {
-  opacity: calc(0.06 + var(--camera-focus) * 0.02) !important;
-}
-
-:root[data-theme='light'] .space-depth__stars--near {
-  opacity: calc(0.07 + var(--camera-focus) * 0.03) !important;
-}
-
-:root[data-theme='light'] .tool-drawer {
-  background: rgba(var(--frame-surface), 0.94) !important;
-}
-
-:root[data-theme='light'] .tool-drawer__panel {
-  background: rgba(var(--frame-surface), 0.97) !important;
-}
-
-:root[data-theme='light'] .hover-card {
-  background: rgba(var(--frame-surface), 0.96) !important;
-}
-
-/* Exact duplicate of the stroke-width/font-weight rules in the media block above — see its
-   comment for why these exist. */
-:root[data-theme='light'] .stroke-main {
-  stroke: #000 !important;
-  stroke-width: 2.6;
-}
-
-:root[data-theme='light'] .node-main {
-  stroke: #000 !important;
-  stroke-width: 2.4;
-}
-
-:root[data-theme='light'] .label-main,
-:root[data-theme='light'] .label-detail {
-  fill: #000 !important;
-  font-weight: 700;
 }
 
 * {
@@ -6767,16 +6550,9 @@ body::after {
   pointer-events: none;
 }
 
-/* This is the one atom-adjacent element the earlier theme pass missed — it sits directly behind
-   the atom (inset: 14%, roughly the atom's own footprint), blurred into a soft ambient glow. Still
-   rgba(var(--atom-ink), alpha) like the atom itself, not a separate hardcoded warm-cream value, so
-   it darkens together with the atom instead of staying a bright cream haze sitting right over a
-   now-also-light stage background — which is exactly what made the atom read as "white on white"
-   in light mode even though its own strokes were correctly black: a large blurred near-white glow
-   painted right on top of it. In dark mode this still reads as a warm glow (bright ink on a black
-   stage); in light mode the same token instead reads as a soft dark vignette behind the atom (dark
-   ink on a light stage) — the same "ambient presence" idea, just inverted the way a light-in-front-
-   of-dark glow naturally becomes a shadow-behind when the backdrop flips. */
+/* Sits directly behind the atom (inset: 14%, roughly the atom's own footprint), blurred into a
+   soft ambient glow. rgba(var(--atom-ink), alpha) like the atom itself, so it stays in lockstep
+   with the atom's own ink color rather than being a separately hardcoded value. */
 .stage-frame::before {
   inset: 14%;
   border-radius: 50%;
@@ -7927,13 +7703,11 @@ body::after {
 
 /* Sticky so the column labels stay readable while scrolling a long holdings list — background
    matches .view-mode-overlay's own scrim exactly (not a token; that scrim is a fixed dark
-   backdrop independent of light/dark theme, same as the atom stage it sits over, so the sticky
-   header needs the identical literal to hide rows scrolling underneath it, not something that'd
-   drift if the frame tokens ever change). Uses --cosmic-* (not --frame-*) for the same reason the
-   background is a raw literal instead of --frame-surface: this whole overlay stays cosmic-dark
-   regardless of system theme, but --frame-* tokens themselves flip under prefers-color-scheme —
-   using them here would put "dark ink for a light panel" text on a permanently near-black
-   background under a light-mode system, which is exactly as unreadable as it sounds.
+   backdrop, same as the atom stage it sits over, so the sticky header needs the identical literal
+   to hide rows scrolling underneath it, not something that'd drift if the frame tokens ever
+   change). Uses --cosmic-* (not --frame-*) for the same reason the background is a raw literal
+   instead of --frame-surface: this whole overlay stays cosmic-dark independent of the --frame-*
+   panel tokens.
    No border-bottom — a border drawn per head-cell can only ever span that one cell's own box, so
    across five gapped columns it rendered as five short, misaligned dashes instead of one line,
    which read as broken rather than as a deliberate divider. The header reads as its own band from
