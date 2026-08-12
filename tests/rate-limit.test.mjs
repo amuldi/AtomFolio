@@ -105,14 +105,18 @@ test('getLiveMarketDataWithCache serves cached payloads within the TTL', async (
     return { latestPrice: 100 + calls };
   };
   const base = 5_000_000;
+  // Explicit ttlMs rather than relying on the module's own default (a short few-second TTL by
+  // design, see marketDataCache.mjs) — this test is about the caching mechanism honoring whatever
+  // TTL it's given, not about pinning down what that default currently happens to be.
+  const ttlMs = 3 * 60_000;
 
   const first = await getLiveMarketDataWithCache(
     { ticker: 'AAPL' },
-    { fetcher, now: base },
+    { fetcher, now: base, ttlMs },
   );
   const second = await getLiveMarketDataWithCache(
     { ticker: 'AAPL' },
-    { fetcher, now: base + 60_000 },
+    { fetcher, now: base + 60_000, ttlMs },
   );
 
   assert.equal(calls, 1);
@@ -129,11 +133,12 @@ test('getLiveMarketDataWithCache refetches after the TTL expires', async () => {
     return { latestPrice: calls };
   };
   const base = 6_000_000;
+  const ttlMs = 3 * 60_000;
 
-  await getLiveMarketDataWithCache({ ticker: 'MSFT' }, { fetcher, now: base });
+  await getLiveMarketDataWithCache({ ticker: 'MSFT' }, { fetcher, now: base, ttlMs });
   const refreshed = await getLiveMarketDataWithCache(
     { ticker: 'MSFT' },
-    { fetcher, now: base + 3 * 60_000 + 1 },
+    { fetcher, now: base + ttlMs + 1, ttlMs },
   );
 
   assert.equal(calls, 2);

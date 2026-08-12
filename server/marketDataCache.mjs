@@ -1,6 +1,11 @@
-import { fetchLiveMarketDataFromProviders } from '../src/lib/liveMarketData.js';
+import { fetchLiveQuoteWithKisRouting } from './marketData/liveQuoteRouter.mjs';
 
-const FRESH_TTL_MS = 3 * 60 * 1000;
+// Was 3 minutes; live portfolio/lookup views poll far more often than that in practice, so most
+// requests were serving quotes that were already stale relative to how fresh the UI implies they
+// are. 10s keeps the "share one cache entry across every concurrent request for the same ticker"
+// benefit (see getLiveMarketDataWithCache below) while actually refreshing at a cadence closer to
+// what "실시간" labels on the UI (MarketLivePreview, the KIS source label itself) imply.
+const FRESH_TTL_MS = 10 * 1000;
 const MAX_CACHE_ENTRIES = 500;
 
 // Entries are kept past the TTL so the last successful quote can be served
@@ -38,7 +43,7 @@ function toResponsePayload(entry, { stale, staleReason = '' } = {}) {
 export async function getLiveMarketDataWithCache(
   { ticker, name } = {},
   {
-    fetcher = fetchLiveMarketDataFromProviders,
+    fetcher = fetchLiveQuoteWithKisRouting,
     ttlMs = FRESH_TTL_MS,
     now = Date.now(),
   } = {},
