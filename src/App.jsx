@@ -99,8 +99,14 @@ const DEFAULT_DISPLAY_FX_RATES = {
 };
 const DATE_BASIS_OPTIONS = ['kst', 'local'];
 const SETTING_TOGGLE_OPTIONS = ['on', 'off'];
+// Mirrors desktop's own appearance setting (desktop/src/lib/store.mjs) one-for-one — same three
+// options, same 'system' default, same name. 'system' means "no opinion, let the media query
+// decide" rather than a resolved value in its own right, which is exactly what clearing
+// document.documentElement.dataset.theme (see the effect that applies this) achieves.
+const THEME_OPTIONS = ['system', 'light', 'dark'];
 const STORAGE_KEYS = {
   language: 'atom-sketch-language',
+  theme: 'atom-sketch-theme',
   assetClassMode: 'atom-sketch-asset-class-mode',
   allocationWeightMode: 'atom-sketch-allocation-weight-mode',
   scoreWeightPreset: 'atom-sketch-score-weight-preset',
@@ -207,6 +213,10 @@ const UI_TEXT = {
     english: '영어',
     settingsAria: '설정 열기',
     settingsSectionLanguage: '언어',
+    settingsSectionTheme: '테마',
+    themeSystem: '시스템',
+    themeLight: '라이트',
+    themeDark: '다크',
     settingsSectionBaseCurrency: '기준 통화',
     settingsCurrencyKrw: 'KRW',
     settingsCurrencyUsd: 'USD',
@@ -329,6 +339,10 @@ const UI_TEXT = {
     english: 'English',
     settingsAria: 'Open settings',
     settingsSectionLanguage: 'Language',
+    settingsSectionTheme: 'Theme',
+    themeSystem: 'System',
+    themeLight: 'Light',
+    themeDark: 'Dark',
     settingsSectionBaseCurrency: 'Base Currency',
     settingsCurrencyKrw: 'KRW',
     settingsCurrencyUsd: 'USD',
@@ -5679,6 +5693,9 @@ export default function App() {
     return readStoredOption(STORAGE_KEYS.language, LANGUAGE_OPTIONS, 'ko');
   });
   const text = textFor(language);
+  const [theme, setTheme] = useState(() =>
+    readStoredOption(STORAGE_KEYS.theme, THEME_OPTIONS, 'system'),
+  );
   const [baseCurrency, setBaseCurrency] = useState(() =>
     readStoredOption(STORAGE_KEYS.baseCurrency, BASE_CURRENCY_OPTIONS, 'KRW'),
   );
@@ -6322,10 +6339,28 @@ export default function App() {
 
     window.localStorage.setItem(STORAGE_KEYS.language, language);
     document.documentElement.lang = language === 'en' ? 'en' : 'ko';
-    window.localStorage.removeItem('atom-sketch-theme');
-    delete document.documentElement.dataset.theme;
-    document.documentElement.style.colorScheme = 'dark';
   }, [language]);
+
+  // Same mechanism desktop already uses (atom-widget.css's :root[data-theme='light'], set from
+  // main.js's resolved appearance setting): 'light'/'dark' write the attribute directly so CSS can
+  // target it unconditionally; 'system' removes it entirely so the plain
+  // @media (prefers-color-scheme) rules take back over on their own, no attribute forcing either
+  // direction. style.colorScheme mirrors the same resolution for native form controls/scrollbars —
+  // cleared (not just left at the CSS file's own unconditional 'dark') for 'system' so those also
+  // genuinely follow the OS preference instead of stubbornly staying dark-styled forever.
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (theme === 'system') {
+      delete document.documentElement.dataset.theme;
+    } else {
+      document.documentElement.dataset.theme = theme;
+    }
+    document.documentElement.style.colorScheme = theme === 'system' ? '' : theme;
+    window.localStorage.setItem(STORAGE_KEYS.theme, theme);
+  }, [theme]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -7686,6 +7721,17 @@ export default function App() {
         label: option === 'ko' ? text.korean : text.english,
         active: language === option,
         onSelect: () => setLanguage(option),
+      })),
+    },
+    {
+      key: 'theme',
+      title: text.settingsSectionTheme,
+      options: THEME_OPTIONS.map((option) => ({
+        key: option,
+        label:
+          option === 'system' ? text.themeSystem : option === 'light' ? text.themeLight : text.themeDark,
+        active: theme === option,
+        onSelect: () => setTheme(option),
       })),
     },
     {

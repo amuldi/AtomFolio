@@ -1,5 +1,11 @@
 :root {
-  color-scheme: dark;
+  /* 'light dark' (not a bare 'dark') so native form controls/scrollbars actually follow the OS
+     preference when the app's own theme setting is 'system' — App.jsx's theme effect sets
+     style.colorScheme to a forced 'light' or 'dark' for a manual selection, and clears it back to
+     nothing (falling through to this stylesheet value) for 'system', so this is what 'system'
+     itself resolves to. A bare 'dark' here would mean 'system' still forced dark native chrome
+     regardless of what the OS actually says — the opposite of what 'system' is supposed to mean. */
+  color-scheme: light dark;
   --app-bg: #000000;
   font-family:
     'Iowan Old Style',
@@ -101,25 +107,37 @@
      .center-*, .graphite-dust, .label-*, .aura-line) used to be a hardcoded warm-cream rgba()
      triplet per rule, each hand-tuned within a few RGB units of the others (245-255 range across
      all of them) — close enough to be visually indistinguishable, so consolidating them into one
-     shared token here changes nothing perceptible in dark mode. This is the same technique (same
-     token name, same dark value) desktop's atom-sketch.css already ships and has verified working
-     — see its own --atom-ink definition — reused rather than reinvented so the two atoms swap
-     tone identically instead of via two independently-tuned color systems. */
+     shared token here changes nothing perceptible in dark mode. Same token name as desktop's own
+     --atom-ink (atom-sketch.css), though the two dark values are independent — only the *light*
+     value is required to match desktop's (see the light blocks below); this dark one is just
+     whatever the site's own pre-existing cream already was. */
   --atom-ink: 250, 240, 220;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Light mode — frame panels, the atom stage's own ink, the stage background (--app-bg), and the
-   star/nebula field dim down accordingly (see further down this block for the last two). Still
-   deliberately absent: .atom-webgl-*, .portfolio-preview*, and .atom-hint. .atom-hint stays
-   fixed-dark on purpose, same call desktop already made for its identical element — it overlays
-   the atom stage directly, and while the stage's flat background is going light here, .atom-hint's
-   own literal dark backdrop was never tied to --app-bg in the first place, so it keeps reading
-   correctly regardless of theme (the same reasoning that made it correctly exempt on desktop). */
+/* Light theme — frame panels, the atom stage's own ink, the stage background (--app-bg), and the
+   star/nebula field, applied via two parallel mechanisms that need to stay in lockstep:
+     1. @media (prefers-color-scheme: light), scoped to :not([data-theme='dark']) — system-level
+        light, EXCEPT when a manual 'dark' choice should override it.
+     2. :root[data-theme='light'] — a manual light choice, which must win even if the system
+        itself is reporting dark (a bare media query alone can never do that; media conditions
+        don't know about this app's own theme state).
+   Both blocks carry the exact same declarations on purpose — CSS has no "media query OR attribute
+   selector" combinator, so there's no way to write this once. data-theme itself is written by
+   App.jsx's theme effect: 'light'/'dark' set the attribute directly, 'system' removes it so only
+   mechanism 1 is ever in play. There is no equivalent :root[data-theme='dark'] block below — a
+   manual dark choice needs no override rules of its own, since the unconditional :root block above
+   already *is* the dark value; [data-theme='dark'] only ever needs to keep mechanism 1 from firing
+   over top of it, which :not([data-theme='dark']) already handles.
+   Still deliberately excluded from both mechanisms: .atom-webgl-*, .portfolio-preview*, and
+   .atom-hint. .atom-hint stays fixed-dark on purpose, same call desktop already made for its
+   identical element — it overlays the atom stage directly, and its own literal dark backdrop was
+   never tied to --app-bg in the first place, so it keeps reading correctly regardless of theme
+   (the same reasoning that made it correctly exempt on desktop). */
 @media (prefers-color-scheme: light) {
-  :root {
+  :root:not([data-theme='dark']) {
     --frame-ink-a: 26, 22, 16;
     --frame-ink-b: 32, 27, 20;
     --frame-ink-c: 54, 47, 36;
@@ -129,10 +147,12 @@
     --frame-ink-secondary: 70, 66, 60;
     --frame-white: 24, 20, 15;
     --frame-surface: 250, 246, 240;
-    /* Same value as desktop's :root[data-theme='light'] --atom-ink (atom-widget.css) — reused
-       verbatim, not retuned, per this stage's own instruction to lean on the already-verified
-       desktop value instead of picking a fresh one. */
-    --atom-ink: 32, 28, 23;
+    /* A true near-black, not desktop's "dark ink" (rgba(28, 24, 20, 0.94), a warm dark brown) —
+       this app's own light mode calls for the atom to read as unambiguous black against its now-
+       bright stage, closer to print ink than desktop's softer warm-dark. Picked by eye against
+       --app-bg below, with headroom to go darker still if a real display ever shows it reading as
+       anything other than black. */
+    --atom-ink: 10, 8, 6;
     /* Same hex as --frame-surface above (250, 246, 240), just spelled as a color instead of an RGB
        triplet — --app-bg is consumed directly as `background: var(--app-bg)`, not through
        rgba(var(--x), alpha) like the --frame-* tokens are, so it needs its own literal rather than
@@ -152,19 +172,19 @@
      deliberately untouched — the halo reads as a soft glow behind the atom either way (arguably
      more coherent in light mode, like sunlight), and meteors are a rare, already-transient detail
      that doesn't carry the same "stars in daytime" mismatch. */
-  .space-depth__nebula--far {
+  :root:not([data-theme='dark']) .space-depth__nebula--far {
     opacity: calc(0.06 + var(--camera-focus) * 0.04) !important;
   }
 
-  .space-depth__stars--far {
+  :root:not([data-theme='dark']) .space-depth__stars--far {
     opacity: calc(0.05 + var(--camera-focus) * 0.02) !important;
   }
 
-  .space-depth__stars--mid {
+  :root:not([data-theme='dark']) .space-depth__stars--mid {
     opacity: calc(0.06 + var(--camera-focus) * 0.02) !important;
   }
 
-  .space-depth__stars--near {
+  :root:not([data-theme='dark']) .space-depth__stars--near {
     opacity: calc(0.07 + var(--camera-focus) * 0.03) !important;
   }
 
@@ -174,17 +194,62 @@
      boosts just these to something close to opaque. Every other rule using --frame-surface is a
      smaller element already sitting on top of one of these (an input pill, a metric card, a
      compare row), so it inherits a solid backdrop for free once its parent is fixed. */
-  .tool-drawer {
+  :root:not([data-theme='dark']) .tool-drawer {
     background: rgba(var(--frame-surface), 0.94) !important;
   }
 
-  .tool-drawer__panel {
+  :root:not([data-theme='dark']) .tool-drawer__panel {
     background: rgba(var(--frame-surface), 0.97) !important;
   }
 
-  .hover-card {
+  :root:not([data-theme='dark']) .hover-card {
     background: rgba(var(--frame-surface), 0.96) !important;
   }
+}
+
+/* Manual light selection — exact duplicate of the media block above (see its own comment for why
+   this can't be unified into one rule), minus the media condition, so it applies even when the
+   system itself is reporting dark. */
+:root[data-theme='light'] {
+  --frame-ink-a: 26, 22, 16;
+  --frame-ink-b: 32, 27, 20;
+  --frame-ink-c: 54, 47, 36;
+  --frame-ink-d: 74, 64, 48;
+  --frame-ink-e: 92, 80, 60;
+  --frame-hairline: 20, 16, 10;
+  --frame-ink-secondary: 70, 66, 60;
+  --frame-white: 24, 20, 15;
+  --frame-surface: 250, 246, 240;
+  --atom-ink: 10, 8, 6;
+  --app-bg: #faf6f0;
+}
+
+:root[data-theme='light'] .space-depth__nebula--far {
+  opacity: calc(0.06 + var(--camera-focus) * 0.04) !important;
+}
+
+:root[data-theme='light'] .space-depth__stars--far {
+  opacity: calc(0.05 + var(--camera-focus) * 0.02) !important;
+}
+
+:root[data-theme='light'] .space-depth__stars--mid {
+  opacity: calc(0.06 + var(--camera-focus) * 0.02) !important;
+}
+
+:root[data-theme='light'] .space-depth__stars--near {
+  opacity: calc(0.07 + var(--camera-focus) * 0.03) !important;
+}
+
+:root[data-theme='light'] .tool-drawer {
+  background: rgba(var(--frame-surface), 0.94) !important;
+}
+
+:root[data-theme='light'] .tool-drawer__panel {
+  background: rgba(var(--frame-surface), 0.97) !important;
+}
+
+:root[data-theme='light'] .hover-card {
+  background: rgba(var(--frame-surface), 0.96) !important;
 }
 
 * {
