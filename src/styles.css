@@ -727,49 +727,6 @@ body::after {
   stroke-width: 1.18;
 }
 
-.spiral-glyph {
-  position: fixed;
-  left: 0;
-  top: 0;
-  z-index: 2;
-  width: 3.38rem;
-  height: 3.38rem;
-  pointer-events: none;
-  opacity: 0.95;
-  will-change: transform;
-  filter: drop-shadow(0 0 12px rgba(248, 235, 212, 0.08));
-}
-
-.spiral-glyph__icon {
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-
-.spiral-glyph__soft,
-.spiral-glyph__main,
-.spiral-glyph__highlight {
-  fill: none;
-  vector-effect: non-scaling-stroke;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.spiral-glyph__soft {
-  stroke: rgba(250, 240, 220, 0.34);
-  stroke-width: 1.88;
-}
-
-.spiral-glyph__main {
-  stroke: rgba(255, 247, 232, 0.94);
-  stroke-width: 1.32;
-}
-
-.spiral-glyph__highlight {
-  stroke: rgba(255, 249, 238, 0.58);
-  stroke-width: 0.94;
-}
-
 .heatmap-dock {
   position: fixed;
   left: 0;
@@ -5865,7 +5822,7 @@ body::after {
   filter:
     blur(var(--preview-blur, 0.04px))
     brightness(1.12)
-    drop-shadow(0 0 calc(var(--preview-shadow, 10px) * 0.92) rgba(248, 235, 212, 0.2));
+    drop-shadow(0 0 calc(var(--preview-shadow, 10px) * 0.92) rgba(var(--atom-ink), 0.2));
   transform-style: preserve-3d;
   transform-origin: center center;
   isolation: isolate;
@@ -5883,10 +5840,21 @@ body::after {
   pointer-events: none;
 }
 
+/* Same halo-behind-the-atom pattern as .stage-frame::before/::after (the main atom's own ambient
+   glow) — missed in the first pass along with the rest of .portfolio-preview__*, for the same
+   reason: a bright cream halo painted right over content that's now dark ink on a light stage
+   reads as a wash, not a glow. rgba(var(--atom-ink), alpha) here too, not alpha-boosted like the
+   atom's own stroke/fill rules — this is meant to stay a soft ambient effect, not a bold line, in
+   either theme. */
 .portfolio-preview::before {
   inset: 24%;
   border-radius: 999px;
-  background: radial-gradient(circle, rgba(251, 240, 216, 0.34) 0%, rgba(249, 239, 216, 0.16) 42%, rgba(249, 239, 216, 0) 76%);
+  background: radial-gradient(
+    circle,
+    rgba(var(--atom-ink), 0.34) 0%,
+    rgba(var(--atom-ink), 0.16) 42%,
+    rgba(var(--atom-ink), 0) 76%
+  );
   filter: blur(12px);
   opacity: 0.72;
 }
@@ -5894,7 +5862,7 @@ body::after {
 .portfolio-preview::after {
   inset: 19%;
   border-radius: 50%;
-  border: 1px solid rgba(250, 239, 217, 0.24);
+  border: 1px solid rgba(var(--atom-ink), 0.24);
   transform: rotate(-7deg) scale(1.06, 0.92);
   opacity: 0.62;
 }
@@ -5910,7 +5878,7 @@ body::after {
   filter:
     blur(0)
     brightness(1.22)
-    drop-shadow(0 0 30px rgba(247, 233, 208, 0.34));
+    drop-shadow(0 0 30px rgba(var(--atom-ink), 0.34));
   outline: none;
 }
 
@@ -5937,7 +5905,7 @@ body::after {
 
 .portfolio-preview__bond-ghost {
   fill: none;
-  stroke: rgba(255, 242, 216, 0.14);
+  stroke: rgba(var(--atom-ink), calc(0.14 * var(--atom-ink-alpha-boost)));
   stroke-width: 5.4;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -5945,7 +5913,7 @@ body::after {
 
 .portfolio-preview__bond-soft {
   fill: none;
-  stroke: rgba(255, 242, 216, 0.24);
+  stroke: rgba(var(--atom-ink), calc(0.24 * var(--atom-ink-alpha-boost)));
   stroke-width: 3.24;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -5953,15 +5921,15 @@ body::after {
 
 .portfolio-preview__bond-main {
   fill: none;
-  stroke: rgba(249, 239, 218, 0.94);
+  stroke: rgba(var(--atom-ink), calc(0.94 * var(--atom-ink-alpha-boost)));
   stroke-width: 1.28;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .portfolio-preview__node-soft {
-  fill: rgba(245, 233, 208, 0.08);
-  stroke: rgba(249, 238, 214, 0.58);
+  fill: rgba(var(--atom-ink), calc(0.08 * var(--atom-ink-alpha-boost)));
+  stroke: rgba(var(--atom-ink), calc(0.58 * var(--atom-ink-alpha-boost)));
   stroke-width: 1.22;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -5969,7 +5937,7 @@ body::after {
 
 .portfolio-preview__node-mid {
   fill: none;
-  stroke: rgba(250, 239, 218, 0.72);
+  stroke: rgba(var(--atom-ink), calc(0.72 * var(--atom-ink-alpha-boost)));
   stroke-width: 1.06;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -5977,7 +5945,7 @@ body::after {
 
 .portfolio-preview__node-main {
   fill: none;
-  stroke: rgba(250, 240, 220, 0.98);
+  stroke: rgba(var(--atom-ink), calc(0.98 * var(--atom-ink-alpha-boost)));
   stroke-width: 1.22;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -5985,20 +5953,20 @@ body::after {
 
 .portfolio-preview__orbit {
   fill: none;
-  stroke: rgba(249, 239, 218, 0.56);
+  stroke: rgba(var(--atom-ink), calc(0.56 * var(--atom-ink-alpha-boost)));
   stroke-width: 1.02;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .portfolio-preview__dust {
-  fill: rgba(248, 236, 212, 0.84);
+  fill: rgba(var(--atom-ink), calc(0.84 * var(--atom-ink-alpha-boost)));
   stroke: none;
 }
 
 .portfolio-preview__center {
-  fill: rgba(248, 237, 216, 0.44);
-  stroke: rgba(249, 239, 218, 0.9);
+  fill: rgba(var(--atom-ink), calc(0.44 * var(--atom-ink-alpha-boost)));
+  stroke: rgba(var(--atom-ink), calc(0.9 * var(--atom-ink-alpha-boost)));
   stroke-width: 1.14;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -6014,11 +5982,11 @@ body::after {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: rgba(248, 236, 212, 0.88);
+  color: rgba(var(--atom-ink), calc(0.88 * var(--atom-ink-alpha-boost)));
   font-size: 0.74rem;
   letter-spacing: 0.02em;
   font-family: "Bradley Hand", "Marker Felt", "Apple Chancery", "Segoe Print", cursive;
-  text-shadow: 0 0 12px rgba(248, 236, 212, 0.14);
+  text-shadow: 0 0 12px rgba(var(--atom-ink), calc(0.14 * var(--atom-ink-alpha-boost)));
   pointer-events: none;
 }
 
@@ -6834,11 +6802,16 @@ body::after {
     translate3d(var(--space-pan-stage-x), var(--space-pan-stage-y), calc(var(--camera-focus) * 44px))
     scale(var(--camera-stage-zoom))
     rotate(var(--camera-stage-roll));
+  /* Same ambient-glow family as .stage-frame::before/.portfolio-preview::before — this drop-shadow
+     wraps the whole camera/stage subtree (both the SVG and, behind the dev-only ?webglScene=1
+     flag, the WebGL preview), so it's the atom's ambient presence too, not a separate effect;
+     rgba(var(--atom-ink), alpha) keeps it consistent with those instead of staying a fixed warm
+     glow regardless of theme. */
   filter:
     brightness(calc(1.02 + var(--camera-focus) * 0.12))
     drop-shadow(
       0 0 calc(18px + var(--camera-focus) * 18px)
-      rgba(247, 233, 208, calc(0.08 + var(--camera-focus) * 0.12))
+      rgba(var(--atom-ink), calc(0.08 + var(--camera-focus) * 0.12))
     );
 }
 
