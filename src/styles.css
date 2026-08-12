@@ -233,11 +233,11 @@
      and pale" rather than solid — thickening just the two foreground layers compensates for that
      without touching the softer background layers, which are meant to stay secondary either way. */
   :root:not([data-theme='dark']) .stroke-main {
-    stroke-width: 2.15;
+    stroke-width: 2.6;
   }
 
   :root:not([data-theme='dark']) .node-main {
-    stroke-width: 2;
+    stroke-width: 2.4;
   }
 
   :root:not([data-theme='dark']) .label-main,
@@ -295,11 +295,11 @@
 /* Exact duplicate of the stroke-width/font-weight rules in the media block above — see its
    comment for why these exist. */
 :root[data-theme='light'] .stroke-main {
-  stroke-width: 2.15;
+  stroke-width: 2.6;
 }
 
 :root[data-theme='light'] .node-main {
-  stroke-width: 2;
+  stroke-width: 2.4;
 }
 
 :root[data-theme='light'] .label-main,

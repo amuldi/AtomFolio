@@ -43,6 +43,14 @@ export function SketchAtom({
   ];
   const dimFactor = atom.dimmed ? 0.18 : 1;
   const focusBoost = atom.isSelected ? 1.08 : atom.isGroupMatch ? 1.04 : 1;
+  // Light mode (inkBoost > 1): the depth/hoverMix-based formula is a 3D depth cue (atoms rotated
+  // toward the back read as fainter) that's fine layered on top of dark-mode's already-bright base,
+  // but combined with anti-aliasing on a thin stroke and the group's own smudge blur (see the
+  // <g filter> below), it was enough to make the *foreground* line — the one thing that has to read
+  // as solidly visible regardless of rotation — drop back into "faint" territory. Only the two
+  // background/secondary layers keep the depth-based falloff; the main line goes flat opaque
+  // (still respecting dimFactor, so search/group dimming still works).
+  const isLightMode = inkBoost > 1;
 
   return (
     <>
@@ -61,7 +69,7 @@ export function SketchAtom({
       <path
         className="stroke-main"
         d={lineLayers[0]}
-        opacity={Math.min(1, mainOpacity * dimFactor * focusBoost * inkBoost)}
+        opacity={isLightMode ? dimFactor : Math.min(1, mainOpacity * dimFactor * focusBoost)}
         strokeWidth={0.98 + scale * 0.46}
       />
 
@@ -83,10 +91,11 @@ export function SketchAtom({
         <path
           className="node-main"
           d={atom.nodePaths[1]}
-          opacity={Math.min(
-            1,
-            (0.48 + atom.depth * 0.38 + atom.hoverMix * 0.08) * dimFactor * focusBoost * inkBoost,
-          )}
+          opacity={
+            isLightMode
+              ? dimFactor
+              : Math.min(1, (0.48 + atom.depth * 0.38 + atom.hoverMix * 0.08) * dimFactor * focusBoost)
+          }
           strokeWidth={1.24}
         />
         <circle
@@ -397,7 +406,13 @@ export function AtomSketch({
         ))}
       </g>
 
-      <g className="sketch-core" filter="url(#smudge)">
+      {/* The smudge blur is a dark-mode pencil-sketch touch (softening bright lines against a near-
+          black stage) that works against light mode's goal of a crisp, unambiguously-dark line: a
+          group-level Gaussian blur spreads a thin stroke's peak intensity across its neighboring
+          pixels, which measurably reduces how dark any single pixel along that stroke ends up,
+          compounding with anti-aliasing on top of an already-thin line. Skipped entirely once
+          inkBoost signals light mode rather than trying to tune the blur radius down instead. */}
+      <g className="sketch-core" filter={inkBoost > 1 ? undefined : 'url(#smudge)'}>
         {backAtoms.map((atom) => (
           <SketchAtom
             key={`back-${atom.id}`}
