@@ -104,6 +104,13 @@ const SETTING_TOGGLE_OPTIONS = ['on', 'off'];
 // decide" rather than a resolved value in its own right, which is exactly what clearing
 // document.documentElement.dataset.theme (see the effect that applies this) achieves.
 const THEME_OPTIONS = ['system', 'light', 'dark'];
+// Must match --atom-ink-alpha-boost's light-mode value in styles.css. The CSS variable only
+// reaches colors declared as rgba(var(--atom-ink), ...); a lot of the atom's actual visible
+// contrast comes from a *second*, independent opacity layer set as plain SVG attributes in
+// src/components/atom/index.jsx (per-node/per-line "hand-drawn" opacity jitter), which the CSS
+// variable can never touch. atomInkAlphaBoost (below) is that same multiplier applied on the JS
+// side so light mode doesn't end up with a technically-black-but-nearly-transparent atom.
+const ATOM_INK_ALPHA_BOOST_LIGHT = 2.4;
 const STORAGE_KEYS = {
   language: 'atom-sketch-language',
   theme: 'atom-sketch-theme',
@@ -5696,6 +5703,15 @@ export default function App() {
   const [theme, setTheme] = useState(() =>
     readStoredOption(STORAGE_KEYS.theme, THEME_OPTIONS, 'system'),
   );
+  // Tracks the OS-level preference live (not just at mount) so theme === 'system' keeps the JS-side
+  // atomInkAlphaBoost below in sync with the CSS media query if the user flips their OS appearance
+  // without touching this app's own theme setting.
+  const [systemPrefersLight, setSystemPrefersLight] = useState(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return false;
+    }
+    return window.matchMedia('(prefers-color-scheme: light)').matches;
+  });
   const [baseCurrency, setBaseCurrency] = useState(() =>
     readStoredOption(STORAGE_KEYS.baseCurrency, BASE_CURRENCY_OPTIONS, 'KRW'),
   );
@@ -6361,6 +6377,23 @@ export default function App() {
     document.documentElement.style.colorScheme = theme === 'system' ? '' : theme;
     window.localStorage.setItem(STORAGE_KEYS.theme, theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+
+    const query = window.matchMedia('(prefers-color-scheme: light)');
+    const handleChange = (event) => setSystemPrefersLight(event.matches);
+
+    query.addEventListener('change', handleChange);
+    return () => query.removeEventListener('change', handleChange);
+  }, []);
+
+  // Same precedence as the CSS: an explicit 'light'/'dark' choice always wins; 'system' defers to
+  // the live OS preference tracked above.
+  const isLightAtomTheme = theme === 'light' || (theme === 'system' && systemPrefersLight);
+  const atomInkAlphaBoost = isLightAtomTheme ? ATOM_INK_ALPHA_BOOST_LIGHT : 1;
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -8286,6 +8319,7 @@ export default function App() {
                     ariaLabel={text.atomAria}
                     highlightActive={highlightActive}
                     centerFocusActive={Boolean(selectedAtomId)}
+                    inkBoost={atomInkAlphaBoost}
                     onCenterClick={hasPortfolioItems ? clearCenterSelection : triggerIntroCenterBurst}
                     onPointerDown={handleNodePointerDown}
                     onPointerEnter={handleNodeEnter}
@@ -8316,6 +8350,7 @@ export default function App() {
                           entry={entry}
                           slot={PORTFOLIO_PREVIEW_SLOTS[index]}
                           onSelect={switchToPortfolio}
+                          inkBoost={atomInkAlphaBoost}
                         />
                       ))}
                   </div>
