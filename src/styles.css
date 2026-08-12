@@ -223,6 +223,27 @@
   :root:not([data-theme='dark']) .hover-card {
     background: rgba(var(--frame-surface), 0.96) !important;
   }
+
+  /* A CSS class rule always wins over the SVG stroke-width *attribute* SketchAtom computes in JS
+     (author stylesheet beats presentation attribute in the cascade), so the base .stroke-main /
+     .node-main rules above are what actually render — not whatever index.jsx passed as
+     strokeWidth={...}. --atom-ink-alpha-boost already pushes these strokes to ~full alpha in light
+     mode, but a fully-opaque 1.5px/1.42px line is still thin enough that anti-aliased edge pixels
+     (never truly (10,8,6)) make up a large share of what the eye actually sees, reading as "thin
+     and pale" rather than solid — thickening just the two foreground layers compensates for that
+     without touching the softer background layers, which are meant to stay secondary either way. */
+  :root:not([data-theme='dark']) .stroke-main {
+    stroke-width: 2.15;
+  }
+
+  :root:not([data-theme='dark']) .node-main {
+    stroke-width: 2;
+  }
+
+  :root:not([data-theme='dark']) .label-main,
+  :root:not([data-theme='dark']) .label-detail {
+    font-weight: 700;
+  }
 }
 
 /* Manual light selection — exact duplicate of the media block above (see its own comment for why
@@ -269,6 +290,21 @@
 
 :root[data-theme='light'] .hover-card {
   background: rgba(var(--frame-surface), 0.96) !important;
+}
+
+/* Exact duplicate of the stroke-width/font-weight rules in the media block above — see its
+   comment for why these exist. */
+:root[data-theme='light'] .stroke-main {
+  stroke-width: 2.15;
+}
+
+:root[data-theme='light'] .node-main {
+  stroke-width: 2;
+}
+
+:root[data-theme='light'] .label-main,
+:root[data-theme='light'] .label-detail {
+  font-weight: 700;
 }
 
 * {
