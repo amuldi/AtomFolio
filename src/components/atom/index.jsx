@@ -154,12 +154,17 @@ export function AtomLabel({ atom, inkBoost = 1 }) {
   const baseX = direction.x > 0.24 ? 10 : direction.x < -0.24 ? -10 : 0;
   const noteX = atom.x + direction.x * atom.labelOffset;
   const noteY = atom.y + direction.y * atom.labelOffset + jitter(atom.seed + 601, 4);
-  const opacity = Math.min(
-    1,
-    (0.48 + atom.depth * 0.32 + atom.hoverMix * 0.08) *
-      (atom.dimmed ? 0.24 : atom.isSelected ? 1.06 : atom.isGroupMatch ? 1.03 : 1) *
-      inkBoost,
-  );
+  // Same "no formula" call as .stroke-main/.node-main in SketchAtom above: in light mode the label
+  // goes flat opaque (still respecting the dimmed state) instead of the depth/hover-based falloff.
+  const opacity =
+    inkBoost > 1
+      ? (atom.dimmed ? 0.24 : 1)
+      : Math.min(
+          1,
+          (0.48 + atom.depth * 0.32 + atom.hoverMix * 0.08) *
+            (atom.dimmed ? 0.24 : atom.isSelected ? 1.06 : atom.isGroupMatch ? 1.03 : 1) *
+            inkBoost,
+        );
 
   return (
     <g

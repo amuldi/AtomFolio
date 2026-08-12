@@ -232,16 +232,25 @@
      (never truly (10,8,6)) make up a large share of what the eye actually sees, reading as "thin
      and pale" rather than solid — thickening just the two foreground layers compensates for that
      without touching the softer background layers, which are meant to stay secondary either way. */
+  /* No more rgba(var(--atom-ink), ...) formula for these three — pure #000 at forced full opacity,
+     no boost multiplier, no depth-based falloff, nothing left to under-shoot. This is deliberately
+     the blunt version: everything more "considered" (alpha boost, then stroke-width, then dropping
+     the smudge blur filter, then bypassing the depth-opacity formula in index.jsx) was tried first
+     and still weren't unmistakably solid black on a real screen, so this replaces all of that
+     guesswork for these three elements with a value that cannot be miscalculated. */
   :root:not([data-theme='dark']) .stroke-main {
+    stroke: #000 !important;
     stroke-width: 2.6;
   }
 
   :root:not([data-theme='dark']) .node-main {
+    stroke: #000 !important;
     stroke-width: 2.4;
   }
 
   :root:not([data-theme='dark']) .label-main,
   :root:not([data-theme='dark']) .label-detail {
+    fill: #000 !important;
     font-weight: 700;
   }
 }
@@ -295,15 +304,18 @@
 /* Exact duplicate of the stroke-width/font-weight rules in the media block above — see its
    comment for why these exist. */
 :root[data-theme='light'] .stroke-main {
+  stroke: #000 !important;
   stroke-width: 2.6;
 }
 
 :root[data-theme='light'] .node-main {
+  stroke: #000 !important;
   stroke-width: 2.4;
 }
 
 :root[data-theme='light'] .label-main,
 :root[data-theme='light'] .label-detail {
+  fill: #000 !important;
   font-weight: 700;
 }
 
