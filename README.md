@@ -476,12 +476,6 @@ ATOMFOLIO_DB_AUTO_MIGRATE="true"
 
 `DATABASE_URL`이 없으면 로컬 개발에서는 JSON 파일 fallback 저장소를 사용합니다.
 
-AI 포트폴리오 요약을 사용하려면 서버 환경 변수에 아래 값을 추가합니다. 이 키는 서버에서만 사용하며, 값이 없으면 앱은 기존 지표 기반 fallback 요약을 표시합니다.
-
-```bash
-OPENAI_API_KEY="sk-..."
-```
-
 로그인은 Clerk로 처리합니다. 아래 값을 설정하지 않으면 앱은 `guest:<uuid>`
 workspace로 저장/복원만 하는 게스트 전용 모드로 동작합니다 (자세한 흐름은
 [인증](#인증) 절 참고).
@@ -522,7 +516,6 @@ Vercel 설정은 [vercel.json](vercel.json)에 있습니다.
 | `GET /api/market/live` | 현재가, 변동률, 차트 데이터 조회 |
 | `GET /api/market/search` | 종목 후보 검색 |
 | `GET /api/market/news` | 시장 뉴스 조회 |
-| `POST /api/ai/portfolio-summary` | 정보 제공 목적의 사용자 입력 기반 AI 포트폴리오 요약 |
 | `GET /api/workspace/session` | 현재 요청의 로그인 감지 상태와 workspace 확인 |
 | `POST /api/workspace/claim-guest` | 로그인 사용자 workspace로 게스트 데이터 병합 |
 | `POST /api/portfolio/ingest` | CSV 텍스트를 포트폴리오로 변환 |

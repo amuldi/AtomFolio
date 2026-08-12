@@ -33,7 +33,6 @@ import {
 } from './lib/liveMarketData.js';
 import { fetchCompanyFinancials } from './lib/companyFinancials.js';
 import { fetchMarketNews, formatNewsTime } from './lib/marketNews.js';
-import { fetchPortfolioAiSummary } from './lib/aiPortfolioSummary.js';
 import {
   createServerPortfolio,
   deleteServerPortfolio,
@@ -145,16 +144,18 @@ const FLOATING_TOOL_Z_INDEX = {
 };
 const TOOL_DRAWER_DEFAULT_WIDTH = 522;
 const TOOL_DRAWER_MAX_WIDTH = 760;
-// Bottom dock resizes by height instead of width — same idea, its own numbers (a portfolio tool
-// panel reads comfortably shorter-but-wider at the bottom of the screen than it does narrow-but-
-// tall on a side, so this isn't just TOOL_DRAWER_DEFAULT_WIDTH's value reused on the other axis).
-const TOOL_DRAWER_DEFAULT_HEIGHT = 380;
-const TOOL_DRAWER_MAX_HEIGHT = 620;
-const TOOL_DRAWER_DOCK_OPTIONS = ['left', 'right', 'bottom'];
+// Bottom used to be a third dock option (its own height-based resize numbers lived here) — dropped
+// in favor of left/right only, see .tool-drawer's CSS for why a transform-based slide can't cleanly
+// support a third axis the way the old clip-path box could.
+const TOOL_DRAWER_DOCK_OPTIONS = ['left', 'right'];
 // How close the cursor has to get to a screen edge, while dragging the drawer's dock handle,
 // before that edge highlights as the drop target. Top is deliberately never a candidate — there's
 // nothing at the top of this app worth docking under (the 탐색/관리 toggle lives there).
 const DOCK_EDGE_HOVER_THRESHOLD_PX = 80;
+// Drag-to-dock release snap duration range — see settlePanel's durationMs formula in
+// handleDockDragPointerDown for how release velocity scales between these two.
+const DOCK_DRAG_SNAP_DURATION_MS = 320;
+const DOCK_DRAG_SNAP_MIN_DURATION_MS = 140;
 const SERVER_SYNC_DEBOUNCE_MS = 850;
 const DAILY_SNAPSHOT_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 const DEFAULT_REBALANCE_TARGET_WEIGHTS = {
@@ -2383,6 +2384,20 @@ function SketchNewsIcon() {
   );
 }
 
+// A plain magnifying glass, not another hand-drawn multi-path sketch like its rail siblings above
+// — "look something up" is a much simpler idea than "a stack of accounts" or "a burst of nodes",
+// and a universally-read glyph reads faster here than a bespoke shape would.
+function SketchLookupIcon() {
+  return (
+    <svg className="lookup-dock__icon" viewBox="0 0 48 48" aria-hidden="true">
+      <circle className="lookup-dock__soft" cx="20.5" cy="19.5" r="10.2" />
+      <circle className="lookup-dock__main" cx="20" cy="19" r="9.6" />
+      <path className="lookup-dock__soft" d="M27.4 27.4L36.8 36.8" />
+      <path className="lookup-dock__main" d="M27 27L36.2 36.2" />
+    </svg>
+  );
+}
+
 function summarizePortfolioEntryAccounts(entry, language) {
   const sourceItems = (entry?.timelineItems?.length ? entry.timelineItems : entry?.items) ?? [];
   const labels = [];
@@ -3469,8 +3484,6 @@ function ToolSideDrawer({
   pendingManualTicker = null,
   drawerWidth = TOOL_DRAWER_DEFAULT_WIDTH,
   onDrawerWidthChange,
-  drawerHeight = TOOL_DRAWER_DEFAULT_HEIGHT,
-  onDrawerHeightChange,
   dock = 'left',
   onDockChange,
   onDockDragHoverEdgeChange,
@@ -3483,6 +3496,10 @@ function ToolSideDrawer({
   renderSettingsPanel,
 }) {
   const text = textFor(language);
+  // Imperative target for the drag-to-dock gesture's live follow + release settle (see
+  // handleDockDragPointerDown) — mutated directly via style.transform on every pointermove/on
+  // release, never through React state, so a 60fps drag doesn't mean 60fps of re-renders.
+  const panelRef = useRef(null);
   const [resizing, setResizing] = useState(false);
   const [manualAccountName, setManualAccountName] = useState('');
   const [manualStockName, setManualStockName] = useState('');
@@ -3498,11 +3515,23 @@ function ToolSideDrawer({
   const [manualMarketSuggestions, setManualMarketSuggestions] = useState([]);
   const [manualSuggestionStatus, setManualSuggestionStatus] = useState('idle');
   const [manualSuggestionLocked, setManualSuggestionLocked] = useState(false);
+  // Standalone stock lookup (Stage 4) — deliberately its own state, not a reuse of the manual*
+  // fields above. Those double as an in-progress "add to portfolio" draft (buy price, shares,
+  // asset class, the works); wiring lookup through the same state would mean typing a ticker here
+  // to just glance at its price could silently leave stray data sitting in that draft. Keeping
+  // them fully separate is what makes "never affects portfolio state" actually true rather than
+  // just true by convention.
+  const [lookupQuery, setLookupQuery] = useState('');
+  const [lookupSuggestions, setLookupSuggestions] = useState([]);
+  const [lookupSuggestionStatus, setLookupSuggestionStatus] = useState('idle');
+  const [lookupSuggestionLocked, setLookupSuggestionLocked] = useState(false);
+  const [lookupTicker, setLookupTicker] = useState('');
+  const [lookupMarketData, setLookupMarketData] = useState(null);
+  const [lookupMarketStatus, setLookupMarketStatus] = useState('idle');
+  const [lookupMarketError, setLookupMarketError] = useState('');
+  const lookupSuggestionRef = useRef(null);
   const [editingHolding, setEditingHolding] = useState(null);
   const [selectedHolding, setSelectedHolding] = useState(null);
-  const [aiSummary, setAiSummary] = useState(null);
-  const [aiSummaryStatus, setAiSummaryStatus] = useState('idle');
-  const [aiSummaryError, setAiSummaryError] = useState('');
   const manualSuggestionRef = useRef(null);
   const manualDraftRef = useRef({
     stockName: '',
@@ -3543,6 +3572,14 @@ function ToolSideDrawer({
       icon: <SketchManualAccountIcon />,
       available: true,
       hidden: true,
+    },
+    {
+      // Its own rail icon, unlike 'manual' above — this one has no other entry point (no button
+      // inside another panel hands off to it), so it needs to be directly reachable.
+      key: 'lookup',
+      label: language === 'en' ? 'Stock Lookup' : '종목 조회',
+      icon: <SketchLookupIcon />,
+      available: true,
     },
     {
       key: 'overview',
@@ -3591,21 +3628,6 @@ function ToolSideDrawer({
     return clamp(nextWidth, minWidth, maxWidth);
   }, []);
 
-  // Same idea as clampDrawerWidth, on the other axis — bottom dock resizes by height, with its
-  // own headroom (leaves at least ~80px of atom stage visible above it, same spirit as width's
-  // "leave 34px of screen visible past the drawer").
-  const clampDrawerHeight = useCallback((nextHeight) => {
-    if (typeof window === 'undefined') {
-      return clamp(nextHeight, 220, TOOL_DRAWER_MAX_HEIGHT);
-    }
-
-    const viewportHeight = window.innerHeight;
-    const minHeight = Math.min(220, Math.max(180, viewportHeight - 160));
-    const maxHeight = Math.max(minHeight, Math.min(TOOL_DRAWER_MAX_HEIGHT, viewportHeight - 80));
-
-    return clamp(nextHeight, minHeight, maxHeight);
-  }, []);
-
   useEffect(() => {
     if (typeof window === 'undefined') {
       return undefined;
@@ -3613,7 +3635,6 @@ function ToolSideDrawer({
 
     const handleResize = () => {
       onDrawerWidthChange?.((current) => clampDrawerWidth(current));
-      onDrawerHeightChange?.((current) => clampDrawerHeight(current));
     };
 
     window.addEventListener('resize', handleResize);
@@ -3621,7 +3642,7 @@ function ToolSideDrawer({
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [clampDrawerHeight, clampDrawerWidth, onDrawerHeightChange, onDrawerWidthChange]);
+  }, [clampDrawerWidth, onDrawerWidthChange]);
 
   useEffect(() => {
     manualDraftRef.current = {
@@ -3678,6 +3699,102 @@ function ToolSideDrawer({
       window.clearTimeout(timerId);
     };
   }, [manualStockName, manualSuggestionLocked, open, resolvedTool?.key]);
+
+  // Same suggestion-fetch shape as the manual-entry effect just above (same debounce, same
+  // Korean-name-length exception) — deliberately not shared as one parametrized effect, since the
+  // two are only accidentally identical today and diverging independently later (e.g. the manual
+  // one growing an asset-class filter) shouldn't require untangling a shared abstraction.
+  useEffect(() => {
+    const query = lookupQuery.trim();
+
+    if (
+      !open ||
+      resolvedTool?.key !== 'lookup' ||
+      lookupSuggestionLocked ||
+      (query.length < 2 && !/[가-힣]/.test(query))
+    ) {
+      setLookupSuggestions([]);
+      setLookupSuggestionStatus('idle');
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    setLookupSuggestionStatus('loading');
+
+    const timerId = window.setTimeout(async () => {
+      try {
+        const suggestions = await fetchMarketSymbolSuggestions({
+          query,
+          limit: 8,
+          signal: controller.signal,
+        });
+
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setLookupSuggestions(suggestions);
+        setLookupSuggestionStatus('ready');
+      } catch {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setLookupSuggestions([]);
+        setLookupSuggestionStatus('error');
+      }
+    }, 220);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timerId);
+    };
+  }, [lookupQuery, lookupSuggestionLocked, open, resolvedTool?.key]);
+
+  // Fetches live price/chart data for whichever suggestion was selected — no draft-field
+  // side effects like the manual-entry version has (no buy price, no return rate, no asset class
+  // auto-fill): this is display-only, so there's nothing downstream of the fetch to update besides
+  // the fetch's own status/data/error, unlike applyMarketQuoteToDraft's job for the add-stock flow.
+  useEffect(() => {
+    const ticker = lookupTicker.trim();
+
+    if (!open || resolvedTool?.key !== 'lookup' || !ticker) {
+      setLookupMarketStatus('idle');
+      setLookupMarketError('');
+      setLookupMarketData(null);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    setLookupMarketStatus('loading');
+    setLookupMarketError('');
+    setLookupMarketData(null);
+
+    fetchLiveMarketData({ ticker, name: lookupQuery.trim(), signal: controller.signal })
+      .then((nextData) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setLookupMarketData(nextData);
+        setLookupMarketStatus('ready');
+      })
+      .catch((fetchError) => {
+        if (controller.signal.aborted || fetchError?.name === 'AbortError') {
+          return;
+        }
+
+        setLookupMarketData(null);
+        setLookupMarketStatus('error');
+        setLookupMarketError(
+          language === 'en' ? 'Could not load market data.' : '시세 정보를 가져오지 못했습니다.',
+        );
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [language, lookupQuery, lookupTicker, open, resolvedTool?.key]);
 
   useEffect(() => {
     const ticker = manualTicker.trim();
@@ -3785,26 +3902,20 @@ function ToolSideDrawer({
       event.stopPropagation();
       onInteract?.();
 
-      const isBottom = dock === 'bottom';
-      const startPos = isBottom ? event.clientY : event.clientX;
-      const startSize = isBottom ? drawerHeight : drawerWidth;
+      const startPos = event.clientX;
+      const startSize = drawerWidth;
       // Which physical drag direction grows the panel depends on which edge the resize handle
-      // sits on, which depends on dock: left dock's handle is on the panel's right edge (drag
-      // right to grow, the original/only behavior this used to be); right dock's handle is on the
-      // left edge (drag left to grow); bottom dock's handle is on the top edge (drag up to grow).
-      // Left is the only one where screen-direction and "growing" point the same way.
+      // sits on: left dock's handle is on the panel's right edge (drag right to grow, the
+      // original/only behavior this used to be); right dock's handle is on the left edge (drag
+      // left to grow). Left is the only one where screen-direction and "growing" point the same
+      // way.
       const sign = dock === 'left' ? 1 : -1;
       setResizing(true);
 
       const handlePointerMove = (moveEvent) => {
         moveEvent.preventDefault();
-        const pos = isBottom ? moveEvent.clientY : moveEvent.clientX;
-        const nextSize = startSize + sign * (pos - startPos);
-        if (isBottom) {
-          onDrawerHeightChange?.(clampDrawerHeight(nextSize));
-        } else {
-          onDrawerWidthChange?.(clampDrawerWidth(nextSize));
-        }
+        const nextSize = startSize + sign * (moveEvent.clientX - startPos);
+        onDrawerWidthChange?.(clampDrawerWidth(nextSize));
       };
 
       const stopResize = () => {
@@ -3818,17 +3929,7 @@ function ToolSideDrawer({
       window.addEventListener('pointerup', stopResize);
       window.addEventListener('pointercancel', stopResize);
     },
-    [
-      clampDrawerHeight,
-      clampDrawerWidth,
-      dock,
-      drawerHeight,
-      drawerWidth,
-      onDrawerHeightChange,
-      onDrawerWidthChange,
-      onInteract,
-      open,
-    ],
+    [clampDrawerWidth, dock, drawerWidth, onDrawerWidthChange, onInteract, open],
   );
 
   const handleResizeKeyDown = useCallback(
@@ -3841,23 +3942,16 @@ function ToolSideDrawer({
       // actually docked to — unlike the drag handle (a direct-manipulation gesture where physical
       // direction has to match the cursor), a keyboard shortcut that flipped meaning depending on
       // dock side would be the opposite of predictable.
-      const isBottom = dock === 'bottom';
-      const growKey = isBottom ? 'ArrowUp' : 'ArrowRight';
-      const shrinkKey = isBottom ? 'ArrowDown' : 'ArrowLeft';
-      if (event.key !== growKey && event.key !== shrinkKey) {
+      if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') {
         return;
       }
 
       event.preventDefault();
       onInteract?.();
-      const delta = event.key === growKey ? 24 : -24;
-      if (isBottom) {
-        onDrawerHeightChange?.((current) => clampDrawerHeight(current + delta));
-      } else {
-        onDrawerWidthChange?.((current) => clampDrawerWidth(current + delta));
-      }
+      const delta = event.key === 'ArrowRight' ? 24 : -24;
+      onDrawerWidthChange?.((current) => clampDrawerWidth(current + delta));
     },
-    [clampDrawerHeight, clampDrawerWidth, dock, onDrawerHeightChange, onDrawerWidthChange, onInteract, open],
+    [clampDrawerWidth, onDrawerWidthChange, onInteract, open],
   );
 
   // Drag-to-dock: grab the handle at the top of the rail (always present, open or closed —
@@ -3872,11 +3966,10 @@ function ToolSideDrawer({
       event.preventDefault();
       onInteract?.();
 
-      const computeHoverEdge = (clientX, clientY) => {
+      const computeHoverEdge = (clientX) => {
         const distanceToEdge = {
           left: clientX,
           right: window.innerWidth - clientX,
-          bottom: window.innerHeight - clientY,
         };
         let nearestEdge = null;
         let nearestDistance = DOCK_EDGE_HOVER_THRESHOLD_PX;
@@ -3890,15 +3983,85 @@ function ToolSideDrawer({
         return nearestEdge;
       };
 
+      const panelEl = panelRef.current;
+      const startClientX = event.clientX;
+      // A short rolling history of (time, x) samples, not just the last move — a single frame's
+      // delta right before release is noisy (whatever the pointer happened to do in that last ~8ms
+      // tick), while the last ~60ms gives a steadier read on how fast the hand was actually moving
+      // when it let go.
+      let recentSamples = [{ t: event.timeStamp, x: startClientX }];
+
+      // Directly mutating style.transform every move (not React state) is the same reason the
+      // codebase's other drag loops (rotation drag, resize) skip setState mid-gesture — a state
+      // update per pointermove would re-render the whole drawer subtree 60+ times a second for a
+      // transform that's purely visual until release.
+      const applyDragOffset = (offsetPx) => {
+        if (!panelEl) {
+          return;
+        }
+        panelEl.style.transition = 'none';
+        panelEl.style.transform = `translateX(${offsetPx}px)`;
+      };
+
       const handlePointerMove = (moveEvent) => {
         moveEvent.preventDefault();
-        onDockDragHoverEdgeChange?.(computeHoverEdge(moveEvent.clientX, moveEvent.clientY));
+        recentSamples.push({ t: moveEvent.timeStamp, x: moveEvent.clientX });
+        if (recentSamples.length > 8) {
+          recentSamples.shift();
+        }
+        // Rubber-band clamped — this is a preview of "which edge is about to grab it", not the
+        // drawer actually relocating mid-drag, so the visible travel stays modest even if the
+        // pointer keeps going past the clamp.
+        const rawOffset = moveEvent.clientX - startClientX;
+        applyDragOffset(clamp(rawOffset, -140, 140));
+        onDockDragHoverEdgeChange?.(computeHoverEdge(moveEvent.clientX));
+      };
+
+      // velocity in px/ms, signed (direction matters for nothing here — only magnitude feeds the
+      // snap duration below), measured across the retained sample window rather than just the
+      // final two events.
+      const releaseVelocityPxMs = () => {
+        if (recentSamples.length < 2) {
+          return 0;
+        }
+        const first = recentSamples[0];
+        const last = recentSamples[recentSamples.length - 1];
+        const dt = last.t - first.t;
+        if (dt <= 0) {
+          return 0;
+        }
+        return Math.abs(last.x - first.x) / dt;
+      };
+
+      const settlePanel = (velocityPxMs) => {
+        if (!panelEl) {
+          return;
+        }
+        // Faster release -> shorter settle, so a deliberate flick doesn't visibly lag behind the
+        // hand that threw it; a slow, deliberate drag gets the fuller, more readable ease-out.
+        // This is a duration heuristic, not a real spring simulation — cubic-bezier below is what
+        // actually supplies the "natural, not linear" feel demanded of it.
+        const durationMs = clamp(
+          DOCK_DRAG_SNAP_DURATION_MS - velocityPxMs * 250,
+          DOCK_DRAG_SNAP_MIN_DURATION_MS,
+          DOCK_DRAG_SNAP_DURATION_MS,
+        );
+        panelEl.style.transition = `transform ${durationMs}ms cubic-bezier(0.16, 1, 0.3, 1)`;
+        panelEl.style.transform = 'translateX(0px)';
+        window.setTimeout(() => {
+          // Hand control back to the stylesheet's own dock/is-open-driven transform once the
+          // release animation finishes — an inline style left behind here would silently outrank
+          // every future CSS-driven open/close transition for this element.
+          panelEl.style.transition = '';
+          panelEl.style.transform = '';
+        }, durationMs + 30);
       };
 
       const finishDrag = (finalEdge) => {
         window.removeEventListener('pointermove', handlePointerMove);
         window.removeEventListener('pointerup', handlePointerUp);
         window.removeEventListener('pointercancel', handlePointerCancel);
+        settlePanel(releaseVelocityPxMs());
         if (finalEdge && finalEdge !== dock) {
           onDockChange?.(finalEdge);
         }
@@ -3908,7 +4071,7 @@ function ToolSideDrawer({
       // enough to any candidate edge — dragging and releasing in the middle of the screen is a
       // no-op, not an accidental dock change). pointercancel aborts without committing anything,
       // same as letting go of a drag that got interrupted should.
-      const handlePointerUp = (upEvent) => finishDrag(computeHoverEdge(upEvent.clientX, upEvent.clientY));
+      const handlePointerUp = (upEvent) => finishDrag(computeHoverEdge(upEvent.clientX));
       const handlePointerCancel = () => finishDrag(null);
 
       window.addEventListener('pointermove', handlePointerMove, { passive: false });
@@ -4225,100 +4388,6 @@ function ToolSideDrawer({
   );
   const latestMonthlyReport = analyticsSummary?.profitFlow?.at(-1) ?? null;
 
-  const loadAiSummary = useCallback(
-    async ({ refresh = false } = {}) => {
-      if (!activePortfolio?.id && !items.length) {
-        setAiSummary(null);
-        setAiSummaryStatus('idle');
-        setAiSummaryError('');
-        return;
-      }
-
-      const controller = new AbortController();
-      setAiSummaryStatus('loading');
-      setAiSummaryError('');
-
-      try {
-        const payload = await fetchPortfolioAiSummary({
-          portfolioId: activePortfolio?.id,
-          portfolio: activePortfolio,
-          language,
-          refresh,
-          signal: controller.signal,
-        });
-
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        setAiSummary(payload);
-        setAiSummaryStatus('ready');
-      } catch (error) {
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        setAiSummary(null);
-        setAiSummaryStatus('error');
-        setAiSummaryError(
-          error instanceof Error
-            ? error.message
-            : language === 'en'
-              ? 'AI summary could not be loaded.'
-              : 'AI 요약을 불러오지 못했습니다.',
-        );
-      }
-
-      return () => controller.abort();
-    },
-    [activePortfolio, items.length, language],
-  );
-
-  useEffect(() => {
-    // AI summary is now a section within the merged 'overview' panel rather than its own tool tab.
-    if (!open || resolvedTool?.key !== 'overview') {
-      return undefined;
-    }
-
-    const controller = new AbortController();
-    setAiSummaryStatus('loading');
-    setAiSummaryError('');
-
-    void fetchPortfolioAiSummary({
-      portfolioId: activePortfolio?.id,
-      portfolio: activePortfolio,
-      language,
-      signal: controller.signal,
-    })
-      .then((payload) => {
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        setAiSummary(payload);
-        setAiSummaryStatus('ready');
-      })
-      .catch((error) => {
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        setAiSummary(null);
-        setAiSummaryStatus('error');
-        setAiSummaryError(
-          error instanceof Error
-            ? error.message
-            : language === 'en'
-              ? 'AI summary could not be loaded.'
-              : 'AI 요약을 불러오지 못했습니다.',
-        );
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, [activePortfolio, language, open, resolvedTool?.key]);
-
   useEffect(() => {
     if (!selectedHolding) {
       return;
@@ -4414,6 +4483,149 @@ function ToolSideDrawer({
       document.removeEventListener('keydown', handleDocumentKeyDown, true);
     };
   }, [closeManualSuggestions, shouldShowManualSuggestions]);
+
+  const handleSelectLookupSuggestion = useCallback(
+    (suggestion) => {
+      if (!suggestion?.symbol) {
+        return;
+      }
+
+      onInteract?.();
+      setLookupSuggestionLocked(true);
+      setLookupQuery(suggestion.displayName || suggestion.name || suggestion.symbol);
+      setLookupTicker(suggestion.symbol);
+      setLookupSuggestions([]);
+      setLookupSuggestionStatus('idle');
+    },
+    [onInteract],
+  );
+  const handleLookupQueryChange = useCallback((event) => {
+    setLookupSuggestionLocked(false);
+    setLookupQuery(event.target.value);
+    // Clearing the field (or editing away from a locked-in selection) also clears the result —
+    // otherwise the last-fetched card would keep showing a price for a ticker the input no longer
+    // names, reading as if it were still live for whatever's currently typed.
+    setLookupTicker('');
+  }, []);
+  const shouldShowLookupSuggestions =
+    !lookupSuggestionLocked &&
+    (lookupQuery.trim().length >= 2 || /[가-힣]/.test(lookupQuery.trim())) &&
+    (lookupSuggestionStatus === 'loading' ||
+      lookupSuggestionStatus === 'ready' ||
+      lookupSuggestionStatus === 'error');
+  const closeLookupSuggestions = useCallback(() => {
+    setLookupSuggestionStatus('idle');
+  }, []);
+
+  useEffect(() => {
+    if (!shouldShowLookupSuggestions || typeof document === 'undefined') {
+      return undefined;
+    }
+
+    const handleDocumentPointerDown = (event) => {
+      if (lookupSuggestionRef.current?.contains(event.target)) {
+        return;
+      }
+
+      closeLookupSuggestions();
+    };
+    const handleDocumentKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        closeLookupSuggestions();
+      }
+    };
+
+    document.addEventListener('pointerdown', handleDocumentPointerDown, true);
+    document.addEventListener('keydown', handleDocumentKeyDown, true);
+
+    return () => {
+      document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
+      document.removeEventListener('keydown', handleDocumentKeyDown, true);
+    };
+  }, [closeLookupSuggestions, shouldShowLookupSuggestions]);
+
+  // Display-only — MarketLivePreview's own showApply=false hides the "apply to draft" button
+  // that the manual-entry flow uses it with, and nothing here ever calls onCreateManualAtom,
+  // onAppendManualHoldings, or any other portfolio-mutating callback. This panel reads live data
+  // and nothing more; there is no path from it back into a portfolio's actual holdings.
+  const renderLookupPanel = () => (
+    <section className="tool-drawer__lookup">
+      <div ref={lookupSuggestionRef} className="tool-drawer__manual-field tool-drawer__manual-field--suggest">
+        <span id="lookup-query-label">{language === 'en' ? 'Ticker or name' : '티커 또는 종목명'}</span>
+        <input
+          type="text"
+          value={lookupQuery}
+          onChange={handleLookupQueryChange}
+          placeholder={language === 'en' ? 'Apple, TIGER' : '예: 타이거, 애플'}
+          autoComplete="off"
+          aria-labelledby="lookup-query-label"
+          aria-autocomplete="list"
+          aria-expanded={shouldShowLookupSuggestions}
+        />
+        {shouldShowLookupSuggestions ? (
+          <div
+            className="tool-drawer__suggestions"
+            role="listbox"
+            aria-label={language === 'en' ? 'Stock suggestions' : '종목 검색 결과'}
+          >
+            {lookupSuggestions.length ? (
+              lookupSuggestions.map((suggestion) => (
+                <button
+                  key={suggestion.symbol}
+                  type="button"
+                  className="tool-drawer__suggestion"
+                  role="option"
+                  aria-selected={lookupTicker === suggestion.symbol}
+                  onClick={() => handleSelectLookupSuggestion(suggestion)}
+                >
+                  <span>
+                    <strong>{suggestion.displayName || suggestion.name || suggestion.symbol}</strong>
+                    <em>
+                      {[suggestion.exchangeName, suggestion.typeDisp].filter(Boolean).join(' · ') ||
+                        suggestion.source}
+                    </em>
+                  </span>
+                  <small>{suggestion.symbol}</small>
+                </button>
+              ))
+            ) : (
+              <p className="tool-drawer__suggestion-empty">
+                {lookupSuggestionStatus === 'loading'
+                  ? language === 'en'
+                    ? 'Searching...'
+                    : '검색 중...'
+                  : lookupSuggestionStatus === 'error'
+                    ? language === 'en'
+                      ? 'Could not load suggestions.'
+                      : '검색 결과를 가져오지 못했습니다.'
+                    : language === 'en'
+                      ? 'No matches.'
+                      : '검색 결과가 없습니다.'}
+              </p>
+            )}
+          </div>
+        ) : null}
+      </div>
+
+      {lookupTicker ? (
+        <MarketLivePreview
+          data={lookupMarketData}
+          status={lookupMarketStatus}
+          error={lookupMarketError}
+          language={language}
+          baseCurrency={baseCurrency}
+          fxRates={fxRates}
+          showApply={false}
+        />
+      ) : (
+        <p className="tool-drawer__empty">
+          {language === 'en'
+            ? 'Search a ticker or name to see its live price — this never touches any portfolio.'
+            : '티커나 종목명을 검색하면 실시간 시세를 볼 수 있어요 — 포트폴리오에는 영향을 주지 않습니다.'}
+        </p>
+      )}
+    </section>
+  );
 
   const applyMarketQuoteToDraft = useCallback(() => {
     if (!manualMarketData) {
@@ -4630,111 +4842,6 @@ function ToolSideDrawer({
     </section>
   );
 
-  const renderAiSummaryPanel = () => {
-    const summary = aiSummary?.summary;
-    const observations = Array.isArray(summary?.keyObservations) ? summary.keyObservations : [];
-    const riskNotes = Array.isArray(summary?.riskNotes) ? summary.riskNotes : [];
-    const dataQualityNotes = Array.isArray(summary?.dataQualityNotes) ? summary.dataQualityNotes : [];
-
-    return (
-      <div className="tool-drawer__ai-panel">
-        <section className="tool-drawer__overview-card tool-drawer__overview-card--wide tool-drawer__ai-card">
-          <div className="tool-drawer__overview-card-head">
-            <p>{language === 'en' ? 'AI Portfolio Summary' : 'AI 포트폴리오 요약'}</p>
-            <button
-              type="button"
-              className="tool-drawer__small-action"
-              disabled={aiSummaryStatus === 'loading'}
-              onClick={() => {
-                onInteract?.();
-                void loadAiSummary({ refresh: true });
-              }}
-            >
-              {language === 'en' ? 'Refresh' : '새로고침'}
-            </button>
-          </div>
-
-          <p className="tool-drawer__ai-disclaimer">
-            {aiSummary?.disclaimer ??
-              (language === 'en'
-                ? 'For informational, user-input-based analysis only. This is not investment advice.'
-                : '정보 제공 목적의 사용자 입력 기반 분석이며 투자 조언이 아닙니다.')}
-          </p>
-
-          {aiSummaryStatus === 'loading' ? (
-            <p className="tool-drawer__empty">
-              {language === 'en' ? 'Preparing summary...' : '요약을 준비하고 있습니다.'}
-            </p>
-          ) : null}
-
-          {aiSummaryStatus === 'error' ? (
-            <p className="tool-drawer__empty">{aiSummaryError}</p>
-          ) : null}
-
-          {summary ? (
-            <div className="tool-drawer__ai-content">
-              <div className="tool-drawer__ai-headline">
-                <strong>{summary.headline}</strong>
-                <span>{summary.overview}</span>
-              </div>
-
-              {observations.length ? (
-                <div className="tool-drawer__ai-list">
-                  {observations.map((item, index) => (
-                    <article key={`${item.title}-${index}`} className="tool-drawer__ai-row">
-                      <span>{item.title}</span>
-                      <strong>{item.detail}</strong>
-                      {item.evidence?.length ? <em>{item.evidence.join(' · ')}</em> : null}
-                    </article>
-                  ))}
-                </div>
-              ) : null}
-
-              <div className="tool-drawer__ai-columns">
-                <section>
-                  <p>{language === 'en' ? 'Risk Checks' : '위험 점검'}</p>
-                  {riskNotes.length ? (
-                    <ul>
-                      {riskNotes.slice(0, 4).map((note, index) => (
-                        <li key={`${note}-${index}`}>{note}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <span>{language === 'en' ? 'No risk notes.' : '표시할 위험 점검 항목이 없습니다.'}</span>
-                  )}
-                </section>
-                <section>
-                  <p>{language === 'en' ? 'Data Quality' : '데이터 품질'}</p>
-                  {dataQualityNotes.length ? (
-                    <ul>
-                      {dataQualityNotes.slice(0, 4).map((note, index) => (
-                        <li key={`${note}-${index}`}>{note}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <span>{language === 'en' ? 'No blocking diagnostics.' : '차단 수준의 진단은 없습니다.'}</span>
-                  )}
-                </section>
-              </div>
-
-              <small className="tool-drawer__ai-meta">
-                {aiSummary.mode === 'deterministic-fallback'
-                  ? language === 'en'
-                    ? 'Metric-based fallback'
-                    : '지표 기반 fallback'
-                  : aiSummary.mode === 'cache-hit'
-                    ? language === 'en'
-                      ? 'Cached summary'
-                      : '저장된 요약'
-                    : 'OpenAI'}
-              </small>
-            </div>
-          ) : null}
-        </section>
-      </div>
-    );
-  };
-
   const renderComparePanel = () => (
     <div className="tool-drawer__compare-panel">
       <section className="tool-drawer__overview-card tool-drawer__overview-card--wide">
@@ -4878,42 +4985,56 @@ function ToolSideDrawer({
     if (resolvedTool.key === 'accounts') {
       return (
         <div className="tool-drawer__accounts">
-          <div className="tool-drawer__account-actions">
-            <span>
+          <div className="tool-drawer__accounts-header">
+            <span className="tool-drawer__accounts-count">
               {language === 'en'
                 ? `${portfolioEntries.length} portfolios`
                 : `${portfolioEntries.length}개 포트폴리오`}
             </span>
-            <button
-              type="button"
-              className="tool-drawer__account-upload"
-              disabled={portfolioEntries.length >= MAX_PORTFOLIOS}
-              onClick={() => {
-                onInteract?.();
-                onOpenPortfolioPicker?.();
-              }}
-            >
-              {language === 'en' ? 'Import file' : '파일 가져오기'}
-            </button>
           </div>
-          <div className="tool-drawer__account-create">
-            <label className="tool-drawer__account-create-field">
-              <input
-                type="text"
-                value={manualAccountName}
-                onChange={(event) => setManualAccountName(event.target.value)}
-                aria-label={language === 'en' ? 'Portfolio name' : '포트폴리오명'}
-                placeholder={language === 'en' ? 'Growth portfolio, dividend portfolio' : '예: isa, 연금저축'}
-              />
-            </label>
-            <button
-              type="button"
-              className="tool-drawer__account-create-button"
-              disabled={!hasAtomName || portfolioEntries.length >= MAX_PORTFOLIOS}
-              onClick={handleCreateManualAtom}
-            >
-              {language === 'en' ? 'Create portfolio' : '포트폴리오 생성'}
-            </button>
+
+          {/* Two equal-weight cards, not a button sharing a line with the count text (old layout)
+              and a visually disconnected name+create row below it — reads as "pick one of two ways
+              to get a portfolio in here" now, build-it-yourself vs. import-a-file, side by side. */}
+          <div className="tool-drawer__account-onboard">
+            <div className="tool-drawer__account-onboard-card tool-drawer__overview-card">
+              <p>{language === 'en' ? 'Build manually' : '직접 만들기'}</p>
+              <label className="tool-drawer__account-create-field">
+                <input
+                  type="text"
+                  value={manualAccountName}
+                  onChange={(event) => setManualAccountName(event.target.value)}
+                  aria-label={language === 'en' ? 'Portfolio name' : '포트폴리오명'}
+                  placeholder={language === 'en' ? 'New portfolio name' : '새 포트폴리오 이름'}
+                />
+              </label>
+              <button
+                type="button"
+                className="tool-drawer__account-create-button"
+                disabled={!hasAtomName || portfolioEntries.length >= MAX_PORTFOLIOS}
+                onClick={handleCreateManualAtom}
+              >
+                {language === 'en' ? 'Create portfolio' : '포트폴리오 생성'}
+              </button>
+            </div>
+
+            <div className="tool-drawer__account-onboard-card tool-drawer__overview-card">
+              <p>{language === 'en' ? 'Import a file' : '파일 가져오기'}</p>
+              <span className="tool-drawer__account-onboard-hint">
+                {language === 'en' ? 'CSV or broker export' : 'CSV · 증권사 거래내역'}
+              </span>
+              <button
+                type="button"
+                className="tool-drawer__account-upload"
+                disabled={portfolioEntries.length >= MAX_PORTFOLIOS}
+                onClick={() => {
+                  onInteract?.();
+                  onOpenPortfolioPicker?.();
+                }}
+              >
+                {language === 'en' ? 'Choose file' : '파일 선택'}
+              </button>
+            </div>
           </div>
 
           {portfolioEntries.length ? (
@@ -5099,6 +5220,10 @@ function ToolSideDrawer({
       return <div className="tool-drawer__manual-panel">{renderManualEntryPanel()}</div>;
     }
 
+    if (resolvedTool.key === 'lookup') {
+      return renderLookupPanel();
+    }
+
     if (resolvedTool.key === 'overview') {
       return (
         <div className="tool-drawer__overview">
@@ -5261,7 +5386,6 @@ function ToolSideDrawer({
             ) : null}
           </div>
 
-          {activePortfolio?.id || items.length ? renderAiSummaryPanel() : null}
           {analyticsSummary?.profitFlow?.length ? renderMonthlyReportPanel() : null}
         </div>
       );
@@ -5304,7 +5428,6 @@ function ToolSideDrawer({
         // (not just the one the current dock uses) since dock can change while open/mid-drag —
         // no reason the unused axis' value should ever be stale.
         '--tool-drawer-width': `${drawerWidth}px`,
-        '--tool-drawer-height': `${drawerHeight}px`,
       }}
     >
       <div className="tool-drawer__window">
@@ -5316,7 +5439,7 @@ function ToolSideDrawer({
             aria-label={
               language === 'en' ? 'Drag to move this panel to an edge' : '드래그해서 패널 위치를 옮기기'
             }
-            title={language === 'en' ? 'Drag to dock left, right, or bottom' : '드래그해서 좌/우/하단에 도킹'}
+            title={language === 'en' ? 'Drag to dock left or right' : '드래그해서 좌/우에 도킹'}
             onPointerDown={handleDockDragPointerDown}
           />
           {tools.filter((tool) => !tool.hidden).map((tool) => (
@@ -5336,7 +5459,7 @@ function ToolSideDrawer({
           ))}
         </div>
 
-        <section className="tool-drawer__panel" aria-live="polite">
+        <section className="tool-drawer__panel" aria-live="polite" ref={panelRef}>
           {open && resolvedTool ? (
             <div className="tool-drawer__body">{renderActivePanel()}</div>
           ) : (
@@ -5348,46 +5471,40 @@ function ToolSideDrawer({
               </p>
             </div>
           )}
-        </section>
 
-        <div
-          className="tool-drawer__resize-handle"
-          role="separator"
-          aria-label={
-            dock === 'bottom'
-              ? language === 'en'
-                ? 'Resize tool panel'
-                : '도구 패널 높이 조절'
-              : language === 'en'
-                ? 'Resize tool panel'
-                : '도구 패널 너비 조절'
-          }
-          aria-orientation={dock === 'bottom' ? 'horizontal' : 'vertical'}
-          tabIndex={open ? 0 : -1}
-          onPointerDown={handleResizePointerDown}
-          onKeyDown={handleResizeKeyDown}
-        />
-      </div>
-
-      {open && resolvedTool?.key === 'accounts' && activeAccountEntry && activeSelectedHolding ? (
-        <aside className="tool-drawer__detail-popout" aria-label={language === 'en' ? 'Stock details' : '종목 정보'}>
-          <StockDetailCard
-            item={activeSelectedHolding.item}
-            language={language}
-            baseCurrency={baseCurrency}
-            fxRates={fxRates}
-            onEdit={() =>
-              beginEditHolding(activeAccountEntry, activeSelectedHolding.item, activeSelectedHolding.itemIndex)
-            }
-            onClose={() => {
-              onInteract?.();
-              setSelectedHolding(null);
-              onClearHoldingFocus?.();
-            }}
+          <div
+            className="tool-drawer__resize-handle"
+            role="separator"
+            aria-label={language === 'en' ? 'Resize tool panel' : '도구 패널 너비 조절'}
+            aria-orientation="vertical"
+            tabIndex={open ? 0 : -1}
+            onPointerDown={handleResizePointerDown}
+            onKeyDown={handleResizeKeyDown}
           />
-        </aside>
-      ) : null}
 
+          {open && resolvedTool?.key === 'accounts' && activeAccountEntry && activeSelectedHolding ? (
+            <aside
+              className="tool-drawer__detail-popout"
+              aria-label={language === 'en' ? 'Stock details' : '종목 정보'}
+            >
+              <StockDetailCard
+                item={activeSelectedHolding.item}
+                language={language}
+                baseCurrency={baseCurrency}
+                fxRates={fxRates}
+                onEdit={() =>
+                  beginEditHolding(activeAccountEntry, activeSelectedHolding.item, activeSelectedHolding.itemIndex)
+                }
+                onClose={() => {
+                  onInteract?.();
+                  setSelectedHolding(null);
+                  onClearHoldingFocus?.();
+                }}
+              />
+            </aside>
+          ) : null}
+        </section>
+      </div>
     </aside>
   );
 }
@@ -5496,7 +5613,6 @@ export default function App() {
   const [toolTrayOpen, setToolTrayOpen] = useState(false);
   const [activeDrawerTool, setActiveDrawerTool] = useState(null);
   const [toolDrawerWidth, setToolDrawerWidth] = useState(TOOL_DRAWER_DEFAULT_WIDTH);
-  const [toolDrawerHeight, setToolDrawerHeight] = useState(TOOL_DRAWER_DEFAULT_HEIGHT);
   const [toolDrawerDock, setToolDrawerDock] = useState(() =>
     readStoredOption(STORAGE_KEYS.toolDrawerDock, TOOL_DRAWER_DOCK_OPTIONS, 'left'),
   );
@@ -7836,18 +7952,13 @@ export default function App() {
     ),
     '--camera-stage-roll': `${format(cameraMotion.roll * 0.46)}deg`,
     '--camera-glow': format(0.28 + cameraMotion.focus * 0.5),
-    // Bottom dock doesn't eat horizontal space at all, so this (and the shift it drives below)
-    // both collapse to 0 there — a bottom-docked drawer shouldn't push the atom sideways just
-    // because it happens to be open.
-    '--tool-drawer-current-width':
-      toolTrayOpen && toolDrawerDock !== 'bottom' ? `${toolDrawerWidth}px` : '0px',
+    '--tool-drawer-current-width': toolTrayOpen ? `${toolDrawerWidth}px` : '0px',
     // Which direction to push the atom to keep it visually centered in whatever space the open
     // drawer leaves behind depends on which side it's docked to — left dock pushes the atom
-    // right (positive), right dock pushes it left (negative), bottom dock doesn't push it at all.
-    '--stage-panel-shift':
-      toolTrayOpen && toolDrawerDock !== 'bottom'
-        ? `${(toolDrawerDock === 'right' ? -1 : 1) * (toolDrawerWidth / 2)}px`
-        : '0px',
+    // right (positive), right dock pushes it left (negative).
+    '--stage-panel-shift': toolTrayOpen
+      ? `${(toolDrawerDock === 'right' ? -1 : 1) * (toolDrawerWidth / 2)}px`
+      : '0px',
   };
   const shootingStarStyle = useMemo(() => {
     if (!shootingStar) {
@@ -8057,8 +8168,6 @@ export default function App() {
             pendingManualTicker={pendingManualTicker}
             drawerWidth={toolDrawerWidth}
             onDrawerWidthChange={setToolDrawerWidth}
-            drawerHeight={toolDrawerHeight}
-            onDrawerHeightChange={setToolDrawerHeight}
             dock={toolDrawerDock}
             onDockChange={setToolDrawerDock}
             onDockDragHoverEdgeChange={setDockDragHoverEdge}

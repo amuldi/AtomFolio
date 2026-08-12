@@ -24,7 +24,6 @@ import {
   saveImportHistory,
   updatePortfolio,
 } from './portfolioStore.mjs';
-import { createPortfolioSummaryAnalysis } from './ai/portfolioSummary.mjs';
 import {
   getOperationalEventStats,
   recordOperationalEvent,
@@ -36,7 +35,6 @@ import {
 } from './marketDataCache.mjs';
 
 const RATE_LIMITS = {
-  'ai-portfolio-summary': { limit: 5 },
   'market-live': { limit: 30 },
   'market-search': { limit: 30 },
   'market-news': { limit: 30 },
@@ -721,42 +719,6 @@ export async function handleWorkspaceClaimGuestRequest({
     recordApiError('workspace', 'workspace-claim-failed', error);
     sendJson(500, {
       error: errorMessage(error, 'Workspace claim failed.'),
-    });
-  }
-}
-
-export async function handleAiPortfolioSummaryRequest({
-  method,
-  workspaceId,
-  readBody,
-  clientKey,
-  sendJson,
-}) {
-  if (method !== 'POST') {
-    sendMethodNotAllowed(sendJson);
-    return;
-  }
-
-  if (!enforceRateLimit('ai-portfolio-summary', clientKey, sendJson)) {
-    return;
-  }
-
-  try {
-    const body = await readBody();
-    if (!isPlainObject(body)) {
-      sendJson(400, { error: 'Request body must be a JSON object.' });
-      return;
-    }
-
-    const { statusCode, payload } = await createPortfolioSummaryAnalysis({
-      workspaceId,
-      body,
-    });
-    sendJson(statusCode, payload);
-  } catch (error) {
-    recordApiError('ai', 'ai-portfolio-summary-failed', error, { workspaceId });
-    sendJson(500, {
-      error: errorMessage(error, 'AI portfolio summary failed.'),
     });
   }
 }

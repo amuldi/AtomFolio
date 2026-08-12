@@ -294,24 +294,30 @@ body {
 .settings-panel__body {
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: 16px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
 }
 
 /* Each group ("앱 설정" / "투자 설정") is a soft-tinted block, not a bordered card — background
    only, so it doesn't compete with .panel's own outer chrome or read as a card nested inside a
-   card. margin: 0 -16px cancels .settings-panel__body's own 16px inset so the tint bleeds to the
+   card. margin: 0 -12px cancels .settings-panel__body's own 12px inset so the tint bleeds to the
    panel's edges (the same grouped-section look native macOS Settings panes use), while padding:
-   16px brings the actual label/control text right back to that same 16px baseline — net effect,
-   nothing here moves relative to where it sat as a flat list, only the background changes. */
+   12px brings the actual label/control text right back to that same 12px baseline — net effect,
+   nothing here moves relative to where it sat as a flat list, only the background changes.
+   gap dropped from the original 22px to 14px — measured live against the panel's actual 274px
+   body height (9 rows in the app-settings group alone), the previous spacing left the settings
+   page scrolling ~510px past the fold; every px trimmed here is a px less of that. Still clearly
+   more breathing room than a single row's own internal spacing (.settings-row__top's 9px), so
+   groups of controls still read as separate from one another, just not as loosely as a page with
+   room to spare would want. */
 .settings-group {
   display: flex;
   flex-direction: column;
-  gap: 22px;
-  margin: 0 -16px;
-  padding: 16px;
+  gap: 14px;
+  margin: 0 -12px;
+  padding: 12px;
   border-radius: 10px;
   background: rgba(var(--surface), 0.03);
 }

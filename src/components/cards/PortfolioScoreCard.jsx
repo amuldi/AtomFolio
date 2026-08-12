@@ -1,7 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { format } from '../../utils/math.js';
 import { textFor } from '../../utils/format.js';
 import { buildScoreSketchPolygon, buildScoreAxisPath, buildLoopPath } from '../../utils/scene.js';
+
+// This card renders in very differently-sized places — a wide floating widget, and a narrow
+// drawer sidebar column not much wider than the hint box itself. A fixed pixel margin from
+// whichever edge the hint's box actually ends up clipped against, measured after it's rendered
+// rather than guessed from the hexagon's geometry alone (see the clamp effect below for why the
+// geometry-only anchor isn't enough on its own in the narrow case).
+const SCORE_HINT_EDGE_MARGIN_PX = 8;
 
 export function PortfolioScoreCard({
   scorecard,
@@ -11,6 +18,10 @@ export function PortfolioScoreCard({
   onPointerDown,
 }) {
   const [hoveredMetricKey, setHoveredMetricKey] = useState(null);
+  const cardRef = useRef(null);
+  const hintRef = useRef(null);
+  const [hintClamp, setHintClamp] = useState({ x: 0, y: 0 });
+  const [hintMaxWidth, setHintMaxWidth] = useState(null);
   const center = 104;
   const radius = 74;
   const angleStep = (Math.PI * 2) / axes.length;
@@ -84,20 +95,82 @@ export function PortfolioScoreCard({
   // used below in the `left`/`top` style) — deciding from labelX/labelY instead (a different point,
   // offset by the axis-label's own margin correction) let the two disagree near quadrant boundaries
   // and push the hint off the card's edge.
-  const scoreHintTransform = hoveredAxis
-    ? hoveredAxis.outerY < center - 18
-      ? 'translate(-50%, 0.9rem)'
-      : hoveredAxis.outerY > center + 18
-        ? 'translate(-50%, -115%)'
-        : hoveredAxis.outerX > center + 18
-          ? 'translate(-100%, -55%)'
-          : hoveredAxis.outerX < center - 18
-            ? 'translate(0, -55%)'
-            : 'translate(-50%, -115%)'
-    : '';
+  //
+  // Horizontal and vertical are each resolved independently (not as an either-or chain) — the
+  // previous version checked vertical first and only fell through to a horizontal check when the
+  // point was vertically near-center, so a point that was clearly *both* near the top *and* near
+  // the right edge (a real axis position on a hexagon, not a corner case) only ever got the "near
+  // top" treatment: centered horizontally, ignoring that it was also hard against the right edge.
+  // In a wide floating panel that's harmless slack; in the drawer's narrow column it ran the hint
+  // straight off the card. Each axis now gets both corrections it actually needs.
+  const scoreHintOffsetX =
+    hoveredAxis && hoveredAxis.outerX > center + 18
+      ? '-100%'
+      : hoveredAxis && hoveredAxis.outerX < center - 18
+        ? '0%'
+        : '-50%';
+  const scoreHintOffsetY =
+    hoveredAxis && hoveredAxis.outerY < center - 18
+      ? '0.9rem'
+      : hoveredAxis && hoveredAxis.outerY > center + 18
+        ? '-115%'
+        : '-55%';
+  const scoreHintTransform = hoveredAxis ? `translate(${scoreHintOffsetX}, ${scoreHintOffsetY})` : '';
+
+  // Belt-and-suspenders on top of the anchor logic above: in a container about as narrow as the
+  // hint itself (the drawer case), edge-aligning to avoid overflowing *one* side can still overflow
+  // the *other* — there's no anchor choice that fits a same-width box entirely inside a same-width
+  // container. Rather than trying to out-guess every container this card might render in from pure
+  // hexagon geometry, measure the hint against this card's own actual rendered bounds after each
+  // hover and nudge it back in — cheap (only runs while a hint is actually showing) and correct
+  // regardless of which context this card is mounted in.
+  useEffect(() => {
+    // Keyed on the metric *key* (a stable primitive), not hoveredAxis itself — axisPoints (and so
+    // hoveredAxis) is rebuilt fresh every render, so depending on the object directly meant this
+    // effect re-ran on every render, not just when the hovered axis actually changed. Each rerun
+    // re-measured a rect that already included the previous run's own clamp correction and set a
+    // fresh one on top without ever settling, which is how a plain few-pixel overflow correction
+    // ran away to a many-thousand-pixel offset in testing instead of converging.
+    if (!hoveredMetricKey || !hintRef.current || !cardRef.current) {
+      setHintClamp({ x: 0, y: 0 });
+      setHintMaxWidth(null);
+      return;
+    }
+
+    const cardRect = cardRef.current.getBoundingClientRect();
+    // Cap the box's own width to what the card can actually hold *before* measuring for the x/y
+    // nudge below — found by testing, not by inspection: capping only the position (no width
+    // change) fixed whichever edge the box happened to overflow at that moment, but a box wider
+    // than the card minus both margins has no position that avoids overflowing the *other* edge
+    // instead, so on a first pass that only ever overflowed left it "corrected" itself so far
+    // right that it now overflowed right instead — genuinely worse than doing nothing, not just
+    // insufficient. Applied imperatively first so the immediate remeasure below already reflects
+    // it; setHintMaxWidth is what keeps it applied on the next real render.
+    const maxWidth = Math.max(120, cardRect.width - SCORE_HINT_EDGE_MARGIN_PX * 2);
+    hintRef.current.style.maxWidth = `${maxWidth}px`;
+
+    const hintRect = hintRef.current.getBoundingClientRect();
+    let x = 0;
+    let y = 0;
+
+    if (hintRect.right > cardRect.right - SCORE_HINT_EDGE_MARGIN_PX) {
+      x = cardRect.right - SCORE_HINT_EDGE_MARGIN_PX - hintRect.right;
+    } else if (hintRect.left < cardRect.left + SCORE_HINT_EDGE_MARGIN_PX) {
+      x = cardRect.left + SCORE_HINT_EDGE_MARGIN_PX - hintRect.left;
+    }
+
+    if (hintRect.bottom > cardRect.bottom - SCORE_HINT_EDGE_MARGIN_PX) {
+      y = cardRect.bottom - SCORE_HINT_EDGE_MARGIN_PX - hintRect.bottom;
+    } else if (hintRect.top < cardRect.top + SCORE_HINT_EDGE_MARGIN_PX) {
+      y = cardRect.top + SCORE_HINT_EDGE_MARGIN_PX - hintRect.top;
+    }
+
+    setHintMaxWidth(maxWidth);
+    setHintClamp((current) => (current.x === x && current.y === y ? current : { x, y }));
+  }, [hoveredMetricKey]);
 
   return (
-    <aside className={className} onPointerDown={onPointerDown} aria-label={text.heatmapChartAria}>
+    <aside ref={cardRef} className={className} onPointerDown={onPointerDown} aria-label={text.heatmapChartAria}>
       <div className="score-chart-wrap">
         <svg className="score-chart" viewBox="0 0 208 208" role="img" aria-label={text.scoreChartAria}>
           <g className="score-grid">
@@ -161,11 +234,17 @@ export function PortfolioScoreCard({
 
         {hoveredAxis ? (
           <div
+            ref={hintRef}
             className="score-hint"
             style={{
               left: `${(hoveredAxis.outerX / 208) * 100}%`,
               top: `${(hoveredAxis.outerY / 208) * 100}%`,
-              transform: scoreHintTransform,
+              // The clamp effect's correction is a second, independent translate rather than
+              // folded into scoreHintTransform's own percentages — CSS applies space-separated
+              // transform functions in sequence, so this nudges the *already-anchored* box by a
+              // flat pixel amount instead of fighting over the same translate() call.
+              transform: `${scoreHintTransform} translate(${hintClamp.x}px, ${hintClamp.y}px)`,
+              ...(hintMaxWidth != null ? { maxWidth: `${hintMaxWidth}px` } : null),
             }}
           >
             <strong className="score-hint__title">

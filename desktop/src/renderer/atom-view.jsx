@@ -144,19 +144,38 @@ function buildSelectedInfo(holding, item) {
 // No idle/default state anymore (used to show the portfolio-wide total when nothing was
 // selected) — the widget stays quiet until a node is actually clicked, then shows that stock's
 // own info.
+//
+// Stays mounted at all times now instead of returning null when info is absent — it used to
+// unmount immediately, which is also what let it sit in .atom-section's normal flex flow and
+// shrink .atom-visual-stage every time it appeared (see atom-widget.css for the overlay fix on
+// that side). An immediate unmount also means there's nothing left on screen to fade *out* — a
+// disappear transition needs something to still be there while it plays. deferredInfo holds
+// onto the last real info through that fade so the text doesn't blank out mid-animation; `visible`
+// is the actual trigger for the CSS transition, one render tick behind `info` on purpose.
 function AtomReadout({ info }) {
-  if (!info) {
+  const [deferredInfo, setDeferredInfo] = useState(info);
+  const [visible, setVisible] = useState(Boolean(info));
+
+  useEffect(() => {
+    if (info) {
+      setDeferredInfo(info);
+    }
+    setVisible(Boolean(info));
+  }, [info]);
+
+  if (!deferredInfo) {
     return null;
   }
+
   return (
-    <div className="atom-readout">
-      <div className="atom-readout__label">{info.label}</div>
-      <div className="atom-readout__value">{info.valueText}</div>
+    <div className={`atom-readout${visible ? ' is-visible' : ''}`}>
+      <div className="atom-readout__label">{deferredInfo.label}</div>
+      <div className="atom-readout__value">{deferredInfo.valueText}</div>
       <div className="atom-readout__row">
-        {info.changeText ? (
-          <span className={`atom-readout__chip ${info.changeTone}`.trim()}>{info.changeText}</span>
+        {deferredInfo.changeText ? (
+          <span className={`atom-readout__chip ${deferredInfo.changeTone}`.trim()}>{deferredInfo.changeText}</span>
         ) : null}
-        {info.weightText ? <span className="atom-readout__note">{info.weightText}</span> : null}
+        {deferredInfo.weightText ? <span className="atom-readout__note">{deferredInfo.weightText}</span> : null}
       </div>
     </div>
   );

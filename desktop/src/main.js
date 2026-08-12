@@ -295,6 +295,21 @@ function createAtomWidget() {
   };
   atomWidget.on('move', saveAtomWidgetGeometry);
   atomWidget.on('resize', saveAtomWidgetGeometry);
+  // Transparent, frameless BrowserWindows on macOS have a known Chromium compositor bug: shrinking
+  // the window via a native resize drag can leave the renderer's last-painted frame stretched/
+  // stale, or blank the content entirely, and it stays that way — regrowing the window afterward
+  // doesn't self-correct, since nothing tells the compositor a new frame is actually needed. Not
+  // this app's own layout/JS breaking (the underlying DOM is fine the whole time); the fix is
+  // forcing a fresh paint on every resize tick, not just at the end of the debounced geometry save
+  // above. webContents.invalidate() is Electron's documented "schedule a full repaint" escape
+  // hatch for exactly this class of stuck-renderer problem, and is cheap enough to call on every
+  // tick of a live drag, not just once it settles.
+  atomWidget.on('resize', () => {
+    if (!atomWidget || atomWidget.isDestroyed()) {
+      return;
+    }
+    atomWidget.webContents.invalidate();
+  });
   // Edge-snap is triggered explicitly by the atomfolio:widget-move-end IPC message below (sent
   // from atom-view.jsx's own pointerup/pointercancel), not from this 'move'/'moved' native window
   // event — the ⌘-drag itself is driven by a stream of setPosition() calls from

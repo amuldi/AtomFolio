@@ -4,7 +4,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   handleHealthRequest,
-  handleAiPortfolioSummaryRequest,
   handleMarketFinancialsRequest,
   handleMarketLiveRequest,
   handleMarketNewsRequest,
@@ -205,24 +204,6 @@ const server = http.createServer(async (request, response) => {
         headers: request.headers,
       }),
       readBody,
-      sendJson: sendApiJson,
-    });
-    return;
-  }
-
-  if (requestUrl.pathname === '/api/ai/portfolio-summary') {
-    const workspaceContext = await getWorkspaceContextFromUrl(request, requestUrl, 'editor');
-
-    if (!workspaceContext.ok) {
-      sendWorkspaceAccessError(workspaceContext, sendApiJson);
-      return;
-    }
-
-    await handleAiPortfolioSummaryRequest({
-      method: request.method,
-      workspaceId: workspaceContext.workspaceId,
-      readBody,
-      clientKey,
       sendJson: sendApiJson,
     });
     return;

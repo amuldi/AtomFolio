@@ -97,17 +97,27 @@
   --cosmic-hairline: 255, 242, 216;
   --cosmic-ink-secondary: 226, 226, 226;
   --cosmic-white: 255, 255, 255;
+  /* The atom stage's own ink — every stroke/fill color on the atom itself (.stroke-*, .node-*,
+     .center-*, .graphite-dust, .label-*, .aura-line) used to be a hardcoded warm-cream rgba()
+     triplet per rule, each hand-tuned within a few RGB units of the others (245-255 range across
+     all of them) — close enough to be visually indistinguishable, so consolidating them into one
+     shared token here changes nothing perceptible in dark mode. This is the same technique (same
+     token name, same dark value) desktop's atom-sketch.css already ships and has verified working
+     — see its own --atom-ink definition — reused rather than reinvented so the two atoms swap
+     tone identically instead of via two independently-tuned color systems. */
+  --atom-ink: 250, 240, 220;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Light mode — frame panels only. The atom stage/space scene (.space-depth, .stage-*, .node-*,
-   .label-*, .stroke-*, .center-*, .aura-line, .spiral-glyph, .graphite-dust, .sketch-svg,
-   .atom-webgl-*, .portfolio-preview*, .atom-hint) is deliberately absent from this block — those
-   rules were never converted to these tokens in the first place, so they keep exactly their
-   current cosmic-on-black look no matter what the system theme says. Only what these tokens
-   already touch (every panel built from rgba(var(--frame-*), alpha)) changes here. */
+/* Light mode — frame panels, the atom stage's own ink, the stage background (--app-bg), and the
+   star/nebula field dim down accordingly (see further down this block for the last two). Still
+   deliberately absent: .atom-webgl-*, .portfolio-preview*, and .atom-hint. .atom-hint stays
+   fixed-dark on purpose, same call desktop already made for its identical element — it overlays
+   the atom stage directly, and while the stage's flat background is going light here, .atom-hint's
+   own literal dark backdrop was never tied to --app-bg in the first place, so it keeps reading
+   correctly regardless of theme (the same reasoning that made it correctly exempt on desktop). */
 @media (prefers-color-scheme: light) {
   :root {
     --frame-ink-a: 26, 22, 16;
@@ -119,6 +129,43 @@
     --frame-ink-secondary: 70, 66, 60;
     --frame-white: 24, 20, 15;
     --frame-surface: 250, 246, 240;
+    /* Same value as desktop's :root[data-theme='light'] --atom-ink (atom-widget.css) — reused
+       verbatim, not retuned, per this stage's own instruction to lean on the already-verified
+       desktop value instead of picking a fresh one. */
+    --atom-ink: 32, 28, 23;
+    /* Same hex as --frame-surface above (250, 246, 240), just spelled as a color instead of an RGB
+       triplet — --app-bg is consumed directly as `background: var(--app-bg)`, not through
+       rgba(var(--x), alpha) like the --frame-* tokens are, so it needs its own literal rather than
+       being able to reference --frame-surface directly. Sharing the exact same value (not just a
+       similar one) is what guarantees the stage background and every card/panel sitting on it read
+       as one coherent light surface instead of two independently-chosen off-whites. */
+    --app-bg: #faf6f0;
+  }
+
+  /* The nebula/star field was tuned entirely for one job: brightening small patches of an
+     otherwise near-black void so it reads as depth. Against a light stage background that same
+     low-alpha warm/cool tinting reads as faint haze, not stars — there's no version of "visible
+     stars" that makes sense against daylight, so rather than inventing light-mode "dark stars"
+     (which would look like smudges, not a designed effect), these fade down to a much subtler
+     presence: enough that the parallax drift is still faintly there on close inspection, not
+     enough to read as an odd tint across the page. .space-depth__halo and .space-depth__meteor are
+     deliberately untouched — the halo reads as a soft glow behind the atom either way (arguably
+     more coherent in light mode, like sunlight), and meteors are a rare, already-transient detail
+     that doesn't carry the same "stars in daytime" mismatch. */
+  .space-depth__nebula--far {
+    opacity: calc(0.06 + var(--camera-focus) * 0.04) !important;
+  }
+
+  .space-depth__stars--far {
+    opacity: calc(0.05 + var(--camera-focus) * 0.02) !important;
+  }
+
+  .space-depth__stars--mid {
+    opacity: calc(0.06 + var(--camera-focus) * 0.02) !important;
+  }
+
+  .space-depth__stars--near {
+    opacity: calc(0.07 + var(--camera-focus) * 0.03) !important;
   }
 
   /* These three sit directly over the space scene and were tuned, in dark mode, to sit at a low
@@ -1357,6 +1404,14 @@ body::after {
   display: none;
 }
 
+/* background was a hardcoded near-black literal (6,6,6) while the title/value text below use
+   --frame-ink-a — a token that's *supposed* to flip between themes, and does: under a light-mode
+   system it resolves to dark ink meant for a light panel, composited here against a background
+   that never changed to match, reading as dark text on a near-black box. --frame-surface is the
+   same token .hover-card already uses for exactly this reason; already-opaque at 0.94 here (unlike
+   .hover-card's own low-alpha default) so unlike .hover-card this doesn't also need the separate
+   light-mode opacity boost elsewhere in this file — a light hue at 0.94 alpha already reads as a
+   clean opaque panel with no "haze" to fix. */
 .allocation-panel__tooltip {
   position: absolute;
   z-index: 3;
@@ -1364,7 +1419,7 @@ body::after {
   padding: 0.52rem 0.62rem 0.56rem;
   border: 1px solid rgba(var(--frame-white), 0.14);
   border-radius: 12px 14px 12px 16px / 14px 12px 16px 12px;
-  background: rgba(6, 6, 6, 0.94);
+  background: rgba(var(--frame-surface), 0.94);
   box-shadow:
     0 12px 28px rgba(var(--frame-void), 0.34),
     0 0 0 1px rgba(var(--frame-white), 0.04) inset;
@@ -3172,148 +3227,76 @@ body::after {
    while "closed" (caught by actually opening/closing this live, not by reasoning about the CSS —
    the child's own background/blur/shadow get clipped for free as part of the same ancestor clip,
    no need to duplicate it there too). */
-/* data-dock defaults to (and this base rule *is*) the left-docked shape — right and bottom below
-   are overrides layered on top, not a parallel/separate system, so left doesn't have to repeat
-   itself in an attribute-selector block of its own. */
+/* data-dock defaults to (and this base rule *is*) the left-docked shape — right below is a mirror
+   overlay on top, not a parallel/separate system, so left doesn't have to repeat itself in an
+   attribute-selector block of its own. Bottom dock used to be a third option here (a width/height
+   axis swap, clipped from the top instead of the side) — dropped along with the clip-path reveal
+   mechanism below, since a third axis doesn't have a natural translateX-only equivalent the way
+   left/right's mirrored slide does.
+   This element itself is now just a full-viewport positioning root, not a visibly-sized box — the
+   rail and panel below are what actually render and take up space, independently fixed rather
+   than clipped pieces of one shared box (see .tool-drawer__rail and .tool-drawer__panel for why:
+   the old clip-path model closed by clipping this box down to its rail-width column, which only
+   worked because rail and panel shared one box that could be revealed/hidden together; a pure
+   transform on that same combined box can't keep one edge (the rail) visibly still while sliding
+   the other (the panel) away without an ancestor clip doing the actual hiding — at which point it's
+   clip-path again, not transform. Splitting them is what actually lets the panel's own
+   transform: translateX() do 100% of the open/close work, GPU-composited, no clip-path at all). */
 .tool-drawer {
   --tool-drawer-width: 32.625rem;
-  --tool-drawer-height: 23.75rem;
   --tool-drawer-rail-width: 4.55rem;
+  position: fixed;
+  inset: 0;
+  z-index: var(--ui-layer-allocation-active);
+  /* Nothing at this level should catch a click — the atom stage needs clicks to pass straight
+     through the (viewport-spanning) space this element now occupies. .tool-drawer__rail and
+     .tool-drawer__panel opt back into pointer-events individually, each sized to only their own
+     actual footprint. */
+  pointer-events: none;
+  font-family: var(--ui-font);
+}
+
+/* Right dock: mirror of left — rail and panel both anchor to the opposite screen edge, and the
+   panel's closed-state slide direction flips to match (see .tool-drawer__panel below). */
+.tool-drawer[data-dock='right'] {
+  --dock-edge-sign: -1;
+}
+
+/* Purely a DOM grouping now, not a layout box — rail and panel below are each independently
+   position: fixed, so a real box here would have nothing to size itself around (its two children
+   don't share a track/edge relationship anymore the way a grid's columns did). display: contents
+   keeps rail/panel as its rendered children (for CSS descendant selectors like
+   .tool-drawer[data-dock='right'] .tool-drawer__rail below) without this element itself
+   participating in layout or painting anything of its own. */
+.tool-drawer__window {
+  display: contents;
+}
+
+/* Independently fixed to the true edge, full height, and — unlike .tool-drawer__panel below — no
+   transform, no transition, ever: the whole point of splitting rail out of the old combined
+   rail+panel box is that this piece simply never moves, open or closed, so it can't be the thing a
+   pure transform-based close needs to hide. */
+.tool-drawer__rail {
   position: fixed;
   top: 0;
   bottom: 0;
   left: 0;
-  z-index: var(--ui-layer-allocation-active);
-  display: block;
-  width: var(--tool-drawer-width);
-  min-width: var(--tool-drawer-width);
-  max-width: calc(100vw - 0.5rem);
-  height: 100vh;
-  max-height: none;
-  pointer-events: auto;
-  opacity: 1;
-  /* Closed: clipped down to exactly the rail column. inset() is a plain rectangle, which every
-     mainstream engine composites without a layout/paint pass — the actual fix for the diagnosed
-     width-transition stutter. Elements clipped out of view by clip-path also don't receive
-     pointer events in that region, so this alone keeps clicks from reaching a visually-hidden
-     panel — no separate pointer-events juggling needed. */
-  clip-path: inset(0 calc(100% - var(--tool-drawer-rail-width)) 0 0);
-  transition: clip-path 320ms cubic-bezier(0.2, 0.78, 0.22, 1), opacity 180ms ease;
-  will-change: clip-path;
-  font-family: var(--ui-font);
-}
-
-.tool-drawer.is-open {
-  clip-path: inset(0 0 0 0);
-}
-
-.tool-drawer.is-resizing {
-  transition: opacity 180ms ease;
-}
-
-/* Right dock: mirror of left — anchored to the opposite screen edge, clipped from the opposite
-   side (rail stays flush against the true right edge, panel reveals leftward out from under it). */
-.tool-drawer[data-dock='right'] {
-  left: auto;
-  right: 0;
-  clip-path: inset(0 0 0 calc(100% - var(--tool-drawer-rail-width)));
-}
-
-.tool-drawer[data-dock='right'].is-open {
-  clip-path: inset(0 0 0 0);
-}
-
-/* Bottom dock: the axis swap — width/height and left-right/top-bottom trade places entirely
-   (full viewport width, resizable height, anchored to the bottom edge, clipped from the top so
-   the rail — now a horizontal strip — stays flush against the true bottom edge). */
-.tool-drawer[data-dock='bottom'] {
-  top: auto;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  width: 100%;
-  min-width: 0;
-  max-width: none;
-  height: var(--tool-drawer-height);
-  min-height: var(--tool-drawer-height);
-  max-height: calc(100vh - 0.5rem);
-  clip-path: inset(calc(100% - var(--tool-drawer-rail-width)) 0 0 0);
-}
-
-.tool-drawer[data-dock='bottom'].is-open {
-  clip-path: inset(0 0 0 0);
-}
-
-.tool-drawer__window {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  grid-template-columns: var(--tool-drawer-rail-width) minmax(0, 1fr);
-  min-width: 0;
-  height: 100%;
-  overflow: hidden;
+  z-index: 2;
+  width: var(--tool-drawer-rail-width);
   border-right: 1px solid rgba(var(--frame-hairline), 0.12);
   background:
     linear-gradient(90deg, rgba(var(--frame-white), 0.035), transparent 42%),
     rgba(var(--frame-surface), 0.62);
-  box-shadow:
-    22px 0 64px rgba(var(--frame-void), 0.42),
-    1px 0 0 rgba(var(--frame-white), 0.035) inset;
   backdrop-filter: blur(22px);
   opacity: 0.98;
   pointer-events: auto;
 }
 
-/* Rail and panel are placed explicitly by grid-column/grid-row everywhere (not left to default
-   source-order auto-placement), because that default would put whichever one is FIRST IN THE DOM
-   (the rail — see the JSX) into whichever track is defined FIRST IN grid-template-columns — true
-   by coincidence for left dock (rail already is both), but exactly backwards the moment a track
-   list gets reordered to put the rail on a different physical edge without touching the markup. */
-.tool-drawer__rail {
-  grid-column: 1;
-  grid-row: 1;
-}
-
-.tool-drawer__panel {
-  grid-column: 2;
-  grid-row: 1;
-}
-
-.tool-drawer[data-dock='right'] .tool-drawer__window {
-  grid-template-columns: minmax(0, 1fr) var(--tool-drawer-rail-width);
+.tool-drawer[data-dock='right'] .tool-drawer__rail {
+  left: auto;
+  right: 0;
   border-right: none;
   border-left: 1px solid rgba(var(--frame-hairline), 0.12);
-  box-shadow:
-    -22px 0 64px rgba(var(--frame-void), 0.42),
-    -1px 0 0 rgba(var(--frame-white), 0.035) inset;
-}
-
-.tool-drawer[data-dock='right'] .tool-drawer__rail {
-  grid-column: 2;
-}
-
-.tool-drawer[data-dock='right'] .tool-drawer__panel {
-  grid-column: 1;
-}
-
-.tool-drawer[data-dock='bottom'] .tool-drawer__window {
-  grid-template-columns: 1fr;
-  grid-template-rows: minmax(0, 1fr) var(--tool-drawer-rail-width);
-  border-right: none;
-  border-top: 1px solid rgba(var(--frame-hairline), 0.12);
-  box-shadow:
-    0 -22px 64px rgba(var(--frame-void), 0.42),
-    0 -1px 0 rgba(var(--frame-white), 0.035) inset;
-}
-
-.tool-drawer[data-dock='bottom'] .tool-drawer__rail {
-  grid-column: 1;
-  grid-row: 2;
-}
-
-.tool-drawer[data-dock='bottom'] .tool-drawer__panel {
-  grid-column: 1;
-  grid-row: 1;
 }
 
 .tool-drawer__detail-popout {
@@ -3330,21 +3313,15 @@ body::after {
   scrollbar-color: rgba(var(--frame-ink-a), 0.18) transparent;
 }
 
-/* Mirrors to spill out the panel's other side for right dock, and drops above the panel instead
-   of beside it for bottom dock — same "float just outside the panel, clamped to the viewport"
-   idea as the left-dock default, aimed at whichever edge is actually free in each case. */
+/* Mirrors to spill out the panel's other side for right dock — same "float just outside the
+   panel, clamped to the viewport" idea as the left-dock default, aimed at whichever edge is
+   actually free. Positioned relative to .tool-drawer__panel now (its own nearest positioned
+   ancestor, since it moved inside the panel to ride along with its transform/overflow — see the
+   JSX), so `100%` here means the panel's own width, same role it played before when `100%` meant
+   the combined rail+panel box's width — the panel is still the only edge this needs to clear. */
 .tool-drawer[data-dock='right'] .tool-drawer__detail-popout {
   left: auto;
   right: max(0.75rem, min(calc(100% + 0.7rem), calc(100vw - 23.25rem)));
-}
-
-.tool-drawer[data-dock='bottom'] .tool-drawer__detail-popout {
-  top: auto;
-  bottom: calc(100% + 0.7rem);
-  left: 1rem;
-  right: 1rem;
-  width: auto;
-  max-height: min(22.5rem, calc(100vh - var(--tool-drawer-height) - 1.6rem));
 }
 
 .tool-drawer__detail-popout .tool-drawer__holding-detail {
@@ -3370,48 +3347,15 @@ body::after {
   }
 }
 
+/* Layout-only additions on top of the position/background rule further up — that earlier rule is
+   what actually places and paints this element; everything here is just how its own tool icons
+   arrange themselves inside it. */
 .tool-drawer__rail {
   display: grid;
   gap: 0.22rem;
   align-content: start;
-  width: 100%;
-  min-width: 0;
-  height: 100%;
   padding: 1rem 0.42rem;
   overflow: auto;
-  border-right: 1px solid rgba(var(--frame-hairline), 0.08);
-  background: rgba(var(--frame-white), 0.025);
-  box-shadow: 1px 0 0 rgba(var(--frame-white), 0.025) inset;
-  backdrop-filter: blur(12px);
-  opacity: 1;
-  pointer-events: auto;
-  transform: translate3d(0, 0, 0);
-  transition:
-    opacity 210ms ease,
-    transform 260ms cubic-bezier(0.2, 0.78, 0.22, 1);
-}
-
-.tool-drawer[data-dock='right'] .tool-drawer__rail {
-  border-right: none;
-  border-left: 1px solid rgba(var(--frame-hairline), 0.08);
-  box-shadow: -1px 0 0 rgba(var(--frame-white), 0.025) inset;
-}
-
-/* Icons flow left-to-right in a single horizontal strip instead of top-to-bottom in a vertical
-   one — grid-auto-flow: column sends implicitly-placed children (the tool buttons, none of which
-   declare their own grid-column/row) into new columns instead of new rows; there's no
-   grid-template-columns to size those columns explicitly, so each just sizes to its own
-   3.58rem-square button, exactly like the vertical rail's implicit rows already did. */
-.tool-drawer[data-dock='bottom'] .tool-drawer__rail {
-  border-right: none;
-  border-top: 1px solid rgba(var(--frame-hairline), 0.08);
-  box-shadow: 0 -1px 0 rgba(var(--frame-white), 0.025) inset;
-  grid-auto-flow: column;
-  align-content: center;
-  justify-content: start;
-  padding: 0.42rem 1rem;
-  overflow-x: auto;
-  overflow-y: hidden;
 }
 
 /* Drag-to-dock grip — always present (open or closed), sitting at the head of the rail. A plain
@@ -3437,12 +3381,6 @@ body::after {
 .tool-drawer__dock-handle:active {
   cursor: grabbing;
   transform: scaleX(1.2);
-}
-
-.tool-drawer[data-dock='bottom'] .tool-drawer__dock-handle {
-  width: 0.3rem;
-  height: 1.8rem;
-  margin: auto 0.7rem auto 0.15rem;
 }
 
 .tool-drawer__button {
@@ -3486,6 +3424,7 @@ body::after {
 .tool-drawer__button .manual-dock__icon,
 .tool-drawer__button .news-dock__icon,
 .tool-drawer__button .twin-dock__icon,
+.tool-drawer__button .lookup-dock__icon,
 .tool-drawer__button .settings-gear__icon {
   position: relative;
   z-index: 1;
@@ -3500,6 +3439,7 @@ body::after {
 .tool-drawer__button.is-active .manual-dock__icon,
 .tool-drawer__button.is-active .news-dock__icon,
 .tool-drawer__button.is-active .twin-dock__icon,
+.tool-drawer__button.is-active .lookup-dock__icon,
 .tool-drawer__button.is-active .settings-gear__icon {
   filter:
     drop-shadow(0 0 9px rgba(var(--frame-ink-b), 0.42))
@@ -3533,6 +3473,13 @@ body::after {
   overflow: visible;
 }
 
+.lookup-dock__icon {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+
 .account-dock__soft,
 .account-dock__main,
 .manual-dock__soft,
@@ -3540,7 +3487,9 @@ body::after {
 .manual-dock__accent,
 .news-dock__soft,
 .news-dock__main,
-.news-dock__accent {
+.news-dock__accent,
+.lookup-dock__soft,
+.lookup-dock__main {
   fill: none;
   vector-effect: non-scaling-stroke;
   stroke-linecap: round;
@@ -3549,14 +3498,16 @@ body::after {
 
 .account-dock__soft,
 .manual-dock__soft,
-.news-dock__soft {
+.news-dock__soft,
+.lookup-dock__soft {
   stroke: rgba(var(--frame-ink-c), 0.32);
   stroke-width: 2.25;
 }
 
 .account-dock__main,
 .manual-dock__main,
-.news-dock__main {
+.news-dock__main,
+.lookup-dock__main {
   stroke: rgba(var(--frame-ink-b), 0.9);
   stroke-width: 1.28;
 }
@@ -3567,49 +3518,63 @@ body::after {
   stroke-width: 1.6;
 }
 
-/* No more display:none toggle — display can't be transitioned, so animating this in required
-   dropping it in favor of a mechanism that can. clip-path on .tool-drawer__window above already
-   handles the visual + pointer-event hiding (nothing in the clipped-away region is paintable or
-   clickable); this element's own job is just the accessibility half clip-path *doesn't* cover —
-   clipped-out content stays in the tab order unless something also takes it out. visibility does
-   that (unlike display, an element stays laid out but visibility:hidden removes it from both hit
-   testing and focus — belt-and-suspenders with clip-path's own hit-testing behavior, and the part
-   that actually matters for keyboard users). The transition-delay on visibility is what keeps
-   this from just snapping invisible at t=0 and cutting the slide short: closing waits until the
-   320ms transform has actually finished before it takes effect, while opening switches to visible
-   immediately so the panel is interactive from the first frame of the reveal, not just at the end
-   of it. The small translateX adds a touch of its own motion on top of the window's clip-path
-   reveal, rather than the content sitting perfectly still while a mask slides over it. */
+/* This is the entire open/close mechanism now — no clip-path anywhere in the picture. Closed:
+   translateX(calc(var(--dock-edge-sign, 1) * -100%)) slides the panel fully behind its own rail
+   (100% of the panel's *own* width, not a pixel value — correct at any drawerWidth without a
+   resize needing to recompute it) and off past the true screen edge; --dock-edge-sign flips the
+   direction for right dock (see .tool-drawer[data-dock='right'] further up) so both mirror instead
+   of needing two separate transform rules. transform + visibility are the only two properties that
+   ever move here — no clip-path, no width — so this composites on the GPU with no layout pass,
+   the same property this codebase already leans on for the resize handle's own hover states and
+   the atom transition scale.
+   visibility follows the same delayed-on-close / immediate-on-open pattern the old clip-path
+   version used: closing waits until the 320ms slide has actually finished before leaving the tab
+   order (visibility:hidden pulls a laid-out-but-offscreen element out of both hit-testing and
+   keyboard focus — the transform alone doesn't), while opening switches to visible immediately so
+   the panel is interactive from the first frame of the reveal, not just at the end of it. */
 .tool-drawer__panel {
-  position: relative;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: var(--tool-drawer-rail-width);
+  z-index: 1;
+  width: calc(var(--tool-drawer-width) - var(--tool-drawer-rail-width));
   display: flex;
   flex-direction: column;
   min-width: 0;
-  width: 100%;
-  height: 100%;
   max-width: none;
   max-height: none;
-  overflow: hidden;
+  overflow: visible;
   border: none;
   border-radius: 0;
-  background: rgba(var(--frame-surface), 0.3);
-  box-shadow: none;
-  backdrop-filter: none;
-  opacity: 1;
+  background:
+    linear-gradient(90deg, rgba(var(--frame-white), 0.035), transparent 42%),
+    rgba(var(--frame-surface), 0.62);
+  box-shadow:
+    22px 0 64px rgba(var(--frame-void), 0.42),
+    1px 0 0 rgba(var(--frame-white), 0.035) inset;
+  backdrop-filter: blur(22px);
+  opacity: 0.98;
   visibility: hidden;
   pointer-events: auto;
-  transform: translateX(-2%);
+  transform: translateX(calc(var(--dock-edge-sign, 1) * -100%));
   transition:
-    background 180ms ease,
     transform 320ms cubic-bezier(0.2, 0.78, 0.22, 1),
     visibility 0s linear 320ms;
+}
+
+.tool-drawer[data-dock='right'] .tool-drawer__panel {
+  left: auto;
+  right: var(--tool-drawer-rail-width);
+  box-shadow:
+    -22px 0 64px rgba(var(--frame-void), 0.42),
+    -1px 0 0 rgba(var(--frame-white), 0.035) inset;
 }
 
 .tool-drawer.is-open .tool-drawer__panel {
   visibility: visible;
   transform: translateX(0);
   transition:
-    background 180ms ease,
     transform 320ms cubic-bezier(0.2, 0.78, 0.22, 1),
     visibility 0s linear 0s;
 }
@@ -3640,16 +3605,15 @@ body::after {
   gap: 0.72rem;
 }
 
-.tool-drawer__account-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.7rem;
+/* Just the portfolio count now — the import button that used to share this line moved into its
+   own card below (see .tool-drawer__account-onboard), so this is free to just be a plain small
+   header line instead of a flex row justifying a lone piece of text against a button. */
+.tool-drawer__accounts-header {
   min-width: 0;
 }
 
-.tool-drawer__account-actions span {
-  min-width: 0;
+.tool-drawer__accounts-count {
+  display: block;
   overflow: hidden;
   color: rgba(var(--frame-ink-c), 0.56);
   font-family: var(--ui-font);
@@ -3660,8 +3624,44 @@ body::after {
   white-space: nowrap;
 }
 
+/* Two equal-weight cards — "build it yourself" and "import a file" side by side, same width,
+   stretched to match each other's height regardless of which has more content (the import card is
+   shorter — one hint line instead of a text field — so without the stretch it would look like an
+   afterthought next to the fuller create card). */
+.tool-drawer__account-onboard {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: stretch;
+  gap: 0.56rem;
+}
+
+/* Extends .tool-drawer__overview-card's shared card shell (the same soft-tinted, slightly
+   irregular-corner box every other card in this drawer uses — see its own definition) with just
+   the internal stacking these two need: an eyebrow title, then whatever the card's own middle
+   content is, then a full-width action button pinned to the bottom. */
+.tool-drawer__account-onboard-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.tool-drawer__account-onboard-card p {
+  margin: 0;
+}
+
+.tool-drawer__account-onboard-hint {
+  flex: 1 1 auto;
+  color: rgba(var(--frame-ink-a), 0.44);
+  font-family: var(--ui-font);
+  font-size: 0.66rem;
+  font-weight: 560;
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
 .tool-drawer__account-upload {
-  flex: 0 0 auto;
+  width: 100%;
+  margin-top: auto;
   padding: 0.42rem 0.58rem;
   border: 1px solid rgba(var(--frame-hairline), 0.12);
   border-radius: 999px;
@@ -3693,18 +3693,6 @@ body::after {
   outline: none;
 }
 
-.tool-drawer__account-create {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 0.5rem;
-  min-width: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
-  box-shadow: none;
-}
-
 .tool-drawer__account-create-field {
   display: grid;
   gap: 0.24rem;
@@ -3723,13 +3711,18 @@ body::after {
   white-space: nowrap;
 }
 
+/* Deliberately NOT the 999px pill every search/filter field in this drawer uses (see the many
+   other border-radius: 999px rules throughout this file) — a pill here reads as "type to search/
+   autocomplete", which is exactly the wrong affordance for a field whose job is naming something
+   new, not looking something up. A plain rounded-rect radius is what ties it visually to an
+   ordinary form input instead. */
 .tool-drawer__account-create-field input {
   min-width: 0;
   width: 100%;
   height: 2.12rem;
   padding: 0 0.58rem;
   border: 1px solid rgba(var(--frame-hairline), 0.1);
-  border-radius: 999px;
+  border-radius: 0.7rem;
   background: rgba(var(--frame-surface), 0.32);
   color: rgba(var(--frame-ink-b), 0.9);
   font-family: var(--ui-font);
@@ -3749,6 +3742,8 @@ body::after {
 }
 
 .tool-drawer__account-create-button {
+  width: 100%;
+  margin-top: auto;
   min-width: 0;
   height: 2.12rem;
   padding: 0 0.64rem;
@@ -3781,6 +3776,16 @@ body::after {
   background: rgba(var(--frame-ink-a), 0.13);
   color: rgba(var(--frame-ink-b), 0.98);
   outline: none;
+}
+
+/* One search field + whatever MarketLivePreview itself renders (its own single card, or the empty
+   hint below) — two pieces total, well inside the "no card-sprawl" ceiling the rest of this
+   drawer holds to. */
+.tool-drawer__lookup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.62rem;
+  min-width: 0;
 }
 
 .tool-drawer__manual-entry {
@@ -5205,7 +5210,6 @@ body::after {
   opacity: 0.5;
 }
 
-.tool-drawer__ai-panel,
 .tool-drawer__compare-panel,
 .tool-drawer__report-panel {
   display: grid;
@@ -5213,39 +5217,6 @@ body::after {
   min-width: 0;
 }
 
-.tool-drawer__ai-disclaimer {
-  margin: 0;
-  color: rgba(var(--frame-ink-a), 0.58);
-  font-family: var(--ui-font);
-  font-size: 0.64rem;
-  font-weight: 560;
-  letter-spacing: 0;
-  line-height: 1.42;
-  text-transform: none;
-}
-
-.tool-drawer__ai-content {
-  display: grid;
-  gap: 0.72rem;
-  min-width: 0;
-}
-
-.tool-drawer__ai-headline {
-  display: grid;
-  gap: 0.28rem;
-  min-width: 0;
-}
-
-.tool-drawer__ai-headline strong {
-  color: rgba(var(--frame-ink-a), 0.94);
-  font-family: var(--ui-font);
-  font-size: 0.92rem;
-  line-height: 1.24;
-}
-
-.tool-drawer__ai-headline span,
-.tool-drawer__ai-row em,
-.tool-drawer__ai-columns span,
 .tool-drawer__report-lines p,
 .tool-drawer__report-lines li {
   color: rgba(var(--frame-ink-a), 0.68);
@@ -5255,73 +5226,11 @@ body::after {
   overflow-wrap: anywhere;
 }
 
-.tool-drawer__ai-list {
-  display: grid;
-  gap: 0.44rem;
-  min-width: 0;
-}
-
-.tool-drawer__ai-row {
-  display: grid;
-  gap: 0.18rem;
-  min-width: 0;
-  padding: 0.52rem 0;
-  border-top: 1px solid rgba(var(--frame-hairline), 0.08);
-}
-
-.tool-drawer__ai-row span,
-.tool-drawer__ai-columns p {
-  margin: 0;
-  color: rgba(var(--frame-ink-a), 0.52);
-  font-family: var(--ui-font);
-  font-size: 0.58rem;
-  font-weight: 760;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.tool-drawer__ai-row strong {
-  min-width: 0;
-  color: rgba(var(--frame-ink-a), 0.88);
-  font-family: var(--ui-font);
-  font-size: 0.74rem;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
-.tool-drawer__ai-columns {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.58rem;
-  min-width: 0;
-}
-
-.tool-drawer__ai-columns section {
-  min-width: 0;
-  padding-top: 0.48rem;
-  border-top: 1px solid rgba(var(--frame-hairline), 0.08);
-}
-
-.tool-drawer__ai-columns ul,
 .tool-drawer__report-lines ul {
   display: grid;
   gap: 0.28rem;
   margin: 0.34rem 0 0;
   padding-left: 1rem;
-}
-
-.tool-drawer__ai-columns li {
-  color: rgba(var(--frame-ink-a), 0.68);
-  font-family: var(--ui-font);
-  font-size: 0.66rem;
-  line-height: 1.46;
-  overflow-wrap: anywhere;
-}
-
-.tool-drawer__ai-meta {
-  color: rgba(var(--frame-ink-a), 0.42);
-  font-family: var(--ui-font);
-  font-size: 0.58rem;
 }
 
 .tool-drawer__compare-table {
@@ -5495,18 +5404,6 @@ body::after {
   left: -0.26rem;
 }
 
-/* Bottom dock's resizable edge is its top, and the handle rotates from a vertical ew-resize strip
-   into a horizontal ns-resize one to match. */
-.tool-drawer[data-dock='bottom'] .tool-drawer__resize-handle {
-  top: -0.26rem;
-  left: 0;
-  right: 0;
-  bottom: auto;
-  width: 100%;
-  height: 0.52rem;
-  cursor: ns-resize;
-}
-
 .tool-drawer__resize-handle::before {
   content: '';
   position: absolute;
@@ -5520,15 +5417,6 @@ body::after {
     background 160ms ease,
     opacity 160ms ease,
     box-shadow 160ms ease;
-}
-
-.tool-drawer[data-dock='bottom'] .tool-drawer__resize-handle::before {
-  top: 0.24rem;
-  bottom: auto;
-  left: 0;
-  right: 0;
-  width: auto;
-  height: 1px;
 }
 
 .tool-drawer__resize-handle:hover::before,
@@ -5572,14 +5460,6 @@ body::after {
 .dock-edge-hint--right {
   right: 0;
   background: linear-gradient(270deg, rgba(var(--frame-ink-b), 0.6), transparent);
-}
-
-.dock-edge-hint--bottom {
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 14px;
-  background: linear-gradient(0deg, rgba(var(--frame-ink-b), 0.6), transparent);
 }
 
 @keyframes dock-edge-hint-in {
@@ -5700,7 +5580,9 @@ body::after {
   padding: 0.38rem 0.72rem 0.42rem;
   border: 1px solid rgba(var(--frame-hairline), 0.16);
   border-radius: 999px;
-  background: rgba(10, 10, 10, 0.9);
+  /* Same fix as .allocation-panel__tooltip above — was a hardcoded near-black literal behind
+     theme-reactive --frame-ink-c text, unreadable under a light-mode system. */
+  background: rgba(var(--frame-surface), 0.9);
   box-shadow:
     0 0 0 1px rgba(var(--frame-ink-a), 0.04) inset,
     0 8px 22px rgba(var(--frame-void), 0.24);
@@ -6744,7 +6626,7 @@ body::after {
 
 .label-main,
 .label-detail {
-  fill: rgba(250, 240, 220, 0.9);
+  fill: rgba(var(--atom-ink), 0.9);
   font-family:
     'Bradley Hand',
     'Marker Felt',
@@ -6759,7 +6641,7 @@ body::after {
 }
 
 .label-detail {
-  fill: rgba(250, 240, 220, 0.62);
+  fill: rgba(var(--atom-ink), 0.62);
   font-size: 10.5px;
 }
 
@@ -7047,7 +6929,7 @@ body::after {
 
 .aura-line {
   fill: none;
-  stroke: rgba(248, 235, 212, 0.11);
+  stroke: rgba(var(--atom-ink), 0.11);
   stroke-width: 8;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -7073,7 +6955,7 @@ body::after {
 
 .stroke-soft {
   fill: none;
-  stroke: rgba(255, 242, 216, 0.31);
+  stroke: rgba(var(--atom-ink), 0.31);
   stroke-width: 1.08;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -7081,7 +6963,7 @@ body::after {
 
 .stroke-shadow {
   fill: none;
-  stroke: rgba(246, 233, 208, 0.54);
+  stroke: rgba(var(--atom-ink), 0.54);
   stroke-width: 2.18;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -7089,15 +6971,15 @@ body::after {
 
 .stroke-main {
   fill: none;
-  stroke: rgba(249, 239, 218, 0.96);
+  stroke: rgba(var(--atom-ink), 0.96);
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .node-soft {
-  fill: rgba(245, 233, 208, 0.09);
-  stroke: rgba(249, 238, 214, 0.67);
+  fill: rgba(var(--atom-ink), 0.09);
+  stroke: rgba(var(--atom-ink), 0.67);
   stroke-width: 1.2;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -7105,19 +6987,19 @@ body::after {
 
 .node-main {
   fill: none;
-  stroke: rgba(250, 240, 220, 0.98);
+  stroke: rgba(var(--atom-ink), 0.98);
   stroke-width: 1.42;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .node-selected-glow {
-  fill: rgba(255, 247, 232, 0.18);
-  stroke: rgba(255, 250, 238, 0.98);
+  fill: rgba(var(--atom-ink), 0.18);
+  stroke: rgba(var(--atom-ink), 0.98);
   stroke-width: 3.2;
   stroke-linecap: round;
   stroke-linejoin: round;
-  filter: drop-shadow(0 0 8px rgba(255, 247, 232, 0.45));
+  filter: drop-shadow(0 0 8px rgba(var(--atom-ink), 0.45));
 }
 
 .node-hit {
@@ -7128,9 +7010,9 @@ body::after {
 
 .node-hit:focus-visible {
   outline: none;
-  stroke: rgba(255, 250, 238, 0.92);
+  stroke: rgba(var(--atom-ink), 0.92);
   stroke-width: 2.8;
-  filter: drop-shadow(0 0 8px rgba(255, 247, 232, 0.45));
+  filter: drop-shadow(0 0 8px rgba(var(--atom-ink), 0.45));
 }
 
 .center-hit {
@@ -7141,57 +7023,57 @@ body::after {
 }
 
 .center-blot {
-  fill: rgba(248, 237, 216, 0.42);
-  stroke: rgba(249, 239, 218, 0.96);
+  fill: rgba(var(--atom-ink), 0.42);
+  stroke: rgba(var(--atom-ink), 0.96);
   stroke-width: 1.2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .center-glow-outer {
-  fill: rgba(255, 245, 226, 0.24);
-  stroke: rgba(255, 243, 220, 0.34);
+  fill: rgba(var(--atom-ink), 0.24);
+  stroke: rgba(var(--atom-ink), 0.34);
   stroke-width: 0.96;
 }
 
 .center-glow-mid {
-  fill: rgba(255, 246, 228, 0.3);
-  stroke: rgba(255, 246, 230, 0.42);
+  fill: rgba(var(--atom-ink), 0.3);
+  stroke: rgba(var(--atom-ink), 0.42);
   stroke-width: 0.96;
 }
 
 .center-glow-core {
-  fill: rgba(255, 250, 237, 0.68);
+  fill: rgba(var(--atom-ink), 0.68);
   stroke: none;
 }
 
 .center-shell-shadow {
-  fill: rgba(255, 242, 214, 0.2);
-  stroke: rgba(250, 239, 218, 0.46);
+  fill: rgba(var(--atom-ink), 0.2);
+  stroke: rgba(var(--atom-ink), 0.46);
   stroke-width: 1;
 }
 
 .center-shell-rim {
-  fill: rgba(255, 248, 233, 0.1);
-  stroke: rgba(255, 247, 232, 0.68);
+  fill: rgba(var(--atom-ink), 0.1);
+  stroke: rgba(var(--atom-ink), 0.68);
   stroke-width: 1.12;
 }
 
 .center-shell-highlight {
-  fill: rgba(255, 250, 239, 0.54);
+  fill: rgba(var(--atom-ink), 0.54);
   stroke: none;
 }
 
 .center-orbit {
   fill: none;
-  stroke: rgba(250, 240, 220, 0.72);
+  stroke: rgba(var(--atom-ink), 0.72);
   stroke-width: 0.94;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .graphite-dust {
-  fill: rgba(248, 237, 214, 0.88);
+  fill: rgba(var(--atom-ink), 0.88);
 }
 
 @keyframes breathe {
@@ -7496,6 +7378,7 @@ body::after {
   .tool-drawer__button .manual-dock__icon,
   .tool-drawer__button .news-dock__icon,
   .tool-drawer__button .twin-dock__icon,
+  .tool-drawer__button .lookup-dock__icon,
   .tool-drawer__button .settings-gear__icon {
     width: 3.08rem;
     height: 3.08rem;
@@ -7516,13 +7399,10 @@ body::after {
     padding: 0.78rem 0.82rem 0.95rem;
   }
 
-  .tool-drawer__account-create {
+  /* Side-by-side only has room to breathe above a certain drawer width — stack the two onboarding
+     cards on narrow (mobile-width) drawers instead of squeezing both into ~100px each. */
+  .tool-drawer__account-onboard {
     grid-template-columns: 1fr;
-    align-items: stretch;
-  }
-
-  .tool-drawer__account-create-button {
-    width: 100%;
   }
 
   .tool-drawer__manual-grid {
@@ -7792,10 +7672,6 @@ body::after {
 
   .tool-drawer__compare-row small {
     white-space: normal;
-  }
-
-  .tool-drawer__ai-columns {
-    grid-template-columns: 1fr;
   }
 }
 
