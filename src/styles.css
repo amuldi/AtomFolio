@@ -6684,6 +6684,46 @@ body::after {
   }
 }
 
+/* Unlike the transient tap-hint above, this one has nothing to be transient about - it's the only
+   thing on screen explaining what to do with zero portfolios, so it stays up the whole time that's
+   true instead of fading out after a few seconds. Real <button> (not the plain <div role="status">
+   the tap-hint uses) since clicking it actually opens the accounts drawer. */
+.atom-hint--empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.22rem;
+  width: max-content;
+  max-width: min(20rem, calc(100vw - 3rem));
+  padding: 0.65rem 1.1rem;
+  border-radius: 16px;
+  appearance: none;
+  white-space: normal;
+  text-align: center;
+  pointer-events: auto;
+  cursor: pointer;
+  opacity: 1;
+  animation: none;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.atom-hint--empty-state:hover {
+  background: rgba(7, 7, 7, 0.92);
+  border-color: rgba(255, 242, 216, 0.22);
+}
+
+.atom-hint--empty-state strong {
+  font-size: 0.82rem;
+  font-weight: 680;
+  color: rgba(250, 240, 220, 0.94);
+}
+
+.atom-hint--empty-state span {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: rgba(250, 240, 220, 0.68);
+}
+
 @keyframes atomHintFade {
   0% {
     opacity: 0;
@@ -7608,6 +7648,54 @@ body::after {
 .view-mode-toggle__option.is-active {
   background: rgba(var(--frame-ink-a), 0.16);
   color: rgba(var(--frame-ink-b), 0.96);
+}
+
+/* Same fixed/pill/blur treatment as .view-mode-toggle, mirrored to the top-right corner instead of
+   top-center — a quiet, always-there reminder that Cmd+K/Ctrl+K opens quick search, since nothing
+   else in the app hints that shortcut exists. */
+.command-palette-hint {
+  position: fixed;
+  top: 1.1rem;
+  right: 1.1rem;
+  z-index: var(--z-view-toggle);
+  display: flex;
+  align-items: center;
+  gap: 0.42rem;
+  padding: 0.36rem 0.7rem 0.36rem 0.9rem;
+  border: 1px solid rgba(var(--frame-hairline), 0.12);
+  border-radius: 999px;
+  background: rgba(var(--frame-surface), 0.7);
+  backdrop-filter: blur(8px);
+  color: rgba(var(--frame-ink-secondary), 0.68);
+  font-family: var(--ui-font);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.command-palette-hint:hover {
+  background: rgba(var(--frame-ink-a), 0.08);
+  color: rgba(var(--frame-ink-b), 0.9);
+}
+
+.command-palette-hint__key {
+  padding: 0.1rem 0.4rem;
+  border-radius: 6px;
+  background: rgba(var(--frame-ink-a), 0.1);
+  font-size: 0.68rem;
+  font-weight: 680;
+  letter-spacing: 0.02em;
+}
+
+/* Rail is full-height on narrow viewports and .command-palette-hint would otherwise overlap
+   .atom-detail-panel's own top edge - hides the label text (keeping just the ⌘K chip, still
+   clickable) rather than disappearing entirely, same "shrink before vanish" idea the tool rail
+   itself already follows at small sizes. */
+@media (max-width: 640px) {
+  .command-palette-hint__label {
+    display: none;
+  }
 }
 
 .view-mode-overlay {
