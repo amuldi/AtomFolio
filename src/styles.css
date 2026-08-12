@@ -112,6 +112,18 @@
      value is required to match desktop's (see the light blocks below); this dark one is just
      whatever the site's own pre-existing cream already was. */
   --atom-ink: 250, 240, 220;
+  /* Multiplies every one of the atom's own alpha values below (see rgba(var(--atom-ink),
+     calc(alpha times var(--atom-ink-alpha-boost))) throughout the stroke, node, center, label, and
+     dust rules) — 1 here is a no-op, so dark mode's actual per-element alphas (each hand-tuned in
+     the 0.09-0.98 range for a bright-ink-on-black look) are completely unchanged. Light mode
+     redefines this alone rather than touching two dozen individual alpha values a second time:
+     alpha-blending a low-alpha dark color over a light background reads far fainter than the same
+     alpha of a light color over black ever did (a near-black at 0.3 alpha over white barely reads
+     as gray; the equivalent bright-on-black easily reads as a clear line) — confirmed on a real
+     light-mode screen, where the untouched dark-mode alphas made the whole atom look like a ghost.
+     One shared multiplier fixes all of them in lockstep and keeps their relative soft/main/shadow
+     layering intact, rather than needing an independent light-mode value hand-picked per rule. */
+  --atom-ink-alpha-boost: 1;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -153,6 +165,12 @@
        --app-bg below, with headroom to go darker still if a real display ever shows it reading as
        anything other than black. */
     --atom-ink: 10, 8, 6;
+    /* See the base :root's own comment on --atom-ink-alpha-boost for why this needs to exist at
+       all — 2.4 was picked so even the faintest dark-mode alpha (0.09, on .node-soft's fill) clears
+       0.2 here, while everything already at or above ~0.42 simply clamps to fully opaque (rgba()
+       alpha silently clamps values over 1), which is the intended outcome for "make it read as
+       unambiguous black" rather than a half-measure. */
+    --atom-ink-alpha-boost: 2.4;
     /* Same hex as --frame-surface above (250, 246, 240), just spelled as a color instead of an RGB
        triplet — --app-bg is consumed directly as `background: var(--app-bg)`, not through
        rgba(var(--x), alpha) like the --frame-* tokens are, so it needs its own literal rather than
@@ -221,6 +239,7 @@
   --frame-white: 24, 20, 15;
   --frame-surface: 250, 246, 240;
   --atom-ink: 10, 8, 6;
+  --atom-ink-alpha-boost: 2.4;
   --app-bg: #faf6f0;
 }
 
@@ -2741,7 +2760,6 @@ body::after {
 .settings-panel__section + .settings-panel__section {
   margin-top: 0.64rem;
   padding-top: 0.64rem;
-  border-top: 1px solid rgba(var(--frame-hairline), 0.07);
 }
 
 .settings-panel__section:last-child {
@@ -6691,7 +6709,7 @@ body::after {
 
 .label-main,
 .label-detail {
-  fill: rgba(var(--atom-ink), 0.9);
+  fill: rgba(var(--atom-ink), calc(0.9 * var(--atom-ink-alpha-boost)));
   font-family:
     'Bradley Hand',
     'Marker Felt',
@@ -6706,7 +6724,7 @@ body::after {
 }
 
 .label-detail {
-  fill: rgba(var(--atom-ink), 0.62);
+  fill: rgba(var(--atom-ink), calc(0.62 * var(--atom-ink-alpha-boost)));
   font-size: 10.5px;
 }
 
@@ -6733,14 +6751,24 @@ body::after {
   pointer-events: none;
 }
 
+/* This is the one atom-adjacent element the earlier theme pass missed — it sits directly behind
+   the atom (inset: 14%, roughly the atom's own footprint), blurred into a soft ambient glow. Still
+   rgba(var(--atom-ink), alpha) like the atom itself, not a separate hardcoded warm-cream value, so
+   it darkens together with the atom instead of staying a bright cream haze sitting right over a
+   now-also-light stage background — which is exactly what made the atom read as "white on white"
+   in light mode even though its own strokes were correctly black: a large blurred near-white glow
+   painted right on top of it. In dark mode this still reads as a warm glow (bright ink on a black
+   stage); in light mode the same token instead reads as a soft dark vignette behind the atom (dark
+   ink on a light stage) — the same "ambient presence" idea, just inverted the way a light-in-front-
+   of-dark glow naturally becomes a shadow-behind when the backdrop flips. */
 .stage-frame::before {
   inset: 14%;
   border-radius: 50%;
   background:
     radial-gradient(
       circle at calc(50% + var(--space-pan-stage-x) * 0.32) calc(50% + var(--space-pan-stage-y) * 0.28),
-      rgba(255, 244, 220, calc(var(--camera-glow) * 0.34)) 0,
-      rgba(255, 244, 220, 0.12) 24%,
+      rgba(var(--atom-ink), calc(var(--camera-glow) * 0.34)) 0,
+      rgba(var(--atom-ink), 0.12) 24%,
       transparent 64%
     );
   opacity: calc(0.24 + var(--camera-focus) * 0.3);
@@ -6751,7 +6779,7 @@ body::after {
 .stage-frame::after {
   inset: 18%;
   border-radius: 50%;
-  border: 1px solid rgba(255, 246, 226, calc(0.08 + var(--camera-focus) * 0.14));
+  border: 1px solid rgba(var(--atom-ink), calc(0.08 + var(--camera-focus) * 0.14));
   opacity: calc(0.16 + var(--camera-focus) * 0.22);
   transform:
     translate3d(calc(var(--space-pan-stage-x) * 0.18), calc(var(--space-pan-stage-y) * 0.18), 0)
@@ -6994,7 +7022,7 @@ body::after {
 
 .aura-line {
   fill: none;
-  stroke: rgba(var(--atom-ink), 0.11);
+  stroke: rgba(var(--atom-ink), calc(0.11 * var(--atom-ink-alpha-boost)));
   stroke-width: 8;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -7020,7 +7048,7 @@ body::after {
 
 .stroke-soft {
   fill: none;
-  stroke: rgba(var(--atom-ink), 0.31);
+  stroke: rgba(var(--atom-ink), calc(0.31 * var(--atom-ink-alpha-boost)));
   stroke-width: 1.08;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -7028,7 +7056,7 @@ body::after {
 
 .stroke-shadow {
   fill: none;
-  stroke: rgba(var(--atom-ink), 0.54);
+  stroke: rgba(var(--atom-ink), calc(0.54 * var(--atom-ink-alpha-boost)));
   stroke-width: 2.18;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -7036,15 +7064,15 @@ body::after {
 
 .stroke-main {
   fill: none;
-  stroke: rgba(var(--atom-ink), 0.96);
+  stroke: rgba(var(--atom-ink), calc(0.96 * var(--atom-ink-alpha-boost)));
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .node-soft {
-  fill: rgba(var(--atom-ink), 0.09);
-  stroke: rgba(var(--atom-ink), 0.67);
+  fill: rgba(var(--atom-ink), calc(0.09 * var(--atom-ink-alpha-boost)));
+  stroke: rgba(var(--atom-ink), calc(0.67 * var(--atom-ink-alpha-boost)));
   stroke-width: 1.2;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -7052,19 +7080,19 @@ body::after {
 
 .node-main {
   fill: none;
-  stroke: rgba(var(--atom-ink), 0.98);
+  stroke: rgba(var(--atom-ink), calc(0.98 * var(--atom-ink-alpha-boost)));
   stroke-width: 1.42;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .node-selected-glow {
-  fill: rgba(var(--atom-ink), 0.18);
-  stroke: rgba(var(--atom-ink), 0.98);
+  fill: rgba(var(--atom-ink), calc(0.18 * var(--atom-ink-alpha-boost)));
+  stroke: rgba(var(--atom-ink), calc(0.98 * var(--atom-ink-alpha-boost)));
   stroke-width: 3.2;
   stroke-linecap: round;
   stroke-linejoin: round;
-  filter: drop-shadow(0 0 8px rgba(var(--atom-ink), 0.45));
+  filter: drop-shadow(0 0 8px rgba(var(--atom-ink), calc(0.45 * var(--atom-ink-alpha-boost))));
 }
 
 .node-hit {
@@ -7075,9 +7103,9 @@ body::after {
 
 .node-hit:focus-visible {
   outline: none;
-  stroke: rgba(var(--atom-ink), 0.92);
+  stroke: rgba(var(--atom-ink), calc(0.92 * var(--atom-ink-alpha-boost)));
   stroke-width: 2.8;
-  filter: drop-shadow(0 0 8px rgba(var(--atom-ink), 0.45));
+  filter: drop-shadow(0 0 8px rgba(var(--atom-ink), calc(0.45 * var(--atom-ink-alpha-boost))));
 }
 
 .center-hit {
@@ -7088,57 +7116,57 @@ body::after {
 }
 
 .center-blot {
-  fill: rgba(var(--atom-ink), 0.42);
-  stroke: rgba(var(--atom-ink), 0.96);
+  fill: rgba(var(--atom-ink), calc(0.42 * var(--atom-ink-alpha-boost)));
+  stroke: rgba(var(--atom-ink), calc(0.96 * var(--atom-ink-alpha-boost)));
   stroke-width: 1.2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .center-glow-outer {
-  fill: rgba(var(--atom-ink), 0.24);
-  stroke: rgba(var(--atom-ink), 0.34);
+  fill: rgba(var(--atom-ink), calc(0.24 * var(--atom-ink-alpha-boost)));
+  stroke: rgba(var(--atom-ink), calc(0.34 * var(--atom-ink-alpha-boost)));
   stroke-width: 0.96;
 }
 
 .center-glow-mid {
-  fill: rgba(var(--atom-ink), 0.3);
-  stroke: rgba(var(--atom-ink), 0.42);
+  fill: rgba(var(--atom-ink), calc(0.3 * var(--atom-ink-alpha-boost)));
+  stroke: rgba(var(--atom-ink), calc(0.42 * var(--atom-ink-alpha-boost)));
   stroke-width: 0.96;
 }
 
 .center-glow-core {
-  fill: rgba(var(--atom-ink), 0.68);
+  fill: rgba(var(--atom-ink), calc(0.68 * var(--atom-ink-alpha-boost)));
   stroke: none;
 }
 
 .center-shell-shadow {
-  fill: rgba(var(--atom-ink), 0.2);
-  stroke: rgba(var(--atom-ink), 0.46);
+  fill: rgba(var(--atom-ink), calc(0.2 * var(--atom-ink-alpha-boost)));
+  stroke: rgba(var(--atom-ink), calc(0.46 * var(--atom-ink-alpha-boost)));
   stroke-width: 1;
 }
 
 .center-shell-rim {
-  fill: rgba(var(--atom-ink), 0.1);
-  stroke: rgba(var(--atom-ink), 0.68);
+  fill: rgba(var(--atom-ink), calc(0.1 * var(--atom-ink-alpha-boost)));
+  stroke: rgba(var(--atom-ink), calc(0.68 * var(--atom-ink-alpha-boost)));
   stroke-width: 1.12;
 }
 
 .center-shell-highlight {
-  fill: rgba(var(--atom-ink), 0.54);
+  fill: rgba(var(--atom-ink), calc(0.54 * var(--atom-ink-alpha-boost)));
   stroke: none;
 }
 
 .center-orbit {
   fill: none;
-  stroke: rgba(var(--atom-ink), 0.72);
+  stroke: rgba(var(--atom-ink), calc(0.72 * var(--atom-ink-alpha-boost)));
   stroke-width: 0.94;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .graphite-dust {
-  fill: rgba(var(--atom-ink), 0.88);
+  fill: rgba(var(--atom-ink), calc(0.88 * var(--atom-ink-alpha-boost)));
 }
 
 @keyframes breathe {
