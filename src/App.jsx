@@ -4133,7 +4133,7 @@ function ToolSideDrawer({
       return {
         accountName:
           activePortfolio?.id
-            ? activePortfolio.fileName?.replace(/\.manual\.csv$/i, '') ||
+            ? activePortfolio.fileName ||
               summarizePortfolioEntryAccounts(activePortfolio, language).accountText ||
               '직접 입력 포트폴리오'
             : manualAccountName.trim() || '직접 입력 포트폴리오',
@@ -4291,7 +4291,7 @@ function ToolSideDrawer({
     onAppendManualHoldings?.({
       entryId: activePortfolio.id,
       accountName:
-        activePortfolio.fileName?.replace(/\.manual\.csv$/i, '') ||
+        activePortfolio.fileName ||
         summarizePortfolioEntryAccounts(activePortfolio, language).accountText ||
         '직접 입력 포트폴리오',
       rows,
@@ -7445,7 +7445,7 @@ export default function App() {
         ? crypto.randomUUID()
         : `manual-atom-${Date.now()}`;
     const payload = buildLocalPortfolioPayload(
-      `${safeAccountName}.manual.csv`,
+      safeAccountName,
       [],
       {
         reviewStatus: 'ok',
@@ -7507,7 +7507,7 @@ export default function App() {
       ),
     );
     const payload = buildLocalPortfolioPayload(
-      `${safeAccountName}.manual.csv`,
+      safeAccountName,
       manualItems,
       {
         reviewStatus: 'ok',
@@ -7724,8 +7724,7 @@ export default function App() {
       handleRemovePortfolioHolding({ entryId: sourceEntryId, itemId, itemIds, itemIndex, itemIndexes });
       handleAppendManualHoldings({
         entryId: targetEntryId,
-        accountName:
-          targetEntry?.fileName?.replace(/\.manual\.csv$/i, '').replace(/\.csv$/i, '') || '',
+        accountName: targetEntry?.fileName?.replace(/\.csv$/i, '') || '',
         rows: [row],
       });
     },

@@ -15,7 +15,6 @@ import {
 function portfolioLabel(entry) {
   return (
     String(entry?.fileName ?? '')
-      .replace(/\.manual\.csv$/i, '')
       .replace(/\.csv$/i, '')
       .trim() || '포트폴리오'
   );
