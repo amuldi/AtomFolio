@@ -138,34 +138,42 @@ crashed silently with no window ever appearing, rotate/move gestures fighting ea
 its own fix commit. The build target is now scoped to Apple Silicon (arm64) only, for release
 stability.
 
-### Being upfront about what these screenshots actually are
+### Being upfront about how these screenshots were taken
 
-The menu bar app is a native macOS tray widget, so unlike everything else in this document it
-couldn't just be captured with browser automation. Opening the renderer HTML directly without
-`window.atomfolio` (the IPC bridge Electron's `preload.cjs` normally injects) fails immediately
-with a blank page — which is itself a decent illustration of how deeply this app depends on native
-IPC rather than being a webpage in disguise.
+The menu bar app is a native macOS tray widget, so it couldn't initially be captured with browser
+automation. It was actually launched locally (`cd desktop && npm run dev`) and captured with
+macOS's built-in `screencapture` command instead — the three images below are not mockups, they're
+**the real tray widget and popover, actually running on macOS**, connected to a real local test
+workspace (`portfolio_test2`, 11 holdings) over `localhost:8787`, with a live Naver market-news
+feed showing through.
 
-So instead: **the real renderer code (`atom-view.bundle.js`, `popover.js`) was left completely
-untouched, and a throwaway script was used to stand in for `window.atomfolio` with fake data.**
-In other words, the screenshots below are not a capture of the real macOS tray widget — they're
-**the exact renderer code this project actually ships, running against made-up numbers.** Colors,
-fonts, layout, and click interactions are all genuine; only the figures are invented examples. The
-throwaway mock files (`mock-bridge.js` etc.) were deleted right after the screenshots were taken
-and are not part of the repository. To see the real tray app yourself, follow `desktop/README.md`:
-`cd desktop && npm install && npm run dev`.
+One thing worth being fully transparent about: an early attempt at this captured the *entire*
+screen and picked up unrelated windows from other apps (a chat app conversation, a notes app) that
+had nothing to do with this task. **That file was deleted immediately, without being saved,
+attached, or shown anywhere.** Every capture after that point first hid unrelated apps (chat,
+notes, Finder) via macOS's `System Events`, captured only the screen area the user pointed to (a
+Chrome/Google window), and immediately restored those apps' visibility afterward. The images below
+are cropped from those clean captures only.
 
-**The atom widget** — top holdings orbiting the portfolio total:
+**The atom widget** — an always-on-top floating window with top holdings orbiting the portfolio
+total. The real Chrome window behind it (the AtomFolio GitHub repo, a YouTube tab) shows it's
+genuinely floating over the desktop, not a mockup:
 
-![Menu bar atom widget (real renderer code, mocked data)](assets/atomfolio-menubar-widget-mock.jpg)
+![Menu bar atom widget — real macOS capture](assets/atomfolio-menubar-widget-live.jpg)
 
-**Clicking a holding** shows its market value, P/L, and weight:
+**The popover** (news / quick-add / settings pager) that opens from the tray icon — showing
+`portfolio_test2 · 11 holdings` with a live Naver market-news feed:
 
-![Menu bar atom widget — holding detail (real renderer code, mocked data)](assets/atomfolio-menubar-widget-detail-mock.jpg)
+![Menu bar popover — real macOS capture](assets/atomfolio-menubar-popover-live.jpg)
 
-**The popover** (news/settings pager) that opens from the tray icon:
+**Both windows together**, floating over the Chrome/Google window the user pointed the capture at:
 
-![Menu bar popover (real renderer code, mocked data)](assets/atomfolio-menubar-popover-mock.jpg)
+![Menu bar app — full context, real macOS capture](assets/atomfolio-menubar-context-live.jpg)
+
+(Note: the click-to-detail popup that shows a holding's market value/P&L/weight couldn't be
+captured this time — clicking a specific node programmatically needs macOS Accessibility
+permission, which was not granted to this session, and turning it on would itself be a system
+settings change this session didn't make on its own.)
 
 ## 8. Screenshots — then vs. now
 
