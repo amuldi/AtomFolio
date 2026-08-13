@@ -53,6 +53,12 @@ const DEFAULTS = {
   // the others exist for portfolios where a different axis is more meaningful (e.g. an
   // all-US-tech portfolio, where 위험 등급 or 투자 스타일 says more than 분야 does).
   atomCategoryDimension: 'sector',
+  // "잠자기" — when true, the atom widget is permanently click-through (main.js's
+  // atomfolio:widget-set-click-through handler overrides whatever the renderer's own hit-test
+  // computes) so it just floats over the desktop like a static image: no click/drag/rotate, no
+  // click-through-to-the-app-behind toggling, nothing. Off by default — the widget is interactive
+  // unless the user explicitly asks for it not to be.
+  atomWidgetSleeping: false,
 };
 
 const MAX_SEEN_IDS = 80;

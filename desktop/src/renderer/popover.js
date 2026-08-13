@@ -966,6 +966,15 @@ function renderSettingsPanel(settings) {
       checked: settings.launchAtLogin,
       onChange: (next) => updateSetting({ launchAtLogin: next }),
     }),
+    // Forces the widget permanently click-through (main.js's atomfolio:widget-set-click-through
+    // handler overrides its own dynamic hit-test whenever this is on) — the atom keeps floating
+    // and rotating exactly as before, it just stops reacting to the cursor at all, like a static
+    // desktop image instead of a small app.
+    renderToggle({
+      label: '잠자기',
+      checked: settings.atomWidgetSleeping,
+      onChange: (next) => updateSetting({ atomWidgetSleeping: next }),
+    }),
     el('div', 'settings-subgroup-divider'),
     renderSlider({
       label: '새로고침 주기',

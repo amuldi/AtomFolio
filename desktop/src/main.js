@@ -463,8 +463,9 @@ function setAtomWidgetVisible(visible) {
     // Reset click-through explicitly rather than trusting whatever state a previous hide left it
     // in — atom-view.jsx's own hit-test (see atomfolio:widget-set-click-through) only re-evaluates
     // on pointermove, so without this a widget re-shown under a cursor that hasn't moved yet could
-    // briefly reappear still click-through from before it was hidden.
-    atomWidget.setIgnoreMouseEvents(false);
+    // briefly reappear still click-through from before it was hidden. Sleep mode still wins even
+    // here, though — showing the widget shouldn't itself wake it back up.
+    atomWidget.setIgnoreMouseEvents(Boolean(loadConfig().atomWidgetSleeping), { forward: true });
     atomWidget.showInactive();
     // Mirrors hideAtomWidgetAfterDissolve's 'closing' signal below — without this, a widget shown
     // again after being dissolved-and-hidden stays stuck at its dissolved (scale 0) state, since
@@ -890,7 +891,13 @@ function registerIpcHandlers() {
     if (!atomWidget || atomWidget.isDestroyed()) {
       return;
     }
-    atomWidget.setIgnoreMouseEvents(Boolean(shouldIgnore), { forward: true });
+    // "잠자기" overrides the renderer's own hit-test unconditionally — asleep, the widget is
+    // click-through no matter what's under the cursor, full stop. Read fresh off config (not a
+    // cached flag) so a settings change from the popover takes effect on this very next message,
+    // not just from update-settings' own immediate apply (see that handler's own comment for why
+    // both exist).
+    const sleeping = Boolean(loadConfig().atomWidgetSleeping);
+    atomWidget.setIgnoreMouseEvents(sleeping ? true : Boolean(shouldIgnore), { forward: true });
   });
 
   ipcMain.handle('atomfolio:connect', async (_event, workspaceId) => {
@@ -1029,6 +1036,7 @@ function registerIpcHandlers() {
       launchAtLogin: config.launchAtLogin,
       appearance: config.appearance,
       atomCategoryDimension: config.atomCategoryDimension,
+      atomWidgetSleeping: config.atomWidgetSleeping,
     };
   });
 
@@ -1051,6 +1059,7 @@ function registerIpcHandlers() {
       'launchAtLogin',
       'appearance',
       'atomCategoryDimension',
+      'atomWidgetSleeping',
     ];
     const clean = {};
     for (const key of allowedKeys) {
@@ -1096,6 +1105,14 @@ function registerIpcHandlers() {
       // without this the atom widget wouldn't see the new dimension until something else happened
       // to trigger a state broadcast.
       setState({ categoryDimension: clean.atomCategoryDimension });
+    }
+    if ('atomWidgetSleeping' in clean && atomWidget && !atomWidget.isDestroyed()) {
+      // Applied immediately rather than waiting for atom-view.jsx's own hit-test to send its next
+      // atomfolio:widget-set-click-through message — that handler already re-checks
+      // config.atomWidgetSleeping itself (see its own comment) so this isn't strictly required for
+      // correctness, only for not leaving the widget interactive for however long it takes the
+      // cursor to move again after sleep is turned on.
+      atomWidget.setIgnoreMouseEvents(Boolean(clean.atomWidgetSleeping), { forward: true });
     }
 
     await refresh({ silent: true });
