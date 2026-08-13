@@ -452,6 +452,11 @@ function setAtomWidgetVisible(visible) {
     const { width, height } = atomWidget.getBounds();
     const { x, y } = centeredAtomWidgetPosition(width, height);
     atomWidget.setPosition(x, y, false);
+    // Reset click-through explicitly rather than trusting whatever state a previous hide left it
+    // in — atom-view.jsx's own hit-test (see atomfolio:widget-set-click-through) only re-evaluates
+    // on pointermove, so without this a widget re-shown under a cursor that hasn't moved yet could
+    // briefly reappear still click-through from before it was hidden.
+    atomWidget.setIgnoreMouseEvents(false);
     atomWidget.showInactive();
     // Mirrors hideAtomWidgetAfterDissolve's 'closing' signal below — without this, a widget shown
     // again after being dissolved-and-hidden stays stuck at its dissolved (scale 0) state, since
@@ -864,6 +869,20 @@ function registerIpcHandlers() {
   ipcMain.on('atomfolio:widget-drag-end', () => {
     stopAtomWidgetDrag();
     snapAtomWidgetToEdges();
+  });
+
+  // atom-view.jsx's own hit-test decides *when* this should flip (see its own comment) — this
+  // handler just applies whatever it decided. forward: true is load-bearing, not a nicety: without
+  // it, the moment the window switches to ignoring mouse events, it stops receiving mousemove too,
+  // so the renderer would lose the one signal (a pointermove back over an actual hit target) it
+  // needs in order to ever ask to un-ignore again — the widget would be permanently click-through
+  // until reopened. With forward: true, move events still reach the renderer while only
+  // clicks/drags pass through to whatever's behind.
+  ipcMain.on('atomfolio:widget-set-click-through', (_event, shouldIgnore) => {
+    if (!atomWidget || atomWidget.isDestroyed()) {
+      return;
+    }
+    atomWidget.setIgnoreMouseEvents(Boolean(shouldIgnore), { forward: true });
   });
 
   ipcMain.handle('atomfolio:connect', async (_event, workspaceId) => {

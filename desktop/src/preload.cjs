@@ -7,6 +7,10 @@ contextBridge.exposeInMainWorld('atomfolio', {
   // main process polling the cursor, not by streaming deltas up from here.
   startWidgetDrag: () => ipcRenderer.send('atomfolio:widget-drag-start'),
   endWidgetDrag: () => ipcRenderer.send('atomfolio:widget-drag-end'),
+  // Fire-and-forget, sent only when atom-view.jsx's own hit-test actually changes state (not on
+  // every pointermove) — see main.js's atomfolio:widget-set-click-through handler for what this
+  // does to the window itself.
+  setWidgetClickThrough: (shouldIgnore) => ipcRenderer.send('atomfolio:widget-set-click-through', Boolean(shouldIgnore)),
   // Round-trip for the widget-close dissolve — main.js sends 'closing' before actually hiding the
   // window, atom-view.jsx plays the transition and acks back. See main.js's
   // hideAtomWidgetAfterDissolve for the timeout fallback if this ack never arrives.

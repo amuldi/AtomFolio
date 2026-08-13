@@ -437,6 +437,70 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
     };
   }, []);
 
+  // Click-through for the widget's own empty space. This is a transparent, frameless
+  // BrowserWindow — by default Electron gives it a normal opaque hit-box covering its whole
+  // rectangle, so *any* pixel inside that rectangle intercepts clicks regardless of whether
+  // anything is actually painted there. Almost everything drawn here already opts out of that at
+  // the SVG level (every decorative stroke/glow/label in atom-sketch.css is pointer-events: none;
+  // only .node-hit/.center-hit are pointer-events: all) — but the plain <div>s wrapping the SVG
+  // (.atom-visual-stage, .atom-materialize-wrapper) still have the CSS default (pointer-events:
+  // auto), so today the entire stage box still eats every click that isn't over a node, doing
+  // nothing with it and blocking whatever's behind this window — that's the actual bug being
+  // fixed here, not just the visually-obvious margin around the atom.
+  //
+  // document.elementFromPoint (not a ref on the event target) is what actually answers "is this
+  // pixel currently interactive" — the event target for a plain pointermove is whatever DOM
+  // element is literally under the cursor, which for the reasons above is almost always one of
+  // those wrapper divs rather than something meaningful to branch on directly.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) {
+      return undefined;
+    }
+
+    // null (not a boolean) so the very first evaluation always sends its result, regardless of
+    // which way it comes out — there's no meaningful "default" to compare against yet. A ref, not
+    // a plain closure variable, because onWidgetOpening below has to be able to reset it: main.js
+    // resets the *actual* window to non-ignoring on every show (see setAtomWidgetVisible's own
+    // comment), and this has to reset back in step, or a re-shown widget whose cursor lands
+    // somewhere that hashes to the same shouldIgnore it had before being hidden would never
+    // re-send the IPC (the `!== lastIgnore` guard below would see no change) even though main.js's
+    // side had already changed out from under it.
+    const lastIgnoreRef = { current: null };
+
+    const unsubscribeOpening = window.atomfolio?.onWidgetOpening?.(() => {
+      lastIgnoreRef.current = null;
+    });
+
+    const evaluate = (event) => {
+      const target = document.elementFromPoint(event.clientX, event.clientY);
+      const overHitTarget = Boolean(target?.closest?.('.node-hit, .center-hit'));
+      const overStage = Boolean(target && stage.contains(target));
+      // A drag already in progress must never flip to click-through mid-gesture — forward: true
+      // (see main.js's atomfolio:widget-set-click-through handler) only forwards move events, not
+      // the eventual pointerup/pointercancel this component needs to hear in order to end the
+      // drag cleanly. Checked directly off the same refs handleUp/handleMove above already use,
+      // not some derived boolean state, so this can never drift out of sync with the actual drag.
+      const dragInProgress = Boolean(dragRef.current.atomId) || widgetDragRef.current.active;
+      // Matches handleStagePointerDown's own condition for starting a window-move drag (⌘ held,
+      // anywhere on the stage) — hovering that same combination has to stay non-click-through too,
+      // or the drag could never start in the first place.
+      const interactive = overHitTarget || dragInProgress || (overStage && event.metaKey);
+      const shouldIgnore = !interactive;
+
+      if (shouldIgnore !== lastIgnoreRef.current) {
+        lastIgnoreRef.current = shouldIgnore;
+        window.atomfolio?.setWidgetClickThrough?.(shouldIgnore);
+      }
+    };
+
+    window.addEventListener('pointermove', evaluate);
+    return () => {
+      window.removeEventListener('pointermove', evaluate);
+      unsubscribeOpening?.();
+    };
+  }, []);
+
   // Imperative (not React state) on purpose — this fires continuously while the user drags-resizes
   // the window, and a CSS custom property write is far cheaper than a re-render on every tick.
   useEffect(() => {
