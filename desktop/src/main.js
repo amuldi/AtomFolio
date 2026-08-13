@@ -45,6 +45,10 @@ const ATOM_WIDGET_GEOMETRY_SAVE_DEBOUNCE_MS = 400;
 // against it. Deliberately not applied on every 'move' tick — only from the 'moved' handler,
 // which macOS fires once the drag actually settles — so it never fights the user's hand mid-drag.
 const ATOM_WIDGET_SNAP_THRESHOLD = 24;
+// How often the main process re-reads the global cursor position while ⌘-dragging the widget
+// (see startAtomWidgetDrag). 16ms ~ 60Hz — smooth without meaningfully loading the CPU for what's
+// normally a few-second gesture.
+const ATOM_WIDGET_DRAG_POLL_MS = 16;
 // Pages inside the popover's horizontal pager (see popover.js's createPager) — kept in one place
 // since both the header's own ⚙ shortcut and the context-menu shortcuts below need to agree on
 // the indices.
@@ -58,6 +62,9 @@ let tray = null;
 let popover = null;
 let atomWidget = null;
 let atomWidgetGeometrySaveTimer = null;
+// Non-null only while a ⌘-drag is in flight — see startAtomWidgetDrag/stopAtomWidgetDrag.
+let atomWidgetDragInterval = null;
+let atomWidgetDragOrigin = null;
 let pollTimer = null;
 /** @type {Set<string>} article ids already pushed to the renderer at least once this session —
  * separate from the persisted lastSeenArticleIds, which only exists to avoid re-notifying across
@@ -178,6 +185,69 @@ function defaultAtomWidgetPosition() {
     x: Math.round(workArea.x + workArea.width - ATOM_WIDGET_WIDTH - ATOM_WIDGET_DEFAULT_MARGIN),
     y: Math.round(workArea.y + ATOM_WIDGET_DEFAULT_MARGIN),
   };
+}
+
+// Used every time the widget is shown (setAtomWidgetVisible(true)) — deliberately not the same
+// thing as defaultAtomWidgetPosition above, which only matters once, at the very first launch
+// before any saved position exists. Always the *primary* display's center, not whichever display
+// the widget last happened to be on — showing the widget is meant to be a predictable "it's right
+// here" action regardless of where a previous drag left it.
+function centeredAtomWidgetPosition(width, height) {
+  const workArea = screen.getPrimaryDisplay().workArea;
+  return {
+    x: Math.round(workArea.x + (workArea.width - width) / 2),
+    y: Math.round(workArea.y + (workArea.height - height) / 2),
+  };
+}
+
+// Global-cursor-polling drag, not renderer pointermove deltas. Electron's renderer process only
+// receives pointer events while the cursor is over its own window — a fast drag lets the cursor
+// outrun the (still catching-up) window edge, at which point the cursor leaves the window and
+// pointermove stops arriving entirely, so the drag visibly "sticks" until the cursor happens to
+// re-enter the window's new bounds. screen.getCursorScreenPoint() has no such restriction (it's a
+// main-process, OS-level query), so polling it directly tracks the cursor everywhere, including
+// off-window and across displays, with nothing for a fast gesture to outrun.
+function startAtomWidgetDrag() {
+  if (!atomWidget || atomWidget.isDestroyed()) {
+    return;
+  }
+  // Guards a stray second widget-drag-start (e.g. a dropped widget-drag-end IPC) from stacking a
+  // second interval on top of the first rather than replacing it.
+  stopAtomWidgetDrag();
+  const cursor = screen.getCursorScreenPoint();
+  const bounds = atomWidget.getBounds();
+  atomWidgetDragOrigin = {
+    cursorX: cursor.x,
+    cursorY: cursor.y,
+    windowX: bounds.x,
+    windowY: bounds.y,
+  };
+  atomWidgetDragInterval = setInterval(() => {
+    if (!atomWidget || atomWidget.isDestroyed() || !atomWidgetDragOrigin) {
+      stopAtomWidgetDrag();
+      return;
+    }
+    const point = screen.getCursorScreenPoint();
+    const dx = point.x - atomWidgetDragOrigin.cursorX;
+    const dy = point.y - atomWidgetDragOrigin.cursorY;
+    // No clampPointToVisibleDisplay here on purpose (see this module's own note elsewhere) — a
+    // drag in progress should be able to cross freely onto another display, not get held at the
+    // edge of whichever one it started on. Edge-snap/display-matching only apply once the drag
+    // actually ends, in stopAtomWidgetDrag below.
+    atomWidget.setPosition(
+      Math.round(atomWidgetDragOrigin.windowX + dx),
+      Math.round(atomWidgetDragOrigin.windowY + dy),
+      false,
+    );
+  }, ATOM_WIDGET_DRAG_POLL_MS);
+}
+
+function stopAtomWidgetDrag() {
+  if (atomWidgetDragInterval) {
+    clearInterval(atomWidgetDragInterval);
+    atomWidgetDragInterval = null;
+  }
+  atomWidgetDragOrigin = null;
 }
 
 // A position saved on a display that's since been unplugged (external monitor, different desk)
@@ -310,11 +380,12 @@ function createAtomWidget() {
     }
     atomWidget.webContents.invalidate();
   });
-  // Edge-snap is triggered explicitly by the atomfolio:widget-move-end IPC message below (sent
-  // from atom-view.jsx's own pointerup/pointercancel), not from this 'move'/'moved' native window
-  // event — the ⌘-drag itself is driven by a stream of setPosition() calls from
-  // atomfolio:widget-move-by, and snapping on every one of those (if 'moved' fired per call) would
-  // fight the user's hand mid-drag instead of only settling things once, on release.
+  // Edge-snap is triggered explicitly by the atomfolio:widget-drag-end IPC message (sent from
+  // atom-view.jsx's own pointerup/pointercancel/⌘-release), not from this 'move'/'moved' native
+  // window event — the ⌘-drag itself is driven by startAtomWidgetDrag's own setInterval polling
+  // loop, which calls setPosition() many times a second, and snapping on every one of those (if
+  // 'moved' fired per call) would fight the user's hand mid-drag instead of only settling things
+  // once, on release.
 
   // A discoverable way to reach things that would otherwise require knowing the tray menu exists.
   atomWidget.webContents.on('context-menu', () => {
@@ -372,6 +443,15 @@ function setAtomWidgetVisible(visible) {
   }
   if (visible) {
     cancelPendingWidgetHide?.();
+    // Always the primary display's center on show, regardless of wherever a previous drag left
+    // it — see centeredAtomWidgetPosition's own comment. This makes the saved atomWidgetPosition
+    // (still written by saveAtomWidgetGeometry below on every 'move'/'resize', including live
+    // during a drag) relevant only to createAtomWidget's *initial* window bounds at app launch,
+    // not to anything that happens on a later show — it's kept rather than removed because it
+    // still does that one job, and atomWidgetSize is saved by the same debounced handler.
+    const { width, height } = atomWidget.getBounds();
+    const { x, y } = centeredAtomWidgetPosition(width, height);
+    atomWidget.setPosition(x, y, false);
     atomWidget.showInactive();
     // Mirrors hideAtomWidgetAfterDissolve's 'closing' signal below — without this, a widget shown
     // again after being dissolved-and-hidden stays stuck at its dissolved (scale 0) state, since
@@ -771,31 +851,18 @@ function startPolling() {
 function registerIpcHandlers() {
   ipcMain.handle('atomfolio:get-state', () => state);
 
-  // Fire-and-forget (ipcRenderer.send, not invoke) — sent continuously off atom-view.jsx's own
-  // pointermove while ⌘-dragging the widget, so round-trip latency from awaiting a reply on every
-  // single move would be pure waste. dx/dy are screen-space deltas already computed on the
-  // renderer side (see atom-view.jsx for why screen, not client, coordinates).
-  ipcMain.on('atomfolio:widget-move-by', (_event, dx, dy) => {
-    if (!atomWidget || atomWidget.isDestroyed()) {
-      return;
-    }
-    // setPosition() throws (crashing the whole main process, not just this handler — an
-    // uncaught exception here takes the entire app down) if it gets anything that doesn't
-    // convert to an integer. dx/dy come from the renderer's own pointermove-diff computation,
-    // which should always be finite numbers, but this is a fire-and-forget `send` — nothing
-    // upstream stops a malformed or stale message from reaching this handler, so the guard has
-    // to live here rather than trusting the sender.
-    if (!Number.isFinite(dx) || !Number.isFinite(dy)) {
-      return;
-    }
-    const { x, y } = atomWidget.getBounds();
-    atomWidget.setPosition(Math.round(x + dx), Math.round(y + dy), false);
+  // Sent once per ⌘-drag gesture (not once per pointermove) — see startAtomWidgetDrag's own
+  // comment for why the drag itself is tracked here via cursor polling rather than as a stream of
+  // renderer-computed deltas.
+  ipcMain.on('atomfolio:widget-drag-start', () => {
+    startAtomWidgetDrag();
   });
 
-  // Sent once, on pointerup/pointercancel — the one moment edge-snapping should actually run (see
-  // snapAtomWidgetToEdges's own comment and createAtomWidget's for why this isn't wired off a
-  // native window event instead).
-  ipcMain.on('atomfolio:widget-move-end', () => {
+  // Sent once, on pointerup/pointercancel or on ⌘ being released mid-drag — the one moment
+  // edge-snapping should actually run (see snapAtomWidgetToEdges's own comment and
+  // createAtomWidget's for why this isn't wired off a native window event instead).
+  ipcMain.on('atomfolio:widget-drag-end', () => {
+    stopAtomWidgetDrag();
     snapAtomWidgetToEdges();
   });
 
@@ -1035,4 +1102,5 @@ app.on('window-all-closed', (event) => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  stopAtomWidgetDrag();
 });

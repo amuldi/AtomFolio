@@ -66,9 +66,9 @@ body {
    card, rounded corners) — no card here at all, the atom floats straight over the desktop.
    -webkit-app-region: no-drag by default — grabbing the atom (center, bond-lines, or an
    individual stock node) rotates/selects it, same as the real website's trackball, not the
-   window-hijacking behavior this used to have. Holding ⌘ instead moves the window — but by hand
-   (atom-view.jsx tracks screenX/screenY deltas and calls atomfolio.moveWidgetBy over IPC), not via
-   -webkit-app-region: drag on this element. A native-app-region version was tried first and
+   window-hijacking behavior this used to have. Holding ⌘ instead moves the window — but via
+   main.js polling the global cursor position over IPC (atomfolio.startWidgetDrag/endWidgetDrag),
+   not via -webkit-app-region: drag on this element. A native-app-region version was tried first and
    confirmed broken in real use: that property only takes effect for a mousedown that starts
    *after* the browser process already has the point cached as a draggable region from a prior
    layout pass — toggling the class reactively from a pointerdown/pointermove handler is
@@ -85,6 +85,18 @@ body {
   user-select: none;
   -webkit-app-region: no-drag;
   cursor: default;
+  /* Permanently reserves room for .atom-readout at the bottom, instead of the readout overlaying
+     on top of wherever the atom's own lines/nodes happen to be. .sketch-svg is width:100%/
+     height:100% with a fixed viewBox + default preserveAspectRatio="meet" (atom-sketch.css), so
+     shrinking this element's content box via padding shrinks and re-centers the whole atom to
+     fit inside it — no JS/camera changes needed. It's static (not toggled when a node is
+     selected), so it doesn't reintroduce the old flex-resize "atom jumps on click" bug .atom-
+     section's own comment describes; the atom is just permanently drawn slightly smaller and
+     higher, with the bottom strip always kept clear. 52px comfortably clears .atom-readout's
+     tallest realistic content (label + value + chip row) plus a bit of margin for the SVG's own
+     ~10% scale(1.1) overflow (see .sketch-svg's comment).
+  */
+  padding-bottom: 52px;
 }
 
 /* .is-move-mode itself is still just a hover-reactive cursor cue (toggled by atom-view.jsx reading
@@ -167,6 +179,11 @@ body {
    margin the rest of .atom-section gets for free in normal flow — it also conveniently matches
    .atom-visual-stage's own width (192px in the 240px-wide default size), so the readout and the
    atom stage above it share the same left/right bounds.
+   No background/backing plate here on purpose — a solid or blurred panel behind the text was
+   tried and read as an opaque box sitting on top of the atom, which is worse than the overlap it
+   was covering up. The actual fix is .atom-visual-stage's own padding-bottom (see its comment):
+   the atom is permanently drawn a bit smaller/higher so this bottom strip is genuinely empty
+   space by the time the readout fades in, not something a panel needs to paper over.
    pointer-events: none because this now visually sits on top of the lower part of the stage —
    without it, clicking a node under where the readout text happens to be would hit this label
    instead of the atom (it's display-only text, nothing here needs to catch a click). max-height

@@ -2,9 +2,11 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('atomfolio', {
   getState: () => ipcRenderer.invoke('atomfolio:get-state'),
-  // Fire-and-forget (send, not invoke) — see main.js's atomfolio:widget-move-by handler for why.
-  moveWidgetBy: (dx, dy) => ipcRenderer.send('atomfolio:widget-move-by', dx, dy),
-  moveWidgetEnd: () => ipcRenderer.send('atomfolio:widget-move-end'),
+  // Fire-and-forget (send, not invoke), one message per gesture rather than one per pointermove —
+  // see main.js's atomfolio:widget-drag-start handler for why the drag itself is tracked by the
+  // main process polling the cursor, not by streaming deltas up from here.
+  startWidgetDrag: () => ipcRenderer.send('atomfolio:widget-drag-start'),
+  endWidgetDrag: () => ipcRenderer.send('atomfolio:widget-drag-end'),
   // Round-trip for the widget-close dissolve — main.js sends 'closing' before actually hiding the
   // window, atom-view.jsx plays the transition and acks back. See main.js's
   // hideAtomWidgetAfterDissolve for the timeout fallback if this ack never arrives.

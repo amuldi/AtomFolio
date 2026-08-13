@@ -371,24 +371,23 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
   }, []);
 
   // The actual ⌘-move drag: started from handleStagePointerDown below (background/center/node —
-  // whatever's under the cursor, as long as ⌘ is held), same dragRef + window-level pointermove/up
-  // shape as the rotation drag further down. Tracked via screenX/screenY (not clientX/Y) because
-  // the window itself moves under the cursor as this runs — a client-coordinate delta would be
-  // measuring against a stage that just relocated out from under it; screen coordinates don't have
-  // that problem.
-  const widgetDragRef = useRef({ active: false, pointerId: null, lastScreenX: 0, lastScreenY: 0 });
+  // whatever's under the cursor, as long as ⌘ is held). The renderer itself doesn't track cursor
+  // deltas any more — main.js's startAtomWidgetDrag polls screen.getCursorScreenPoint() instead,
+  // specifically because a renderer only ever receives pointer events while the cursor is over its
+  // own window: a fast drag could outrun the (still catching up) window edge, the cursor would
+  // leave the window, and pointermove would simply stop arriving mid-gesture — main-process cursor
+  // polling has no such boundary. This ref (and the window-level listeners below) exist purely to
+  // know *when* to tell main.js to start/stop that polling — matching pointerId, and watching for
+  // ⌘ being released mid-drag — not to compute any movement themselves.
+  const widgetDragRef = useRef({ active: false, pointerId: null });
 
   const handleStagePointerDown = useCallback((event) => {
     if (!event.metaKey) {
       return;
     }
     event.preventDefault();
-    widgetDragRef.current = {
-      active: true,
-      pointerId: event.pointerId,
-      lastScreenX: event.screenX,
-      lastScreenY: event.screenY,
-    };
+    widgetDragRef.current = { active: true, pointerId: event.pointerId };
+    window.atomfolio?.startWidgetDrag?.();
     try {
       event.currentTarget.setPointerCapture?.(event.pointerId);
     } catch {
@@ -399,11 +398,11 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
   useEffect(() => {
     // Shared by handleMove (⌘ released mid-drag, mouse button still down) and handleUp (button
     // released) — either one ends the drag the same way, so main.js's snap-to-edge handler (see
-    // its atomfolio:widget-move-end handler) fires exactly once per drag regardless of which one
+    // its atomfolio:widget-drag-end handler) fires exactly once per drag regardless of which one
     // triggered it.
     const endDrag = () => {
       widgetDragRef.current.active = false;
-      window.atomfolio?.moveWidgetEnd?.();
+      window.atomfolio?.endWidgetDrag?.();
     };
     const handleMove = (event) => {
       const drag = widgetDragRef.current;
@@ -415,17 +414,10 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
       // the first chance to notice metaKey has gone false, at which point the drag ends here
       // instead of waiting for pointerup. The mouse button can still be held at this point; ending
       // the drag (active = false) means this same handler's own `!drag.active` check above no-ops
-      // every further pointermove until a fresh ⌘+drag starts a new one.
+      // every further pointermove until a fresh ⌘+drag starts a new one. Nothing else to do here —
+      // main.js's polling loop is what actually moves the window.
       if (!event.metaKey) {
         endDrag();
-        return;
-      }
-      const dx = event.screenX - drag.lastScreenX;
-      const dy = event.screenY - drag.lastScreenY;
-      drag.lastScreenX = event.screenX;
-      drag.lastScreenY = event.screenY;
-      if (dx !== 0 || dy !== 0) {
-        window.atomfolio?.moveWidgetBy?.(dx, dy);
       }
     };
     const handleUp = (event) => {
