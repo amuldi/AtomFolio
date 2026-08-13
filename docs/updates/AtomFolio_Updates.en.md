@@ -138,15 +138,34 @@ crashed silently with no window ever appearing, rotate/move gestures fighting ea
 its own fix commit. The build target is now scoped to Apple Silicon (arm64) only, for release
 stability.
 
-### A limitation worth being upfront about
+### Being upfront about what these screenshots actually are
 
-Every screenshot in this document was captured from **the actual web app running locally**, but
-the menu bar app is a native macOS tray widget that this session's browser-automation tooling
-simply cannot reach (an attempt to load the Electron renderer's HTML directly in a plain browser
-tab failed immediately with a missing `window.atomfolio` IPC bridge — which, incidentally, is
-itself a decent illustration of how deeply this app depends on native IPC rather than being a
-webpage in disguise). To see it yourself, follow `desktop/README.md`:
+The menu bar app is a native macOS tray widget, so unlike everything else in this document it
+couldn't just be captured with browser automation. Opening the renderer HTML directly without
+`window.atomfolio` (the IPC bridge Electron's `preload.cjs` normally injects) fails immediately
+with a blank page — which is itself a decent illustration of how deeply this app depends on native
+IPC rather than being a webpage in disguise.
+
+So instead: **the real renderer code (`atom-view.bundle.js`, `popover.js`) was left completely
+untouched, and a throwaway script was used to stand in for `window.atomfolio` with fake data.**
+In other words, the screenshots below are not a capture of the real macOS tray widget — they're
+**the exact renderer code this project actually ships, running against made-up numbers.** Colors,
+fonts, layout, and click interactions are all genuine; only the figures are invented examples. The
+throwaway mock files (`mock-bridge.js` etc.) were deleted right after the screenshots were taken
+and are not part of the repository. To see the real tray app yourself, follow `desktop/README.md`:
 `cd desktop && npm install && npm run dev`.
+
+**The atom widget** — top holdings orbiting the portfolio total:
+
+![Menu bar atom widget (real renderer code, mocked data)](assets/atomfolio-menubar-widget-mock.jpg)
+
+**Clicking a holding** shows its market value, P/L, and weight:
+
+![Menu bar atom widget — holding detail (real renderer code, mocked data)](assets/atomfolio-menubar-widget-detail-mock.jpg)
+
+**The popover** (news/settings pager) that opens from the tray icon:
+
+![Menu bar popover (real renderer code, mocked data)](assets/atomfolio-menubar-popover-mock.jpg)
 
 ## 8. Screenshots — then vs. now
 
