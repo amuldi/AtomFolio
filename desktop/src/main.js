@@ -425,9 +425,12 @@ function createAtomWidget() {
   });
 
   if (config.atomWidgetVisible) {
-    // showInactive, not show — an ambient overlay shouldn't steal focus from whatever the user
-    // was doing, on launch or when toggled back on from the tray menu.
-    atomWidget.showInactive();
+    // Routed through setAtomWidgetVisible (same path the tray menu's "위젯 보이기" uses), not a
+    // direct showInactive() here — that's what actually applies the always-center-on-show
+    // behavior (see its own comment) and the click-through/sleep-mode reset. Calling
+    // atomWidget.showInactive() directly at launch skipped all of that, so a widget already
+    // visible from a previous run reappeared wherever it was last dragged to instead of centered.
+    setAtomWidgetVisible(true);
   }
 
   return atomWidget;
@@ -476,6 +479,21 @@ function setAtomWidgetVisible(visible) {
     return;
   }
   hideAtomWidgetAfterDissolve();
+}
+
+// "잠자기" — lives in the tray icon's right-click menu (see tray.on('right-click') below), not
+// the popover's settings panel. Persists the same way setAtomWidgetVisible does (saveConfig, then
+// an immediate apply to the live window) rather than round-tripping through the
+// atomfolio:update-settings IPC channel the settings panel uses — nothing in the popover needs to
+// know this changed, and the atomfolio:widget-set-click-through handler already re-checks
+// config.atomWidgetSleeping on every message regardless, so this call is only about not leaving
+// the widget interactive for however long it takes the cursor to move again after the toggle.
+function setAtomWidgetSleeping(sleeping) {
+  saveConfig({ atomWidgetSleeping: sleeping });
+  if (!atomWidget || atomWidget.isDestroyed()) {
+    return;
+  }
+  atomWidget.setIgnoreMouseEvents(Boolean(sleeping), { forward: true });
 }
 
 // Plays the dissolve transition (atom-view.jsx) before actually hiding the window, instead of
@@ -646,6 +664,12 @@ function createTray() {
           type: 'checkbox',
           checked: config.atomWidgetVisible,
           click: (menuItem) => setAtomWidgetVisible(menuItem.checked),
+        },
+        {
+          label: '잠자기',
+          type: 'checkbox',
+          checked: config.atomWidgetSleeping,
+          click: (menuItem) => setAtomWidgetSleeping(menuItem.checked),
         },
         { type: 'separator' },
         { label: 'Quit AtomFolio', click: () => app.quit() },
@@ -1036,7 +1060,6 @@ function registerIpcHandlers() {
       launchAtLogin: config.launchAtLogin,
       appearance: config.appearance,
       atomCategoryDimension: config.atomCategoryDimension,
-      atomWidgetSleeping: config.atomWidgetSleeping,
     };
   });
 
@@ -1059,7 +1082,6 @@ function registerIpcHandlers() {
       'launchAtLogin',
       'appearance',
       'atomCategoryDimension',
-      'atomWidgetSleeping',
     ];
     const clean = {};
     for (const key of allowedKeys) {
@@ -1105,14 +1127,6 @@ function registerIpcHandlers() {
       // without this the atom widget wouldn't see the new dimension until something else happened
       // to trigger a state broadcast.
       setState({ categoryDimension: clean.atomCategoryDimension });
-    }
-    if ('atomWidgetSleeping' in clean && atomWidget && !atomWidget.isDestroyed()) {
-      // Applied immediately rather than waiting for atom-view.jsx's own hit-test to send its next
-      // atomfolio:widget-set-click-through message — that handler already re-checks
-      // config.atomWidgetSleeping itself (see its own comment) so this isn't strictly required for
-      // correctness, only for not leaving the widget interactive for however long it takes the
-      // cursor to move again after sleep is turned on.
-      atomWidget.setIgnoreMouseEvents(Boolean(clean.atomWidgetSleeping), { forward: true });
     }
 
     await refresh({ silent: true });
