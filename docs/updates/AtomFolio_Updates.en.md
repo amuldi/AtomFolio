@@ -4,9 +4,13 @@
 > for the app itself (how to run it, what it does, its architecture); this document is a **dated
 > changelog**. The newest entry is at the top, and each entry carries screenshots actually
 > captured from the app running locally at that point — nothing here is mocked up or imagined.
-> This used to be a single document comparing the initial version against the current one all at
-> once; from now on, a new entry is added above the rest for each meaningful batch of work. The
-> old content wasn't deleted — it's kept below as the "baseline" entry.
+>
+> The dated entries below go all the way back to this project's **actual first commit
+> (2026-04-27, `Add AtomFolio dashboard project`)**, built from `git log` — not treating "today"
+> as the starting point. The April/May and early-July entries are summarized from commit messages;
+> the August entries (especially August 13) are the detailed, live-verified write-ups from the
+> sessions that actually did the work. Bugs found along the way are tracked separately in
+> [`AtomFolio_Bugs.en.md`](AtomFolio_Bugs.en.md).
 
 ## 2026-08-13 — Menu bar widget interaction polish (drag, click-through, category, sleep)
 
@@ -78,11 +82,184 @@ Uncomment once the files above exist:
 
 ---
 
-## 2026-08-13 — Market-data resilience + this update log's own creation (baseline)
+## 2026-08-12 — Light/dark theme tried and rolled back, KIS quote provider, disappearing-holding bug
 
-> Everything below is the single comparison document that existed before this log switched to
-> a dated-entry structure, moved here as-is rather than rewritten. Covers the cumulative changes
-> from the very first commit up through when this entry was originally written.
+- **Added the KIS (Korea Investment & Securities) domestic quote provider**, routed ahead of the
+  existing fallback chain (`825bc94`).
+- **Added a manual light/dark theme setting** (`3281515`), then spent several commits fixing the
+  atom being nearly invisible in light mode — halo/alpha-blending asymmetry (`8281107`), boosting
+  JS-driven SVG opacity too (`2ea03b6`), hard-coding the main line/node/label color to pure black
+  (`55e30c0`), dropping the group blur filter and depth-jitter (`38303e7`), thickening strokes/
+  nodes and bolding labels (`e8b2a6d`).
+- Ultimately **removed the light/dark toggle entirely and reverted to dark-only** (`46b02a8`) — not
+  a failure so much as a conclusion the experiment confirmed: a dark background is intrinsically a
+  better fit for what the atom visualization is trying to be.
+- Removed the AI summary feature, fixed theme/tooltip bugs, added a desktop atom overlay, redesigned
+  the drawer (`6a528c4`).
+- Migrated remaining warm-cream color leftovers, removed dead `.spiral-glyph` CSS (`90906ef`).
+- **Bugs**: holdings matching certain name patterns silently vanishing from the atom scene, fixed
+  (`ccc3ce6`); a stray `.manual.csv` suffix being appended to manually-created portfolio names,
+  removed (`cd6e562`).
+
+## 2026-08-11 — Command palette + management table, web light/dark
+
+- **Command palette (⌘K)** and a **management-tab table view** added, plus desktop error-state
+  polish (`70af14b`).
+- Excluded the active portfolio from its own preview-atom orbit (`53b7c58`).
+- Unified portfolio-switch transitions, tool-drawer docking, perf and dead-code cleanup (`473a9a0`).
+- Removed a dead `pendingPortfolioSwitch` flag that was blocking CI lint (`e276f4f`).
+
+## 2026-08-10 — Atom dark-mode contrast, Spaces/fullscreen bug
+
+- Improved atom dark-mode contrast, a custom portfolio dropdown, settings redesign, transition
+  rotation (`397f2a2`).
+- **Bugs**: the menu bar atom widget disappearing during macOS Spaces/fullscreen transitions,
+  fixed, alongside collapsing quick-add on the settings page (`bbb9bdd`) → later reverted the
+  quick-add hiding while fixing "mere hover moves the widget" (`0030179`).
+
+## 2026-08-09 — Atom dissolve/materialize transition, menu bar settings split
+
+- Atom dissolve/materialize transition animation, settings split out, a broader menu bar design
+  pass (`75b354b`).
+- **Bugs**: widget re-open/⌘-center bugs fixed, settings groups reorganized, a padding audit,
+  light/dark theme applied (`214ba4a`).
+
+## 2026-08-08 — Menu bar gesture split, ⌘+drag bug
+
+- Split rotate/move gestures, edge snap, a right-click context menu, keyboard shortcuts, quick add
+  + news search (`a394a7a`).
+- **Bug**: ⌘+drag not actually moving the window, fixed (`ab4da79`).
+
+## 2026-08-07 — Menu bar widget opacity/resize controls
+
+- Opacity controls, a resizable atom widget, swipe/drag polish (`986e730`).
+
+## 2026-08-06 — Menu bar popover card-stack swipe
+
+- Introduced swiping between atom/news/settings pages in the popover as a card stack (`2082ac3`).
+
+## 2026-08-05 — The macOS menu bar companion app is born + news improvements
+
+The day this project went from **web-only to web + desktop**.
+
+- **Added the macOS menu bar companion app for the first time** (`50fb9ff`). The same day went on
+  to reuse the real atom visual (`cdbfb1e`), real 3D trackball rotation (`a8700c7`), hand-drawn
+  nodes on a black space background (`04dda15`), per-portfolio switching + star-chart atom
+  (`3ed3dd6`), and favicon-based tray icons (`eaf44d9`) — several iterations in a single day.
+- **Bugs**: the packaged menu bar app crashing silently with no window ever appearing, fixed
+  (`03e6c77`) → build target narrowed to arm64-only (`41d471f`); `PortfolioAllocationCard` dropping
+  its `className` prop, fixed (`ce71c43`); the date-basis setting not applying to heatmap/news
+  timestamps, fixed (`56a1873`).
+- Added news thumbnails + a Finnhub foreign-news provider + response caching (`7c8b4cb`),
+  consolidated sidebar tools/shrunk detail cards/wired up news polling UI (`7d9b8f9`), news
+  pagination (20/page) + faster default view + cross-page dedup (`4039c46`), news panel state
+  persisted across tab switches (`429a5b0`), numbered pagination + live-quote perf improvements
+  (`6a020a1`).
+
+## 2026-08-04 — Redesigning the portfolio-switch transition (black hole → spaceship fly-to)
+
+- Stage D 1–3: built the black-hole-absorption transition as a state machine with a spring damper
+  (`2867bf2`, `f3105b0`, `310ab43`), then **redesigned it as a "spaceship flying to the next
+  portfolio" effect** for clearer directionality (`4f46c75`).
+- Retargeted this fly-to transition to portfolio switching, made atoms read more clearly as 3D
+  (`19f4e42`).
+- **Bug**: a boxy artifact in the atom/nucleus 3D shading, fixed, sphere shading smoothed
+  (`d98bc74`).
+- Simplified node shape: five tilted rings became a single wobbled icosphere gem (`77cb63b`).
+
+## 2026-08-03 — Starting the WebGL 3D rewrite + a new auth/security layer
+
+The day this project started moving from a **static SVG sketch to a Three.js WebGL 3D scene**, and
+the day login stopped being nonexistent.
+
+- **Auth/workspaces**: Clerk bearer tokens verified server-side, header trust hard-disabled on
+  Vercel (`5d958f7`); a custom Clerk sign-in/sign-up UI wired into workspace-claiming
+  (`8be0d97`); shared API handlers + workspace access control (`a566475`, continuing from
+  7/11).
+- **WebGL rewrite**: consolidated App.jsx's duplicate atom-scene math into `scene.js`
+  (`e6ed12a`); Stage A (static rendering behind a dev toggle, `cdc0a3a`); Stage B (raycaster
+  interaction + CSS2D labels, `435d0ad`); Stage C (always-on bloom + `AtomDetailPanel`, no
+  transition animation yet, `d9ddfec`).
+- **Cleanup**: Phase 0 removed dead code — 9 orphaned files plus roughly 4,800 lines from
+  App.jsx (`28f3809`).
+- Added ESLint flat config + Prettier, fixed lint-flagged bugs (`a0e7cea`); added a CI workflow
+  for lint/test/build (`1ea4994`); serialized local portfolio-store writes to stop concurrent
+  writes losing data (`bd7ea3f`); added CSV structure-inference + analytics-summary + store
+  contract tests (`b14ca7c`); extracted hardcoded security-knowledge data into JSON (`09d33ec`).
+- **Bug**: missing `font-family` on the AI summary's risk/data-quality list items, fixed
+  (`8406bc9`).
+
+## 2026-07-11 — Financials provider, rate limiting/caching (resumed after ~2 months quiet)
+
+No commits for roughly 7 weeks after May 23; work picked back up this day.
+
+- Added company financials providers, extended market-data libraries (`2344d33`).
+- Improved CSV structure inference for portfolio ingestion (`2cfd2c8`).
+- Introduced shared API handlers + workspace access control (`a566475`) — the foundation for
+  8/3's Clerk auth work.
+- Added AI summary, financials, and workspace session UI (`354e81d`).
+- Added portfolio-core and workspace-access tests (`d0749d4`).
+- **Per-IP rate limiting + a market-quote cache with stale fallback** (`b07312b`) — the starting
+  point of today's API-abuse protection.
+- Added light/dark favicons (`7f46c16`), removed unused `@react-three` dependencies (`887ec50`).
+
+## 2026-05-23 — Doc cleanup, a CSV ticker-parsing bug
+
+- Updated AtomFolio docs/persistence, pointed docs at the deployed site URL, unified docs on the
+  canonical domain and removed mobile-only docs (`75083bb`, `6f04c4c`, `0fc84f5`, `5af4052`).
+- Resized the README's concept sketch (`d41073d`, `3f0795a`).
+- **Bug**: ticker parsing for imported portfolios, fixed (`a2d40a8`).
+- Polished portfolio display controls (`30dfe59`).
+
+## 2026-05-20 — Live quotes go in, deployment/domain cleanup
+
+- **Started using Naver Securities live quotes as the first-choice source** (`e2280c9`) — the
+  starting point of today's quote-routing chain.
+- Normalized uploaded holdings against live quotes (`f4c1610`).
+- Added AtomFolio service APIs + live news (`0d83bb5`).
+- Added a deployment link + favicon, cleaned up domain/favicon, redesigned then simplified an
+  adaptive atom favicon (`b412476`, `2bba415`, `80987b9`, `cf6d2bb`).
+- Broad app/README refresh, reduced the default tool-panel width (`3d00b62`, `c52bb11`).
+
+## 2026-05-08 — Tool dock interactions, atom scene keeps rotating on hover
+
+- **Bug**: floating tool dock interactions, fixed (`897279d`).
+- Custom allocation dock placement now respected (`d875f52`).
+- Kept the atom scene rotating even while hovered (`e4a0bc6`).
+
+## 2026-05-07 — Added a README architecture diagram
+
+- Added and refined the README's first system architecture diagram (`a2838e5`, `02918d9`).
+
+## 2026-05-05 — Expanded README feature documentation
+
+- Expanded the README's feature documentation (`8c27173`) and polished it over several commits.
+
+## 2026-05-04 — Documented the build process
+
+- Documented the AtomFolio build process (`f700f43`), cleaned up the README, removed a "future
+  improvement ideas" section (`1b03803`).
+
+## 2026-04-29 — Portfolio upload improvements, first docs
+
+- Improved portfolio upload and stock metadata handling (`94fd219`).
+- First documentation of AtomFolio's deliverables (`9b58c0f`).
+
+## 2026-04-27 — The very first commit
+
+- `Add AtomFolio dashboard project` (`3775969`) — the real starting point of this project. At this
+  point the atom scene was a 2D SVG sketch that started from a hand-drawn concept (see the
+  screenshot comparison in "Cumulative highlights" below).
+
+---
+
+## Cumulative highlights — revisited by theme (2026-04-27 – 2026-08-13)
+
+> If the dated list above shows *when* each commit happened, this section groups the same span of
+> work **by theme** instead — quote reliability, auth, the menu bar app's introduction, the
+> light/dark experiment, screenshot comparisons, and architecture diagrams all read better as one
+> continuous story than as scattered commits. For a commit-by-commit trail, see the dated entries
+> above; for what actually changed and why, read on.
 
 ### The short version
 
@@ -384,4 +561,5 @@ sequenceDiagram
 
 - For the app itself, see [`README.md`](../../README.md).
 - For running the menu bar app, see [`desktop/README.md`](../../desktop/README.md).
+- Bugs found along the way are tracked separately in [`AtomFolio_Bugs.en.md`](AtomFolio_Bugs.en.md).
 - The Korean version of this document: [`AtomFolio_Updates.md`](AtomFolio_Updates.md)

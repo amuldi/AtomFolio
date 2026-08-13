@@ -18,6 +18,7 @@ AtomFolio는 표 형태로 흩어진 투자 데이터를 “중앙 포트폴리�
 - 기획서 HTML: [docs/proposal/AtomFolio_Proposal.html](docs/proposal/AtomFolio_Proposal.html)
 - 기획서 PDF: [docs/proposal/AtomFolio_Proposal.pdf](docs/proposal/AtomFolio_Proposal.pdf)
 - 업데이트 노트: [docs/updates/AtomFolio_Updates.md](docs/updates/AtomFolio_Updates.md) · [English](docs/updates/AtomFolio_Updates.en.md)
+- 버그/오류 기록: [docs/updates/AtomFolio_Bugs.md](docs/updates/AtomFolio_Bugs.md) · [English](docs/updates/AtomFolio_Bugs.en.md)
 
 ## 사용 기술
 
@@ -643,11 +644,14 @@ AtomFolio는 투자 데이터를 정리하고 가정을 계산하는 도구입�
 
 원래 AtomFolio는 손그림에서 출발한 2D SVG 스케치 하나에, 로그인도 없이 브라우저
 localStorage만 쓰는 웹 하나였습니다. 지금은 여기서 훨씬 더 나아갔습니다 — 아래는 그 변화를
-실제로 로컬에서 실행하고 캡처한 화면으로 정리한 것입니다. 전체 기록은 날짜별 changelog인
+실제로 로컬에서 실행하고 캡처한 화면으로 정리한 것입니다. 전체 기록은 **2026년 4월 27일
+최초 커밋부터** 날짜별로 정리한 changelog인
 [docs/updates/AtomFolio_Updates.md](docs/updates/AtomFolio_Updates.md)(영문:
 [AtomFolio_Updates.en.md](docs/updates/AtomFolio_Updates.en.md))에서 확인할 수 있습니다 — 이
 문서로 재작성되기 직전 README 원문은 [docs/updates/archive/](docs/updates/archive/)에 그대로
-보존해 두었습니다.
+보존해 두었습니다. 발견된 버그/오류만 따로 모은 기록은
+[docs/updates/AtomFolio_Bugs.md](docs/updates/AtomFolio_Bugs.md)(영문:
+[AtomFolio_Bugs.en.md](docs/updates/AtomFolio_Bugs.en.md))에서 계속 갱신됩니다.
 
 **원자 화면 — 초기 버전 대비**
 

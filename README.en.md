@@ -18,6 +18,7 @@ AtomFolio turns investment data that's normally scattered across tables into a "
 - Proposal (HTML): [docs/proposal/AtomFolio_Proposal.html](docs/proposal/AtomFolio_Proposal.html)
 - Proposal (PDF): [docs/proposal/AtomFolio_Proposal.pdf](docs/proposal/AtomFolio_Proposal.pdf)
 - Update log (dated changelog with real screenshots): [docs/updates/AtomFolio_Updates.en.md](docs/updates/AtomFolio_Updates.en.md) · [한국어](docs/updates/AtomFolio_Updates.md)
+- Bug/issue log: [docs/updates/AtomFolio_Bugs.en.md](docs/updates/AtomFolio_Bugs.en.md) · [한국어](docs/updates/AtomFolio_Bugs.md)
 
 ## Tech stack
 
@@ -649,10 +650,13 @@ AtomFolio is a tool for organizing investment data and computing outcomes from s
 AtomFolio started as a single 2D SVG sketch drawn from a hand-drawn concept, with no login at all
 — just a web app running on browser localStorage. It's moved well past that since. Below is that
 change, summarized with screenshots actually captured from a local run. The full record is a dated
-changelog at [docs/updates/AtomFolio_Updates.en.md](docs/updates/AtomFolio_Updates.en.md) (Korean:
+changelog going back to the **very first commit on 2026-04-27**, at
+[docs/updates/AtomFolio_Updates.en.md](docs/updates/AtomFolio_Updates.en.md) (Korean:
 [AtomFolio_Updates.md](docs/updates/AtomFolio_Updates.md)) — the README as it stood right before
 this rewrite is preserved as-is under
-[docs/updates/archive/](docs/updates/archive/).
+[docs/updates/archive/](docs/updates/archive/). Bugs found along the way are tracked on their own
+in [docs/updates/AtomFolio_Bugs.en.md](docs/updates/AtomFolio_Bugs.en.md) (Korean:
+[AtomFolio_Bugs.md](docs/updates/AtomFolio_Bugs.md)), and kept up to date going forward.
 
 **The atom scene — compared to the initial version**
 
