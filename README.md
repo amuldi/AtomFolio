@@ -220,7 +220,7 @@ flowchart LR
 - `server/postgresPortfolioStore.mjs`: Neon/Postgres 저장소 어댑터.
 - `server/workspaceAccess.mjs`: Clerk 세션 토큰 검증과 workspace 접근 검사.
 - `server/rateLimit.mjs`: IP 기준 슬라이딩 윈도우 레이트 리밋.
-- `server/marketDataCache.mjs`: 시세 응답 서버 캐시(TTL 3분)와 stale 폴백.
+- `server/marketDataCache.mjs`: 시세 응답 서버 캐시(TTL 10초)와 stale 폴백.
 - `db/schema.sql`: user, workspace, member, portfolio, import history, AI analysis, snapshot 테이블.
 
 ### API 남용 방어
@@ -234,8 +234,20 @@ flowchart LR
 | `/api/market/live` · `search` · `news` · `financials` | 각 30 |
 | `/api/securities/enrich`, `/api/portfolio/ingest` | 10 |
 
-시세(`/api/market/live`)는 서버 측 캐시(TTL 3분)를 거치며, 외부 제공자(Yahoo/Stooq)가
-모두 실패하면 마지막 성공 응답을 `stale: true` 플래그와 함께 반환한다.
+시세(`/api/market/live`)는 서버 측 캐시(TTL 10초)를 거치며, 외부 제공자(KIS/Naver/Mirae/Yahoo/Stooq)가
+모두 실패하면 마지막 성공 응답을 `stale: true` 플래그와 함께 반환한다. 제공자별 실패는
+`recordOperationalEvent`로 기록되어 `/api/health?details=events`의 `operationalEvents.countsByCode`에
+`provider-fail:<naver|mirae|yahoo|stooq|kis>` 형태로 집계된다 — 어떤 제공자가 실제로 자주
+실패하는지 별도 인프라 없이 확인할 수 있다.
+
+Naver와 Mirae Asset 프록시는 서로 독립적인 소스라 순차 대기 대신 동시에 시도하고 먼저 응답한
+쪽을 쓴다(`raceQuoteAttempts`, `src/lib/liveMarketData.js`). 공급자별로 최근 연속 3회 실패하면
+30초간 해당 공급자를 건너뛰는 간단한 서킷 브레이커도 같은 파일에 있다 — 죽은 공급자를 매 요청마다
+타임아웃까지 기다리는 낭비를 줄인다.
+
+모든 공급자가 동시에 실패하면(캐시된 응답이 있어 `stale` 상태로라도 버티는 경우 포함)
+`server/alerting.mjs`가 별도 알림을 남긴다. `ATOMFOLIO_ALERT_WEBHOOK_URL`을 설정하면 Slack
+호환 웹훅으로도 전송된다(설정하지 않아도 `/api/health?details=events`에는 항상 기록됨).
 
 **Vercel 한계**: 레이트 리밋과 시세 캐시는 인메모리 상태라서 Vercel 서버리스에서는
 인스턴스별로 따로 계산된다. 인스턴스가 여러 개 뜨면 실제 허용량이 한도보다 커질 수

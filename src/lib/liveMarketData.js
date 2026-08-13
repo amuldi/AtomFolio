@@ -912,7 +912,13 @@ function localSecurityToSuggestion(entry, localRank = 0, searchScore = 0) {
   };
 }
 
-function searchLocalSymbolSuggestions(query, limit = DEFAULT_SEARCH_LIMIT) {
+// Exported (only the internal scoring/lookup, no network call) so server/marketData/
+// liveQuoteRouter.mjs can resolve a Korean company name to its KRX code and try the official KIS
+// quote before falling into this file's own Naver/Mirae/Yahoo/Stooq chain — see that module's own
+// comment for why this matters: KIS was already tried first for a bare ticker, but a name-only
+// domestic lookup (very common — most Korean CSV exports carry 종목명, not always a ticker) had no
+// path to KIS at all before this existed.
+export function searchLocalSymbolSuggestions(query, limit = DEFAULT_SEARCH_LIMIT) {
   const scored = LOCAL_SECURITY_UNIVERSE.map((entry, index) => ({
     entry,
     index,
@@ -1614,7 +1620,106 @@ async function fetchStooqQuote(symbol, signal) {
   };
 }
 
-export async function fetchLiveMarketDataFromProviders({ ticker, name, signal } = {}) {
+// Simple per-provider circuit breaker: once a provider hits PROVIDER_FAILURE_THRESHOLD
+// consecutive failures, it's skipped (no request attempted) for PROVIDER_COOLDOWN_MS instead of
+// every subsequent quote lookup paying that provider's full request timeout while it's down. A
+// success clears the counter immediately. State is a plain module-level Map — same convention as
+// liveMarketDataCache above — so the worst case on a dev-server hot reload is the breaker
+// resetting early (one extra doomed request), not a correctness problem.
+const PROVIDER_FAILURE_THRESHOLD = 3;
+const PROVIDER_COOLDOWN_MS = 30 * 1000;
+const providerHealth = new Map();
+
+function isProviderCircuitOpen(provider, now = Date.now()) {
+  const health = providerHealth.get(provider);
+  return Boolean(health && health.skipUntil > now);
+}
+
+function recordProviderSuccess(provider) {
+  providerHealth.delete(provider);
+}
+
+function recordProviderFailure(provider) {
+  const health = providerHealth.get(provider) ?? { consecutiveFailures: 0, skipUntil: 0 };
+  health.consecutiveFailures += 1;
+  if (health.consecutiveFailures >= PROVIDER_FAILURE_THRESHOLD) {
+    health.skipUntil = Date.now() + PROVIDER_COOLDOWN_MS;
+  }
+  providerHealth.set(provider, health);
+}
+
+// Exposed for tests, same reason resetKisTokenState/resetMarketDataCache are: lets a test start
+// from a clean breaker state instead of an earlier test's failures leaking in as a tripped circuit.
+export function resetLiveMarketDataProviderHealth() {
+  providerHealth.clear();
+}
+
+// Every provider branch below (Naver, Mirae, Yahoo) shapes its raw quote into the same response
+// shape — display name resolution plus candidate metadata filled in wherever the quote itself
+// didn't supply it. Pulled out once so Naver and Mirae's now-concurrent attempts (see
+// raceQuoteAttempts below) don't have to duplicate it inline in two closures.
+function buildQuotePayload(candidate, quote, searchQuery) {
+  const displayName = resolveOfficialQuoteName(candidate, quote, searchQuery);
+
+  return {
+    ...quote,
+    name: displayName,
+    displayName,
+    rawName: candidate.rawName || quote.rawName || quote.name,
+    quoteType: candidate.quoteType || quote.quoteType || '',
+    typeDisp: candidate.typeDisp || quote.typeDisp || '',
+    sector: candidate.sector || quote.sector || '',
+    assetClass: candidate.assetClass || quote.assetClass || '',
+  };
+}
+
+// Runs independent provider attempts concurrently and settles with the first success — used for
+// Naver and Mirae, two unrelated services quoting the same Korean-listed symbol with no ordering
+// dependency between them. There's no reason a lookup should sit through a slow-to-fail Naver
+// request before it's even allowed to try Mirae. Every attempt that loses the race still runs
+// onFailure (so provider-failure telemetry counts a real failure, not "never tried because
+// something else answered first"); the race itself only rejects once every attempt has failed.
+function raceQuoteAttempts(attempts, onFailure) {
+  return new Promise((resolve, reject) => {
+    let remaining = attempts.length;
+    let firstError = null;
+
+    attempts.forEach(({ provider, run }) => {
+      run().then(resolve, (error) => {
+        firstError = firstError ?? error;
+        onFailure(provider, error);
+        remaining -= 1;
+        if (remaining === 0) {
+          reject(firstError);
+        }
+      });
+    });
+  });
+}
+
+// onProviderError is an optional observability hook — called once per failed provider attempt
+// with { provider, symbol, error }, before the chain falls through to the next candidate. Kept as
+// a plain callback (default no-op) rather than importing a logger directly, because this file is
+// shared with the browser bundle (see fetchLiveMarketData's client-side fallback path below) and
+// has no reason to carry server-only logging code, even inertly. Server callers (see
+// server/marketData/liveQuoteRouter.mjs) wire this to recordOperationalEvent so which upstream
+// provider is actually failing — and how often — shows up in /api/health instead of vanishing
+// into a swallowed catch block the moment some other provider in the chain still answers.
+export async function fetchLiveMarketDataFromProviders({
+  ticker,
+  name,
+  signal,
+  onProviderError,
+} = {}) {
+  const reportProviderError = (provider, symbol, error) => {
+    recordProviderFailure(provider);
+    try {
+      onProviderError?.({ provider, symbol, error });
+    } catch {
+      // A misbehaving observability hook must never break the actual fallback chain.
+    }
+  };
+
   const cacheKey = [
     normalizeSymbol(ticker),
     normalizeSearchText(name),
@@ -1652,83 +1757,78 @@ export async function fetchLiveMarketDataFromProviders({ ticker, name, signal } 
 
   for (const candidate of candidates) {
     if (toNaverStockCode(candidate.symbol)) {
-      try {
-        const quote = await fetchNaverStockQuote(candidate.symbol, candidate.name || searchQuery, signal);
-        const displayName = resolveOfficialQuoteName(candidate, quote, searchQuery);
+      const attempts = [];
 
-        const payload = {
-          ...quote,
-          name: displayName,
-          displayName,
-          rawName: candidate.rawName || quote.rawName || quote.name,
-          quoteType: candidate.quoteType || quote.quoteType || '',
-          typeDisp: candidate.typeDisp || quote.typeDisp || '',
-          sector: candidate.sector || quote.sector || '',
-          assetClass: candidate.assetClass || quote.assetClass || '',
-        };
-
-        if (cacheKey) {
-          liveMarketDataCache.set(cacheKey, { cachedAt: Date.now(), payload });
-        }
-
-        return payload;
-      } catch (error) {
-        lastError = error;
+      if (!isProviderCircuitOpen('naver')) {
+        attempts.push({
+          provider: 'naver',
+          run: async () => {
+            const quote = await fetchNaverStockQuote(candidate.symbol, candidate.name || searchQuery, signal);
+            recordProviderSuccess('naver');
+            return buildQuotePayload(candidate, quote, searchQuery);
+          },
+        });
       }
 
-      try {
-        const quote = await fetchMiraeAssetQuote(candidate.symbol, candidate.name || searchQuery, signal);
-        const displayName = resolveOfficialQuoteName(candidate, quote, searchQuery);
+      if (!isProviderCircuitOpen('mirae')) {
+        attempts.push({
+          provider: 'mirae',
+          run: async () => {
+            const quote = await fetchMiraeAssetQuote(candidate.symbol, candidate.name || searchQuery, signal);
+            recordProviderSuccess('mirae');
+            return buildQuotePayload(candidate, quote, searchQuery);
+          },
+        });
+      }
 
-        const payload = {
-          ...quote,
-          name: displayName,
-          displayName,
-          rawName: candidate.rawName || quote.rawName || quote.name,
-          quoteType: candidate.quoteType || quote.quoteType || '',
-          typeDisp: candidate.typeDisp || quote.typeDisp || '',
-          sector: candidate.sector || quote.sector || '',
-          assetClass: candidate.assetClass || quote.assetClass || '',
-        };
+      if (!attempts.length) {
+        lastError = new Error('naver-mirae-circuit-open');
+      } else {
+        try {
+          const payload = await raceQuoteAttempts(attempts, (provider, error) =>
+            reportProviderError(provider, candidate.symbol, error),
+          );
 
-        if (cacheKey) {
-          liveMarketDataCache.set(cacheKey, { cachedAt: Date.now(), payload });
+          if (cacheKey) {
+            liveMarketDataCache.set(cacheKey, { cachedAt: Date.now(), payload });
+          }
+
+          return payload;
+        } catch (error) {
+          lastError = error;
         }
-
-        return payload;
-      } catch (error) {
-        lastError = error;
       }
     }
 
     for (const windowConfig of MARKET_WINDOWS) {
+      if (isProviderCircuitOpen('yahoo')) {
+        lastError = new Error('yahoo-circuit-open');
+        break;
+      }
+
       try {
         const quote = await fetchYahooChart(candidate.symbol, windowConfig, signal);
-        const displayName = resolveOfficialQuoteName(candidate, quote, searchQuery);
-
-        const payload = {
-          ...quote,
-          name: displayName,
-          displayName,
-          rawName: candidate.rawName || quote.rawName || quote.name,
-          quoteType: candidate.quoteType || quote.quoteType || '',
-          typeDisp: candidate.typeDisp || quote.typeDisp || '',
-          sector: candidate.sector || quote.sector || '',
-          assetClass: candidate.assetClass || quote.assetClass || '',
-        };
+        const payload = buildQuotePayload(candidate, quote, searchQuery);
 
         if (cacheKey) {
           liveMarketDataCache.set(cacheKey, { cachedAt: Date.now(), payload });
         }
 
+        recordProviderSuccess('yahoo');
         return payload;
       } catch (error) {
         lastError = error;
+        reportProviderError('yahoo', candidate.symbol, error);
       }
     }
   }
 
   for (const symbol of unique([...candidates.map((candidate) => candidate.symbol), ticker])) {
+    if (isProviderCircuitOpen('stooq')) {
+      lastError = new Error('stooq-circuit-open');
+      break;
+    }
+
     try {
       const payload = await fetchStooqQuote(symbol, signal);
 
@@ -1736,9 +1836,11 @@ export async function fetchLiveMarketDataFromProviders({ ticker, name, signal } 
         liveMarketDataCache.set(cacheKey, { cachedAt: Date.now(), payload });
       }
 
+      recordProviderSuccess('stooq');
       return payload;
     } catch (error) {
       lastError = error;
+      reportProviderError('stooq', symbol, error);
     }
   }
 

@@ -223,6 +223,36 @@ test('fetchLiveQuoteWithKisRouting skips KIS entirely with no credentials config
   }
 });
 
+test('fetchLiveQuoteWithKisRouting resolves a Korean company name to a KIS quote when no ticker is given', async () => {
+  const originalFetch = globalThis.fetch;
+  const calledUrls = [];
+
+  globalThis.fetch = async (url) => {
+    calledUrls.push(String(url));
+    if (String(url).includes('/oauth2/tokenP')) {
+      return mockTokenResponse();
+    }
+    if (String(url).includes('/inquire-price')) {
+      return mockQuoteResponse({ price: '81500', change: '-500', changePercent: '-0.61' });
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+
+  try {
+    // No ticker at all — only a Korean company name, the shape a lot of real CSV imports arrive
+    // in (see README's CSV-inference section). This should still resolve to 005930 via the
+    // offline local alias table and hit KIS, not fall straight through to Naver/Yahoo/Stooq.
+    const quote = await fetchLiveQuoteWithKisRouting({ name: '삼성전자' });
+
+    assert.equal(quote.source, '한국투자증권');
+    assert.equal(quote.symbol, '005930');
+    assert.equal(quote.latestPrice, 81500);
+    assert.ok(calledUrls.some((url) => url.includes('FID_INPUT_ISCD=005930')));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('fetchLiveQuoteWithKisRouting uses the KIS quote when it succeeds', async () => {
   const originalFetch = globalThis.fetch;
 

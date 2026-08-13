@@ -1,4 +1,5 @@
 import { fetchLiveQuoteWithKisRouting } from './marketData/liveQuoteRouter.mjs';
+import { notifyOperationalAlert } from './alerting.mjs';
 
 // Was 3 minutes; live portfolio/lookup views poll far more often than that in practice, so most
 // requests were serving quotes that were already stale relative to how fresh the UI implies they
@@ -62,12 +63,30 @@ export async function getLiveMarketDataWithCache(
     evictOldestEntries();
     return { ...payload, stale: false };
   } catch (error) {
+    const staleReason = error instanceof Error ? error.message : 'Provider fetch failed.';
+    const label = ticker || name || key;
+
     if (entry) {
-      return toResponsePayload(entry, {
-        stale: true,
-        staleReason: error instanceof Error ? error.message : 'Provider fetch failed.',
+      // Every upstream provider just failed for this quote and we're only still answering
+      // because a previous successful fetch is sitting in cache — worth a distinct alert from an
+      // ordinary provider-error, since this is the first sign of a real outage rather than one
+      // flaky request. notifyOperationalAlert's own per-code cooldown keeps this from firing once
+      // per stale request during a sustained outage.
+      notifyOperationalAlert({
+        code: 'market-data-stale-fallback',
+        message: `All live quote providers failed for "${label}" — serving last known price instead.`,
+        metadata: { ticker, name, staleReason },
       });
+      return toResponsePayload(entry, { stale: true, staleReason });
     }
+
+    // No cache to fall back on at all — this request gets nothing. The most user-visible failure
+    // mode this module has.
+    notifyOperationalAlert({
+      code: 'market-data-total-failure',
+      message: `All live quote providers failed for "${label}" and no cached quote was available.`,
+      metadata: { ticker, name, staleReason },
+    });
     throw error;
   }
 }

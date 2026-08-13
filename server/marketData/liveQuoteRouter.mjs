@@ -11,13 +11,57 @@
 // (Naver, already tried before Yahoo) → ... same as before. Every other ticker shape is untouched
 // — this only ever adds one extra, cheap, silently-skippable attempt in front of what was already
 // there; it doesn't remove or reorder anything else.
-import { fetchLiveMarketDataFromProviders } from '../../src/lib/liveMarketData.js';
+//
+// A bare ticker isn't the only way a domestic lookup arrives, though — a lot of real CSV imports
+// (see README's CSV-inference section) carry only a Korean company name (종목명), no ticker at
+// all. Without resolving that to a KRX code first, those lookups skipped KIS entirely and always
+// went straight to the unofficial Naver/Mirae/Yahoo chain, even though KIS is the one source here
+// backed by an actual API contract. resolveDomesticSymbolFromName closes that gap using only the
+// offline local alias table (searchLocalSymbolSuggestions — no network call, no cost, no latency)
+// so name-only domestic lookups get the same KIS-first treatment a bare ticker already had.
+import { fetchLiveMarketDataFromProviders, searchLocalSymbolSuggestions } from '../../src/lib/liveMarketData.js';
 import { isKisConfigured, fetchKisDomesticQuote } from './kisProvider.mjs';
+import { recordOperationalEvent } from '../operationalEvents.mjs';
+
+const DOMESTIC_SYMBOL_PATTERN = /^\d{6}(?:\.(?:KS|KQ))?$/;
+
+function resolveDomesticSymbolFromName(name) {
+  const query = String(name ?? '').trim();
+
+  if (!query) {
+    return '';
+  }
+
+  const [bestMatch] = searchLocalSymbolSuggestions(query, 1);
+  const symbol = String(bestMatch?.symbol ?? '').trim().toUpperCase();
+
+  return DOMESTIC_SYMBOL_PATTERN.test(symbol) ? symbol : '';
+}
+
+// Every provider failure in the chain below — including KIS's own — lands here instead of
+// vanishing into a swallowed catch block. It's deliberately just a counter feeding
+// /api/health's existing operationalEvents.countsByCode, not a new dashboard: the goal is "which
+// upstream is actually flaky, and how often" becoming answerable from data already exposed,
+// without standing up any new infra.
+function reportProviderFailure(provider, symbol, error) {
+  recordOperationalEvent({
+    level: 'warn',
+    area: 'market-data-provider',
+    code: `provider-fail:${provider}`,
+    message: error instanceof Error ? error.message : String(error ?? ''),
+    metadata: { provider, symbol: String(symbol ?? '') },
+  });
+}
 
 export async function fetchLiveQuoteWithKisRouting({ ticker, name, signal } = {}) {
-  if (isKisConfigured() && ticker) {
+  // A bare ticker is tried as-is (fetchKisDomesticQuote itself rejects non-domestic shapes
+  // without a network call); with no ticker, fall back to resolving one from the name via the
+  // offline alias table so a name-only domestic lookup still gets a shot at KIS.
+  const kisSymbol = ticker || resolveDomesticSymbolFromName(name);
+
+  if (isKisConfigured() && kisSymbol) {
     try {
-      const quote = await fetchKisDomesticQuote(ticker, { signal });
+      const quote = await fetchKisDomesticQuote(kisSymbol, { signal });
 
       return {
         ...quote,
@@ -29,13 +73,20 @@ export async function fetchLiveQuoteWithKisRouting({ ticker, name, signal } = {}
         displayName: name || quote.symbol,
         rawName: name || quote.symbol,
       };
-    } catch {
+    } catch (error) {
       // Silent fallthrough by design — network error, expired/unreachable token, or simply not a
       // KIS-domestic symbol (kis-symbol-not-domestic) all land here the same way the existing
       // chain already treats a failed Naver/Yahoo attempt: try the next provider, don't surface a
       // partial failure to the caller as long as something further down the chain can still answer.
+      // Still worth counting, though — see reportProviderFailure above.
+      reportProviderFailure('kis', kisSymbol, error);
     }
   }
 
-  return fetchLiveMarketDataFromProviders({ ticker, name, signal });
+  return fetchLiveMarketDataFromProviders({
+    ticker,
+    name,
+    signal,
+    onProviderError: ({ provider, symbol, error }) => reportProviderFailure(provider, symbol, error),
+  });
 }
