@@ -59,29 +59,38 @@ AtomFolio has three goals:
 
 ## Screens
 
+> Every screenshot below is current as of this README's last refresh (2026-08-13) — if an older
+> screen is ever left in place by mistake, the [update log](#update-log) has the diff.
+
 ### Main portfolio
 
-Holdings are placed as nodes branching out from a central portfolio. Profit is always red and loss is always blue, following the color convention Korean investors are used to.
+Holdings are placed as nodes branching out from a central portfolio. Profit is always red and loss is always blue, following the color convention Korean investors are used to. It's a WebGL (Three.js) 3D scene you can drag to rotate, with a command palette (⌘K) and an Explore/Manage tab pair up top.
 
-![AtomFolio main screen](docs/assets/atomfolio-main-current.png)
+![AtomFolio main screen](docs/updates/assets/atomfolio-current-atomview.jpg)
+
+### Command palette (⌘K)
+
+Searching by name or ticker returns matches across every portfolio at once — the same holding scattered across multiple portfolios shows which one each result belongs to.
+
+![AtomFolio command palette](docs/updates/assets/atomfolio-current-commandpalette.jpg)
 
 ### Summary tools
 
-The summary panel brings together group filters, a daily P/L heatmap, the portfolio score, and asset allocation.
+The summary panel brings together category filters, a daily P/L heatmap, the 6-axis portfolio score, and asset allocation.
 
-![AtomFolio summary tools](docs/assets/atomfolio-overview-current.png)
+![AtomFolio summary tools](docs/updates/assets/atomfolio-current-summary.jpg)
 
 ### Investment simulation
 
 Enter market-shock, stress-test, rebalancing-target, and long-term recurring-investment assumptions to compute projected outcomes. Any value the user hasn't entered is shown only as a placeholder — never silently filled in.
 
-![AtomFolio investment simulation](docs/assets/atomfolio-simulation-current.png)
+![AtomFolio investment simulation](docs/updates/assets/atomfolio-current-simulation.jpg)
 
 ### Market news
 
 Falls back to the latest stock news if there's nothing dated today. News cards are kept to title, source, and time so they can be scanned quickly.
 
-![AtomFolio market news](docs/assets/atomfolio-news-current.png)
+![AtomFolio market news](docs/updates/assets/atomfolio-current-news.jpg)
 
 ## Menu bar companion app (macOS)
 

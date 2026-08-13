@@ -59,29 +59,38 @@ AtomFolio의 목표는 세 가지입니다.
 
 ## 실행 화면
 
+> 아래 스크린샷은 모두 이 README가 최근 갱신된 시점(2026-08-13) 기준 최신 화면입니다 — 예전
+> 화면이 남아있으면 [업데이트 로그](#업데이트-로그)에 그 차이가 기록돼 있습니다.
+
 ### 메인 포트폴리오
 
-보유 종목을 중앙 포트폴리오에서 뻗어나가는 노드로 배치했습니다. 수익은 빨간색, 손실은 파란색으로 통일해 한국 투자자가 익숙한 손익 색상 체계를 따릅니다.
+보유 종목을 중앙 포트폴리오에서 뻗어나가는 노드로 배치했습니다. 수익은 빨간색, 손실은 파란색으로 통일해 한국 투자자가 익숙한 손익 색상 체계를 따릅니다. WebGL(Three.js) 3D 장면이라 드래그로 회전시킬 수 있고, 상단에는 명령 팔레트(⌘K)와 탐색/관리 탭이 있습니다.
 
-![AtomFolio 메인 화면](docs/assets/atomfolio-main-current.png)
+![AtomFolio 메인 화면](docs/updates/assets/atomfolio-current-atomview.jpg)
+
+### 명령 팔레트 (⌘K)
+
+이름·티커로 검색하면 모든 포트폴리오를 가로질러 한 번에 결과가 뜹니다 — 같은 종목이 여러 포트폴리오에 흩어져 있어도 어디 소속인지 함께 보여줍니다.
+
+![AtomFolio 명령 팔레트](docs/updates/assets/atomfolio-current-commandpalette.jpg)
 
 ### 요약 도구
 
-요약 패널에서는 그룹 필터, 날짜별 손익 히트맵, 포트폴리오 점수, 자산 비중을 함께 확인합니다.
+요약 패널에서는 카테고리 필터, 날짜별 손익 히트맵, 6축 포트폴리오 점수, 자산 비중을 함께 확인합니다.
 
-![AtomFolio 요약 도구](docs/assets/atomfolio-overview-current.png)
+![AtomFolio 요약 도구](docs/updates/assets/atomfolio-current-summary.jpg)
 
 ### 투자 시뮬레이션
 
 시장 충격, 스트레스 테스트, 리밸런싱 목표, 장기 적립식 투자 가정을 입력해 예상 변화를 계산합니다. 사용자가 입력하지 않은 값은 임의로 채우지 않고 placeholder로만 안내합니다.
 
-![AtomFolio 투자 시뮬레이션](docs/assets/atomfolio-simulation-current.png)
+![AtomFolio 투자 시뮬레이션](docs/updates/assets/atomfolio-current-simulation.jpg)
 
 ### 시장 뉴스
 
 오늘 뉴스가 없으면 최신 주식 뉴스로 fallback합니다. 뉴스 카드는 제목, 출처, 시간 중심으로 빠르게 스캔할 수 있게 구성했습니다.
 
-![AtomFolio 시장 뉴스](docs/assets/atomfolio-news-current.png)
+![AtomFolio 시장 뉴스](docs/updates/assets/atomfolio-current-news.jpg)
 
 ## 메뉴바 동반 앱 (macOS)
 
