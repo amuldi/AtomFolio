@@ -91,6 +91,12 @@ let state = {
   // (before app.whenReady()) — app.whenReady's own startup sequence below corrects this to
   // whatever's actually persisted before either window's first paint.
   categoryDimension: 'sector',
+  // Mirrors config.atomWidgetSleeping the same way — atom-view.jsx uses this to keep the idle
+  // rotation at full speed while asleep (see its own comment on engagementRef): a sleeping widget
+  // can never receive focus (it's fully click-through), so the normal "only spin at full speed
+  // once actually interacted with" signal would otherwise stay permanently false and the widget
+  // would crawl at IDLE_ROTATE_DISENGAGED_MULTIPLIER forever instead of reading as ambient motion.
+  sleeping: false,
 };
 
 function broadcastState() {
@@ -490,6 +496,11 @@ function setAtomWidgetVisible(visible) {
 // the widget interactive for however long it takes the cursor to move again after the toggle.
 function setAtomWidgetSleeping(sleeping) {
   saveConfig({ atomWidgetSleeping: sleeping });
+  // Broadcasts regardless of whether atomWidget currently exists — state.sleeping is what
+  // atom-view.jsx reads to keep idle rotation at full speed while asleep (see state's own
+  // comment), and there's no reason to skip updating that just because the window handle check
+  // below is about to return early.
+  setState({ sleeping: Boolean(sleeping) });
   if (!atomWidget || atomWidget.isDestroyed()) {
     return;
   }
@@ -1158,7 +1169,7 @@ app.whenReady().then(async () => {
   // comment) to whatever's actually persisted, before either window's first paint — setState
   // (not a bare assignment) so this also broadcasts to the popover/atom widget the same way any
   // other settings change would.
-  setState({ categoryDimension: config.atomCategoryDimension });
+  setState({ categoryDimension: config.atomCategoryDimension, sleeping: config.atomWidgetSleeping });
   broadcastTheme();
   if (config.workspaceId) {
     await refresh();

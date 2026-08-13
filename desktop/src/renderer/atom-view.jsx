@@ -200,7 +200,7 @@ function AtomReadout({ info }) {
   );
 }
 
-function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categoryDimension }) {
+function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categoryDimension, sleeping }) {
   const stageRef = useRef(null);
   const svgRef = useRef(null);
   const [selectedAtomId, setSelectedAtomId] = useState(null);
@@ -350,6 +350,18 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
       window.removeEventListener('blur', handleBlur);
     };
   }, []);
+
+  // A ref (not read from the `sleeping` prop directly) because the rAF loop below is set up once,
+  // in a mount-only effect — reading a prop's current value inside a closure that never re-runs
+  // would freeze it at whatever `sleeping` was on first render. A sleeping widget is fully
+  // click-through (main.js's atomfolio:widget-set-click-through), so it can never actually receive
+  // focus — without this override, engagementRef.current.focused would stay permanently false and
+  // the idle rotation would crawl at IDLE_ROTATE_DISENGAGED_MULTIPLIER forever instead of reading
+  // as the continuous ambient motion sleep mode is supposed to look like.
+  const sleepingRef = useRef(sleeping);
+  useEffect(() => {
+    sleepingRef.current = sleeping;
+  }, [sleeping]);
 
   // ⌘ gates "move the window" vs "rotate the atom" — without it, grabbing anywhere on the stage
   // (including the center/bond-lines) behaves like the website's trackball; holding ⌘ moves the
@@ -573,7 +585,7 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
       }
 
       if (!isDragging && !prefersReducedMotionRef.current) {
-        const engaged = engagementRef.current.focused;
+        const engaged = engagementRef.current.focused || sleepingRef.current;
         const idleMultiplier = engaged ? 1 : IDLE_ROTATE_DISENGAGED_MULTIPLIER;
         autoRotateY.setFromAxisAngle(yAxis, delta * AUTO_ROTATE_SPEED * idleMultiplier);
         autoRotateX.setFromAxisAngle(xAxis, Math.sin(now * 0.00012) * delta * 0.0038 * idleMultiplier);
@@ -910,21 +922,28 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
               setSelectedAtomId((current) => (current === atomId ? null : atomId))
             }
           />
+          {/* Nested inside .atom-materialize-wrapper, not a sibling of it — this box is exactly
+              .sketch-svg's own box (same viewBox, same effective size), while .atom-visual-stage
+              itself is taller (it reserves 52px at the bottom for .atom-readout, see that
+              element's own comment). A sibling here previously spanned the *stage's* full height
+              instead of the wrapper's shrunk one, so the viewBox math put every line's endpoints
+              somewhere other than the actual node circles — the "이상한 선" bug. Also now
+              inherits the materialize scale for free, instead of needing its own copy of it. */}
+          {groupLinks.length ? (
+            <svg className="atom-group-links" viewBox="-320 -320 640 640" aria-hidden="true">
+              {groupLinks.map((link) => (
+                <line
+                  key={link.id}
+                  className="atom-group-link"
+                  x1={link.x1}
+                  y1={link.y1}
+                  x2={link.x2}
+                  y2={link.y2}
+                />
+              ))}
+            </svg>
+          ) : null}
         </div>
-        {groupLinks.length ? (
-          <svg className="atom-group-links" viewBox="-320 -320 640 640" aria-hidden="true">
-            {groupLinks.map((link) => (
-              <line
-                key={link.id}
-                className="atom-group-link"
-                x1={link.x1}
-                y1={link.y1}
-                x2={link.x2}
-                y2={link.y2}
-              />
-            ))}
-          </svg>
-        ) : null}
         {hintVisible ? (
           <div className="atom-hint" role="status">
             원자를 눌러 자세히 보기
@@ -983,6 +1002,7 @@ function AtomViewRoot() {
       activeInsight={state.activeInsight ?? null}
       selectedPortfolioId={state.selectedPortfolioId ?? null}
       categoryDimension={state.categoryDimension ?? 'sector'}
+      sleeping={state.sleeping ?? false}
     />
   );
 }
