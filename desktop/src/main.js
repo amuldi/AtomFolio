@@ -83,6 +83,14 @@ let state = {
   portfolios: [],
   selectedPortfolioId: null,
   activeInsight: null,
+  // Mirrors config.atomCategoryDimension (store.mjs) into the same broadcast channel atom-view.jsx
+  // already subscribes to (onState), rather than a separate settings round-trip — the popover is
+  // the only window with a settings panel, but the atom widget is the one that actually needs this
+  // value, and state is already pushed to both windows on every change (see broadcastState below).
+  // Hardcoded to store.mjs's own default here rather than calling loadConfig() at module-load time
+  // (before app.whenReady()) — app.whenReady's own startup sequence below corrects this to
+  // whatever's actually persisted before either window's first paint.
+  categoryDimension: 'sector',
 };
 
 function broadcastState() {
@@ -1020,6 +1028,7 @@ function registerIpcHandlers() {
       atomWidgetSizeBounds: { minWidth: ATOM_WIDGET_MIN_WIDTH, maxWidth: ATOM_WIDGET_MAX_WIDTH },
       launchAtLogin: config.launchAtLogin,
       appearance: config.appearance,
+      atomCategoryDimension: config.atomCategoryDimension,
     };
   });
 
@@ -1041,6 +1050,7 @@ function registerIpcHandlers() {
       'widgetOpacity',
       'launchAtLogin',
       'appearance',
+      'atomCategoryDimension',
     ];
     const clean = {};
     for (const key of allowedKeys) {
@@ -1081,6 +1091,12 @@ function registerIpcHandlers() {
       // it to cover this case too.
       broadcastTheme();
     }
+    if ('atomCategoryDimension' in clean) {
+      // refresh() below doesn't touch this field (it only recomputes portfolio/holdings data), so
+      // without this the atom widget wouldn't see the new dimension until something else happened
+      // to trigger a state broadcast.
+      setState({ categoryDimension: clean.atomCategoryDimension });
+    }
 
     await refresh({ silent: true });
     return { ok: true };
@@ -1107,6 +1123,11 @@ app.whenReady().then(async () => {
 
   const config = loadConfig();
   applyLaunchAtLoginSetting(config.launchAtLogin);
+  // Corrects the hardcoded default `state.categoryDimension` was declared with (see its own
+  // comment) to whatever's actually persisted, before either window's first paint — setState
+  // (not a bare assignment) so this also broadcasts to the popover/atom widget the same way any
+  // other settings change would.
+  setState({ categoryDimension: config.atomCategoryDimension });
   broadcastTheme();
   if (config.workspaceId) {
     await refresh();

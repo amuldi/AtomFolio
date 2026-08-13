@@ -46,6 +46,13 @@ const DEFAULTS = {
   // reads the real macOS appearance; light/dark pin it regardless of macOS's own setting). The
   // popover's own CSS never looks at this value directly — see popover.css's data-theme comment.
   appearance: 'system',
+  // Which field on a portfolio item counts as its "category" for the atom widget's same-category
+  // connecting lines (atom-view.jsx) — one of 'assetClass' | 'region' | 'sector' | 'style' | 'risk',
+  // the same enrichment fields securityKnowledge.js already fills in for every holding. 'sector'
+  // (분야) picked as the default since it's the grouping most portfolios actually vary along;
+  // the others exist for portfolios where a different axis is more meaningful (e.g. an
+  // all-US-tech portfolio, where 위험 등급 or 투자 스타일 says more than 분야 does).
+  atomCategoryDimension: 'sector',
 };
 
 const MAX_SEEN_IDS = 80;

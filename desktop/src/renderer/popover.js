@@ -935,6 +935,21 @@ function renderSettingsPanel(settings) {
       value: settings.appearance,
       onChange: (next) => updateSetting({ appearance: next }),
     }),
+    // Which item field the atom widget's same-category connecting lines (atom-view.jsx) group by
+    // when a stock is clicked — see store.mjs's own atomCategoryDimension comment for why 분야
+    // (sector) is the default rather than, say, 자산군.
+    renderSegmented({
+      label: '카테고리 필터',
+      options: [
+        { value: 'assetClass', label: '자산군' },
+        { value: 'region', label: '지역' },
+        { value: 'sector', label: '분야' },
+        { value: 'style', label: '스타일' },
+        { value: 'risk', label: '위험' },
+      ],
+      value: settings.atomCategoryDimension,
+      onChange: (next) => updateSetting({ atomCategoryDimension: next }),
+    }),
     // Below the theme picker, grouped by control type rather than the previous
     // toggle/slider/slider/slider/slider/toggle interleaving — on/off toggles first, then every
     // slider, so scanning the panel doesn't require re-parsing what kind of control each row is

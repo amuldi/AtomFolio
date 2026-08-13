@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import { AtomSketch } from '../../../src/components/atom/index.jsx';
 import { generateAtomLayout, createAtomState, projectPoint, trackballVector } from '../../../src/utils/scene.js';
 import { clamp } from '../../../src/utils/math.js';
+import { normalizeDisplayKey } from '../../../src/utils/format.js';
 import { useAtomTransition } from '../../../src/utils/useAtomTransition.js';
 import {
   BOND_LENGTH,
@@ -98,6 +99,24 @@ function useAtomHint() {
   return [visible, dismiss];
 }
 
+// Local re-implementation of src/App.jsx's own canHighlightGroupField (not exported from there,
+// and App.jsx/src/components/atom/src/utils/scene.js are explicitly off-limits for this task) —
+// same two checks: the field actually has a value, and that value came from real enrichment
+// (securityKnowledge.js) rather than being empty/inferred-from-nothing. Guards against grouping
+// a whole portfolio together under a false "same category" just because every holding alike has
+// an empty risk/style field, say.
+function canHighlightGroupField(atom, groupKey) {
+  if (!atom || !groupKey) {
+    return false;
+  }
+  const value = String(atom[groupKey] ?? '').trim();
+  if (!value) {
+    return false;
+  }
+  const source = String(atom.metadataSourceByField?.[groupKey] ?? '').trim().toLowerCase();
+  return source === 'provided' || source === 'reference' || source === 'derived' || source === 'wikidata';
+}
+
 function findFieldValue(fields, label) {
   const match = Array.isArray(fields) ? fields.find((field) => field?.label === label) : null;
   return match ? Number(match.value) : null;
@@ -181,7 +200,7 @@ function AtomReadout({ info }) {
   );
 }
 
-function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
+function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categoryDimension }) {
   const stageRef = useRef(null);
   const svgRef = useRef(null);
   const [selectedAtomId, setSelectedAtomId] = useState(null);
@@ -771,6 +790,15 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
     }
   }, [activeInsight, baseAtoms]);
 
+  // The clicked atom's own value for the settings-selected category dimension (assetClass/region/
+  // sector/style/risk — see popover.js's 카테고리 필터 control) — computed against baseAtoms, not
+  // the projected `atoms` below, since it only needs the field value, not this frame's rotation.
+  const selectedBaseAtom = selectedAtomId ? baseAtoms.find((atom) => atom.id === selectedAtomId) : null;
+  const activeGroupValue =
+    selectedBaseAtom && canHighlightGroupField(selectedBaseAtom, categoryDimension)
+      ? normalizeDisplayKey(selectedBaseAtom[categoryDimension])
+      : null;
+
   const atoms = useMemo(
     () =>
       baseAtoms.map((atom) => {
@@ -782,6 +810,11 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
         const isDraggingThis = dragRef.current.atomId === atom.id;
         const matchesActiveInsight =
           activeInsight?.code && (atom.ticker === activeInsight.code || atom.stockCode === activeInsight.code);
+        const isGroupMatch =
+          activeGroupValue != null &&
+          atom.id !== selectedAtomId &&
+          canHighlightGroupField(atom, categoryDimension) &&
+          normalizeDisplayKey(atom[categoryDimension]) === activeGroupValue;
 
         return {
           ...atom,
@@ -795,8 +828,13 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
           // dimming logic for free.
           detail: matchesActiveInsight ? activeInsight.message : atom.detail,
           isSelected: atom.id === selectedAtomId,
-          isGroupMatch: false,
-          dimmed: selectedAtomId ? atom.id !== selectedAtomId : false,
+          isGroupMatch,
+          // Same-category atoms stay at full opacity alongside the selected one — only genuinely
+          // unrelated holdings dim out. Without the `&& !isGroupMatch` clause here, every atom but
+          // the one actually clicked would dim regardless of category, which would make the
+          // connecting lines drawn below (see .atom-group-links) point at nodes the rest of the
+          // scene was simultaneously fading into the background — visually working against itself.
+          dimmed: selectedAtomId ? atom.id !== selectedAtomId && !isGroupMatch : false,
           hoverMix: 0,
           dragMix: isDraggingThis ? 1 : 0,
           dragging: isDraggingThis,
@@ -804,7 +842,7 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
       }),
     // frameTime drives the continuous rotation repaint even though it isn't read directly here —
     // rotationRef.current.current is mutated in place by the RAF loop above.
-    [baseAtoms, selectedAtomId, frameTime, activeInsight],
+    [baseAtoms, selectedAtomId, frameTime, activeInsight, activeGroupValue, categoryDimension],
   );
 
   const [hintVisible, dismissHint] = useAtomHint();
@@ -825,6 +863,21 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
       ) ?? null
     : null;
   const selectedInfo = buildSelectedInfo(selectedHolding, selectedItem);
+
+  // One line per same-category match, from the selected atom out to each — drawn as a plain SVG
+  // overlay in this file rather than inside the shared AtomSketch component (off-limits for this
+  // task, see the file header). `atoms` already carries each node's current-frame projected x/y
+  // (same projectPoint call AtomSketch itself uses for bond lines), so this only has to connect
+  // dots that are already computed, not re-derive any position math of its own.
+  const groupLinks = selectedAtom
+    ? atoms.filter((atom) => atom.isGroupMatch).map((atom) => ({
+        id: atom.id,
+        x1: selectedAtom.x,
+        y1: selectedAtom.y,
+        x2: atom.x,
+        y2: atom.y,
+      }))
+    : [];
 
   return (
     <div className="atom-section">
@@ -858,6 +911,20 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
             }
           />
         </div>
+        {groupLinks.length ? (
+          <svg className="atom-group-links" viewBox="-320 -320 640 640" aria-hidden="true">
+            {groupLinks.map((link) => (
+              <line
+                key={link.id}
+                className="atom-group-link"
+                x1={link.x1}
+                y1={link.y1}
+                x2={link.x2}
+                y2={link.y2}
+              />
+            ))}
+          </svg>
+        ) : null}
         {hintVisible ? (
           <div className="atom-hint" role="status">
             원자를 눌러 자세히 보기
@@ -915,6 +982,7 @@ function AtomViewRoot() {
       holdings={state.holdings ?? []}
       activeInsight={state.activeInsight ?? null}
       selectedPortfolioId={state.selectedPortfolioId ?? null}
+      categoryDimension={state.categoryDimension ?? 'sector'}
     />
   );
 }
