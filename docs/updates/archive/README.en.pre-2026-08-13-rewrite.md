@@ -1,3 +1,8 @@
+> **Archived snapshot** — a preserved copy of README.en.md exactly as it stood right before the
+> 2026-08-13 rewrite that updated it for both the web app and the menu bar app. Links here use the
+> original's relative paths and may not resolve from this location. For the current README, see
+> [`../../../README.en.md`](../../../README.en.md).
+
 # AtomFolio
 
 [한국어](README.md) · [English](README.en.md)
@@ -33,17 +38,16 @@ AtomFolio turns investment data that's normally scattered across tables into a "
 
 1. [Why this exists](#why-this-exists)
 2. [Screens](#screens)
-3. [Menu bar companion app (macOS)](#menu-bar-companion-app-macos)
-4. [Core features](#core-features)
-5. [Settings policy](#settings-policy)
-6. [Architecture](#architecture)
-7. [Data flow](#data-flow)
-8. [File structure](#file-structure)
-9. [Things that were hard to build](#things-that-were-hard-to-build)
-10. [Running it](#running-it)
-11. [Environment variables & deployment](#environment-variables--deployment)
-12. [Verification](#verification)
-13. [Update log](#update-log)
+3. [Core features](#core-features)
+4. [Settings policy](#settings-policy)
+5. [Architecture](#architecture)
+6. [Data flow](#data-flow)
+7. [File structure](#file-structure)
+8. [Things that were hard to build](#things-that-were-hard-to-build)
+9. [Running it](#running-it)
+10. [Environment variables & deployment](#environment-variables--deployment)
+11. [Verification](#verification)
+12. [Update — then vs. now](#update--then-vs-now)
 
 ## Why this exists
 
@@ -82,36 +86,6 @@ Enter market-shock, stress-test, rebalancing-target, and long-term recurring-inv
 Falls back to the latest stock news if there's nothing dated today. News cards are kept to title, source, and time so they can be scanned quickly.
 
 ![AtomFolio market news](docs/assets/atomfolio-news-current.png)
-
-## Menu bar companion app (macOS)
-
-AtomFolio isn't just a web app — `desktop/` holds a separate Electron project, a macOS menu bar
-companion app. It reuses the existing API (`/api/portfolio`, `/api/market/news`) as-is, without
-touching any web/server code.
-
-An atom-shaped tray icon sits in the menu bar; clicking it opens an always-on-top widget showing
-**your top holdings by weight orbiting the portfolio total at the center**. Drag to spin the orbit,
-or leave it and it slowly auto-rotates; clicking a holding shows its market value, P/L, and weight.
-The tray icon itself changes color with your overall P/L direction — profit (red), loss (blue), or
-neutral.
-
-![Menu bar atom widget — real macOS capture](docs/updates/assets/atomfolio-menubar-widget-live.jpg)
-
-- **Popover**: opens from the tray icon — holding news search, quick-add, and settings, swipeable
-  between as pager cards.
-- **Atom widget settings**: pick a category filter (assetClass/region/sector/style/risk) and
-  clicking a holding connects it with a solid line to every other holding sharing that value.
-  Theme (system/light/dark) is configurable independently of the website's own.
-- **Sleep**: the tray icon's right-click menu can make the widget fully inert — it keeps floating
-  like a static desktop image instead of reacting to the cursor.
-- **Login**: no full OAuth yet — reuses the web app's guest/workspaceId system. Paste the
-  Workspace ID shown in the web app's Settings → Workspace screen to connect.
-- **Support**: Apple Silicon (arm64) builds only. Not true real-time — holding news is polled
-  every 60 seconds.
-
-See [`desktop/README.md`](desktop/README.md) for how to run it and more detail. How this app was
-built and refined (bugs included) is written up by date in the
-[update log](docs/updates/AtomFolio_Updates.en.md).
 
 ## Core features
 
@@ -209,25 +183,19 @@ Settings are kept down to only what's actually needed in real use.
 ```mermaid
 flowchart LR
   User["User"]
-  Browser["React web UI\nApp.jsx + styles.css"]
-  Desktop["macOS menu bar app\nElectron (desktop/)"]
+  Browser["React UI\nApp.jsx + styles.css"]
   Tools["Tool panels\nlist / add holding / summary / simulation / news"]
   Parser["CSV parser\nportfolioIngestionCore.js"]
   Knowledge["Security knowledge\nsecurityKnowledge.js"]
+  Market["Quote/news modules\nliveMarketData.js / marketNews.js"]
   Analytics["Analytics engine\nheatmap / allocation / scoring / twin"]
   Local["localStorage\nbrowser cache"]
   Api["Vercel Functions\napi/*"]
   Server["Shared Node API logic\nserver/*"]
-  Auth["Clerk auth\nworkspaceAccess.mjs"]
   Store["Storage\nPostgres or JSON fallback"]
-  Router["Quote routing\nliveQuoteRouter.mjs"]
-  Breaker["Circuit breaker + provider race\nliveMarketData.js"]
-  KIS["KIS (official API)"]
-  Fallback["Naver / Mirae / Yahoo / Stooq"]
-  Alert["Outage alerting\nalerting.mjs -> Slack webhook (opt-in)"]
+  External["External public data\nYahoo / Stooq / Naver / Bing"]
 
   User --> Browser
-  User --> Desktop
   Browser --> Tools
   Browser --> Parser
   Parser --> Knowledge
@@ -235,17 +203,13 @@ flowchart LR
   Tools --> Analytics
   Browser --> Local
   Browser --> Api
-  Desktop --> Api
   Api --> Server
   Server --> Parser
   Server --> Knowledge
-  Server --> Auth
   Server --> Store
-  Server --> Router
-  Router --> KIS
-  Router --> Breaker
-  Breaker --> Fallback
-  Router -.total outage.-> Alert
+  Server --> External
+  Market --> External
+  Browser --> Market
 ```
 
 ### Frontend
@@ -267,17 +231,6 @@ flowchart LR
 - `server/rateLimit.mjs`: IP-based sliding-window rate limiting.
 - `server/marketDataCache.mjs`: server-side quote-response cache (10s TTL) with stale fallback.
 - `db/schema.sql`: user, workspace, member, portfolio, import history, AI analysis, and snapshot tables.
-
-### Desktop app (menu bar)
-
-- `desktop/src/main.js`: Electron main process — tray, popover/atom-widget windows, IPC handlers.
-- `desktop/src/preload.cjs`: the `window.atomfolio` IPC bridge exposed to the renderer.
-- `desktop/src/renderer/atom-view.jsx`: the atom-widget renderer — pulls in the real shared
-  components/math from `src/components/atom` and `src/utils/scene.js` as-is.
-- `desktop/src/renderer/popover.js`: the popover (news/settings) renderer, plain DOM.
-- `desktop/src/lib/store.mjs`: local JSON config store.
-- `desktop/src/lib/api.mjs`: a client for the same `/api/*` endpoints the web app calls.
-- The web/server code (`src/`, `server/`, `api/`) is reused as-is — this project never modifies it.
 
 ### API abuse protection
 
@@ -400,7 +353,7 @@ sequenceDiagram
 
 ```text
 .
-├── README.md / README.en.md
+├── README.md
 ├── package.json
 ├── vite.config.js
 ├── vercel.json
@@ -423,21 +376,10 @@ sequenceDiagram
 ├── server/
 │   ├── dev.mjs
 │   ├── index.mjs
-│   ├── apiHandlers.mjs
 │   ├── portfolioIngestion.mjs
 │   ├── portfolioStore.mjs
 │   ├── postgresPortfolioStore.mjs
 │   ├── securityEnrichment.mjs
-│   ├── workspaceAccess.mjs
-│   ├── rateLimit.mjs
-│   ├── marketDataCache.mjs
-│   ├── alerting.mjs
-│   ├── operationalEvents.mjs
-│   ├── newsCache.mjs
-│   ├── finnhubNews.mjs
-│   ├── marketData/
-│   │   ├── liveQuoteRouter.mjs
-│   │   └── kisProvider.mjs
 │   └── agents/
 │       ├── contracts.mjs
 │       ├── explanationAgent.mjs
@@ -449,7 +391,6 @@ sequenceDiagram
 │   ├── main.jsx
 │   ├── styles.css
 │   ├── components/
-│   │   ├── atom/
 │   │   ├── allocation/
 │   │   └── panels/
 │   ├── constants/
@@ -472,20 +413,10 @@ sequenceDiagram
 │       ├── portfolio.js
 │       ├── scene.js
 │       └── storage.js
-├── desktop/                      # macOS menu bar app (Electron, a separate project)
-│   ├── package.json
-│   ├── README.md
-│   ├── assets/                   # tray icons
-│   └── src/
-│       ├── main.js
-│       ├── preload.cjs
-│       ├── lib/                  # config store, API client, insight logic
-│       └── renderer/             # atom-widget / popover renderers
 ├── samples/portfolio/
 └── docs/
     ├── assets/
-    ├── proposal/
-    └── updates/                  # dated update log + screenshots + README archive
+    └── proposal/
 ```
 
 ## Things that were hard to build
@@ -635,15 +566,12 @@ Recently confirmed:
 
 AtomFolio is a tool for organizing investment data and computing outcomes from stated assumptions. It is not investment advice or a buy/sell recommendation service. External quotes and news use public endpoints, so responses may be rate-limited or restricted depending on network conditions or provider policy.
 
-## Update log
+## Update — then vs. now
 
 AtomFolio started as a single 2D SVG sketch drawn from a hand-drawn concept, with no login at all
 — just a web app running on browser localStorage. It's moved well past that since. Below is that
-change, summarized with screenshots actually captured from a local run. The full record is a dated
-changelog at [docs/updates/AtomFolio_Updates.en.md](docs/updates/AtomFolio_Updates.en.md) (Korean:
-[AtomFolio_Updates.md](docs/updates/AtomFolio_Updates.md)) — the README as it stood right before
-this rewrite is preserved as-is under
-[docs/updates/archive/](docs/updates/archive/).
+change, summarized with screenshots actually captured from a local run (the full record lives in
+[docs/updates/AtomFolio_Updates.en.md](docs/updates/AtomFolio_Updates.en.md)).
 
 **The atom scene — then and now**
 
@@ -662,7 +590,14 @@ this rewrite is preserved as-is under
 | Platforms | Web only | Web + a macOS menu bar companion app (Electron) |
 | Tests | Almost none | 78 (`node --test`) — auth isolation, rate limiting, KIS routing, and more |
 
-See the [menu bar companion app](#menu-bar-companion-app-macos) section above for screenshots and
-an introduction to the macOS app. More detailed per-feature screenshots, architecture diagrams, the
-specifics of the market-data resilience work (circuit breaker, provider racing, outage alerting,
-KIS name-based routing), and every new entry added from here on are in the update log.
+**The macOS menu bar app** — an atom widget floats permanently, holdings orbiting the portfolio
+total; clicking the tray icon opens a popover with news, quick-add, and settings. The screenshot
+below was captured directly on macOS from the app actually running locally:
+
+![Menu bar atom widget — real macOS capture](docs/updates/assets/atomfolio-menubar-widget-live.jpg)
+
+More detailed per-feature screenshots, architecture diagrams, and the specifics of this round's
+market-data resilience work (circuit breaker, provider racing, outage alerting, KIS name-based
+routing) are written up in
+[docs/updates/AtomFolio_Updates.en.md](docs/updates/AtomFolio_Updates.en.md) (Korean:
+[AtomFolio_Updates.md](docs/updates/AtomFolio_Updates.md)).

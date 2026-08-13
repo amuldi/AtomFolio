@@ -1,3 +1,7 @@
+> **아카이브 스냅샷** — 2026-08-13에 README.md를 웹+메뉴바 앱 기준으로 재작성하기 직전 상태를
+> 그대로 보존한 사본입니다. 링크는 원본 기준 상대 경로라 이 위치에서는 깨질 수 있습니다.
+> 최신 README는 [`../../../README.md`](../../../README.md)를 참고하세요.
+
 # AtomFolio
 
 [한국어](README.md) · [English](README.en.md)
@@ -33,17 +37,16 @@ AtomFolio는 표 형태로 흩어진 투자 데이터를 “중앙 포트폴리�
 
 1. [개발 목적](#왜-만들었나)
 2. [실행 화면](#실행-화면)
-3. [메뉴바 동반 앱 (macOS)](#메뉴바-동반-앱-macos)
-4. [주요 기능](#주요-기능)
-5. [설정 정책](#설정-정책)
-6. [아키텍처](#아키텍처)
-7. [데이터 흐름](#데이터-흐름)
-8. [파일 구조](#파일-구조)
-9. [구현하면서 애먹었던 부분](#구현하면서-애먹었던-부분)
-10. [실행 방법](#실행-방법)
-11. [환경 변수와 배포](#환경-변수와-배포)
-12. [검증](#검증)
-13. [업데이트 로그](#업데이트-로그)
+3. [주요 기능](#주요-기능)
+4. [설정 정책](#설정-정책)
+5. [아키텍처](#아키텍처)
+6. [데이터 흐름](#데이터-흐름)
+7. [파일 구조](#파일-구조)
+8. [구현하면서 애먹었던 부분](#구현하면서-애먹었던-부분)
+9. [실행 방법](#실행-방법)
+10. [환경 변수와 배포](#환경-변수와-배포)
+11. [검증](#검증)
+12. [업데이트 — 그때와 지금](#업데이트--그때와-지금)
 
 ## 개발 목적
 
@@ -82,35 +85,6 @@ AtomFolio의 목표는 세 가지입니다.
 오늘 뉴스가 없으면 최신 주식 뉴스로 fallback합니다. 뉴스 카드는 제목, 출처, 시간 중심으로 빠르게 스캔할 수 있게 구성했습니다.
 
 ![AtomFolio 시장 뉴스](docs/assets/atomfolio-news-current.png)
-
-## 메뉴바 동반 앱 (macOS)
-
-AtomFolio는 웹 하나가 아닙니다 — `desktop/` 아래에 별도의 Electron 프로젝트로 macOS 메뉴바
-동반 앱이 있습니다. 웹/서버 코드는 건드리지 않고 기존 API(`/api/portfolio`,
-`/api/market/news`)를 그대로 재사용합니다.
-
-메뉴바에 원자 모양 트레이 아이콘이 뜨고, 클릭하면 **보유 비중 상위 종목이 포트폴리오 총액을
-중심으로 도는 원자 궤도**가 항상 위에 떠 있는 작은 위젯 창으로 표시됩니다. 드래그로 궤도를
-돌리거나 가만히 두면 천천히 자동으로 돌고, 종목 하나를 클릭하면 평가금액·손익·비중이
-표시됩니다. 트레이 아이콘 자체도 손익 방향에 따라 빨강(수익)/파랑(손실)/중립으로 바뀝니다.
-
-![메뉴바 원자 위젯 — 실제 macOS 캡처](docs/updates/assets/atomfolio-menubar-widget-live.jpg)
-
-- **팝오버**: 트레이 아이콘을 클릭하면 뜨는 패널로, 종목 뉴스 검색·빠른 종목 추가·설정이
-  카드 스와이프로 전환되는 페이저에 들어 있습니다.
-- **원자 위젯 설정**: 카테고리 필터(자산군/지역/분야/스타일/위험)를 고르면 종목 클릭 시 같은
-  카테고리 종목끼리 실선으로 연결됩니다. 테마(시스템/라이트/다크)도 웹과 별개로 설정할 수
-  있습니다.
-- **잠자기**: 트레이 아이콘 우클릭 메뉴에서 위젯을 완전히 비활성화해 배경화면처럼 띄워둘 수
-  있습니다.
-- **로그인**: 정식 OAuth는 아직 없고, 웹의 게스트/workspaceId 체계를 재사용합니다 — 웹 설정
-  (설정 → Workspace)에 뜨는 Workspace ID를 붙여넣으면 연결됩니다.
-- **지원 범위**: Apple Silicon(arm64) 전용 빌드입니다. 완전한 실시간은 아니며, 종목 뉴스는
-  60초 폴링으로 확인합니다.
-
-실행 방법과 더 자세한 내용은 [`desktop/README.md`](desktop/README.md)를 참고하세요. 이 앱이
-만들어지고 다듬어진 과정(버그 수정 포함)은
-[업데이트 로그](docs/updates/AtomFolio_Updates.md)에 날짜별로 정리돼 있습니다.
 
 ## 주요 기능
 
@@ -208,25 +182,19 @@ AtomFolio는 웹 하나가 아닙니다 — `desktop/` 아래에 별도의 Elect
 ```mermaid
 flowchart LR
   User["사용자"]
-  Browser["React 웹 UI\nApp.jsx + styles.css"]
-  Desktop["macOS 메뉴바 앱\nElectron (desktop/)"]
+  Browser["React UI\nApp.jsx + styles.css"]
   Tools["도구 패널\n목록 / 종목 추가 / 요약 / 시뮬레이션 / 뉴스"]
   Parser["CSV 파서\nportfolioIngestionCore.js"]
   Knowledge["종목 지식\nsecurityKnowledge.js"]
+  Market["시세/뉴스 모듈\nliveMarketData.js / marketNews.js"]
   Analytics["분석 엔진\nheatmap / allocation / scoring / twin"]
   Local["localStorage\n브라우저 캐시"]
   Api["Vercel Functions\napi/*"]
   Server["Node API 공통 로직\nserver/*"]
-  Auth["Clerk 인증\nworkspaceAccess.mjs"]
   Store["저장소\nPostgres 또는 JSON fallback"]
-  Router["시세 라우팅\nliveQuoteRouter.mjs"]
-  Breaker["서킷 브레이커 + 공급자 경쟁\nliveMarketData.js"]
-  KIS["KIS (공식 API)"]
-  Fallback["Naver / Mirae / Yahoo / Stooq"]
-  Alert["장애 알림\nalerting.mjs → Slack 웹훅(선택)"]
+  External["외부 공개 데이터\nYahoo / Stooq / Naver / Bing"]
 
   User --> Browser
-  User --> Desktop
   Browser --> Tools
   Browser --> Parser
   Parser --> Knowledge
@@ -234,17 +202,13 @@ flowchart LR
   Tools --> Analytics
   Browser --> Local
   Browser --> Api
-  Desktop --> Api
   Api --> Server
   Server --> Parser
   Server --> Knowledge
-  Server --> Auth
   Server --> Store
-  Server --> Router
-  Router --> KIS
-  Router --> Breaker
-  Breaker --> Fallback
-  Router -.전면 장애.-> Alert
+  Server --> External
+  Market --> External
+  Browser --> Market
 ```
 
 ### 프런트엔드
@@ -266,17 +230,6 @@ flowchart LR
 - `server/rateLimit.mjs`: IP 기준 슬라이딩 윈도우 레이트 리밋.
 - `server/marketDataCache.mjs`: 시세 응답 서버 캐시(TTL 10초)와 stale 폴백.
 - `db/schema.sql`: user, workspace, member, portfolio, import history, AI analysis, snapshot 테이블.
-
-### 데스크톱 앱 (메뉴바)
-
-- `desktop/src/main.js`: Electron 메인 프로세스 — 트레이, 팝오버/원자 위젯 창, IPC 핸들러.
-- `desktop/src/preload.cjs`: 렌더러에 노출되는 `window.atomfolio` IPC 브릿지.
-- `desktop/src/renderer/atom-view.jsx`: 원자 위젯 렌더러 — `src/components/atom`,
-  `src/utils/scene.js` 등 웹과 공유하는 실제 컴포넌트/수학을 그대로 가져다 씀.
-- `desktop/src/renderer/popover.js`: 팝오버(뉴스/설정) 렌더러, 순수 DOM.
-- `desktop/src/lib/store.mjs`: 로컬 설정(JSON) 저장소.
-- `desktop/src/lib/api.mjs`: 웹과 같은 `/api/*` 엔드포인트를 호출하는 클라이언트.
-- 웹/서버(`src/`, `server/`, `api/`) 코드는 이 프로젝트가 직접 수정하지 않고 그대로 재사용한다.
 
 ### API 남용 방어
 
@@ -396,7 +349,7 @@ sequenceDiagram
 
 ```text
 .
-├── README.md / README.en.md
+├── README.md
 ├── package.json
 ├── vite.config.js
 ├── vercel.json
@@ -419,21 +372,10 @@ sequenceDiagram
 ├── server/
 │   ├── dev.mjs
 │   ├── index.mjs
-│   ├── apiHandlers.mjs
 │   ├── portfolioIngestion.mjs
 │   ├── portfolioStore.mjs
 │   ├── postgresPortfolioStore.mjs
 │   ├── securityEnrichment.mjs
-│   ├── workspaceAccess.mjs
-│   ├── rateLimit.mjs
-│   ├── marketDataCache.mjs
-│   ├── alerting.mjs
-│   ├── operationalEvents.mjs
-│   ├── newsCache.mjs
-│   ├── finnhubNews.mjs
-│   ├── marketData/
-│   │   ├── liveQuoteRouter.mjs
-│   │   └── kisProvider.mjs
 │   └── agents/
 │       ├── contracts.mjs
 │       ├── explanationAgent.mjs
@@ -445,7 +387,6 @@ sequenceDiagram
 │   ├── main.jsx
 │   ├── styles.css
 │   ├── components/
-│   │   ├── atom/
 │   │   ├── allocation/
 │   │   └── panels/
 │   ├── constants/
@@ -468,20 +409,10 @@ sequenceDiagram
 │       ├── portfolio.js
 │       ├── scene.js
 │       └── storage.js
-├── desktop/                      # macOS 메뉴바 앱 (Electron, 별도 프로젝트)
-│   ├── package.json
-│   ├── README.md
-│   ├── assets/                   # 트레이 아이콘
-│   └── src/
-│       ├── main.js
-│       ├── preload.cjs
-│       ├── lib/                  # 설정 저장소, API 클라이언트, 인사이트 로직
-│       └── renderer/             # 원자 위젯 / 팝오버 렌더러
 ├── samples/portfolio/
 └── docs/
     ├── assets/
-    ├── proposal/
-    └── updates/                  # 업데이트 로그(changelog) + 스크린샷 + README 아카이브
+    └── proposal/
 ```
 
 ## 구현하면서 애먹었던 부분
@@ -630,15 +561,12 @@ Vercel 설정은 [vercel.json](vercel.json)에 있습니다.
 
 AtomFolio는 투자 데이터를 정리하고 가정을 계산하는 도구입니다. 투자 조언이나 매수/매도 추천 서비스가 아닙니다. 외부 시세와 뉴스는 공개 엔드포인트를 사용하므로 네트워크 상태나 제공자 정책에 따라 응답이 제한될 수 있습니다.
 
-## 업데이트 로그
+## 업데이트 — 그때와 지금
 
 원래 AtomFolio는 손그림에서 출발한 2D SVG 스케치 하나에, 로그인도 없이 브라우저
 localStorage만 쓰는 웹 하나였습니다. 지금은 여기서 훨씬 더 나아갔습니다 — 아래는 그 변화를
-실제로 로컬에서 실행하고 캡처한 화면으로 정리한 것입니다. 전체 기록은 날짜별 changelog인
-[docs/updates/AtomFolio_Updates.md](docs/updates/AtomFolio_Updates.md)(영문:
-[AtomFolio_Updates.en.md](docs/updates/AtomFolio_Updates.en.md))에서 확인할 수 있습니다 — 이
-문서로 재작성되기 직전 README 원문은 [docs/updates/archive/](docs/updates/archive/)에 그대로
-보존해 두었습니다.
+실제로 로컬에서 실행하고 캡처한 화면으로 정리한 것입니다(전체 기록은
+[docs/updates/AtomFolio_Updates.md](docs/updates/AtomFolio_Updates.md)에 더 자세히 있습니다).
 
 **원자 화면 — 그때와 지금**
 
@@ -657,7 +585,13 @@ localStorage만 쓰는 웹 하나였습니다. 지금은 여기서 훨씬 더 �
 | 플랫폼 | 웹 하나 | 웹 + macOS 메뉴바 동반 앱(Electron) |
 | 테스트 | 거의 없음 | `node --test` 78개 (인증 격리·레이트리밋·KIS 라우팅 등) |
 
-macOS 메뉴바 앱에 대한 스크린샷과 소개는 위 [메뉴바 동반 앱](#메뉴바-동반-앱-macos) 절을
-참고하세요. 더 자세한 기능별 스크린샷, 아키텍처 다이어그램, 시세 복원력(서킷 브레이커, 공급자
-경쟁, 장애 알림, KIS 이름 검색 라우팅)의 구체적인 변경 내용, 그리고 오늘 이후로 쌓일 새 항목은
-업데이트 로그에서 계속 확인할 수 있습니다.
+**macOS 메뉴바 앱** — 원자 위젯이 포트폴리오 총액을 중심으로 도는 궤도로 항상 떠 있고,
+트레이 아이콘을 누르면 뉴스/빠른 종목 추가/설정이 담긴 팝오버가 뜹니다. 아래는 실제로
+로컬에서 앱을 띄우고 macOS에서 직접 캡처한 화면입니다.
+
+![메뉴바 원자 위젯 — 실제 macOS 캡처](docs/updates/assets/atomfolio-menubar-widget-live.jpg)
+
+더 자세한 기능별 스크린샷, 아키텍처 다이어그램, 이번에 작업한 시세 복원력(서킷 브레이커,
+공급자 경쟁, 장애 알림, KIS 이름 검색 라우팅)의 구체적인 변경 내용은
+[docs/updates/AtomFolio_Updates.md](docs/updates/AtomFolio_Updates.md)(영문:
+[AtomFolio_Updates.en.md](docs/updates/AtomFolio_Updates.en.md))에 정리해 두었습니다.
