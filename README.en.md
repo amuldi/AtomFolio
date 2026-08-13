@@ -17,7 +17,7 @@ AtomFolio turns investment data that's normally scattered across tables into a "
 - Proposal (Markdown): [docs/proposal/AtomFolio_Proposal.md](docs/proposal/AtomFolio_Proposal.md)
 - Proposal (HTML): [docs/proposal/AtomFolio_Proposal.html](docs/proposal/AtomFolio_Proposal.html)
 - Proposal (PDF): [docs/proposal/AtomFolio_Proposal.pdf](docs/proposal/AtomFolio_Proposal.pdf)
-- Update notes (then vs. now, with real screenshots): [docs/updates/AtomFolio_Updates.en.md](docs/updates/AtomFolio_Updates.en.md) · [한국어](docs/updates/AtomFolio_Updates.md)
+- Update log (dated changelog with real screenshots): [docs/updates/AtomFolio_Updates.en.md](docs/updates/AtomFolio_Updates.en.md) · [한국어](docs/updates/AtomFolio_Updates.md)
 
 ## Tech stack
 
@@ -654,16 +654,16 @@ changelog at [docs/updates/AtomFolio_Updates.en.md](docs/updates/AtomFolio_Updat
 this rewrite is preserved as-is under
 [docs/updates/archive/](docs/updates/archive/).
 
-**The atom scene — then and now**
+**The atom scene — compared to the initial version**
 
-| Then (earliest commits) | Now |
+| Earliest commits | Current |
 | --- | --- |
 | ![Original atom scene](docs/assets/atomfolio-dashboard.png) | ![Current atom scene](docs/updates/assets/atomfolio-current-atomview.jpg) |
 | A 2D SVG sketch drawn from a hand-drawn concept, with a fixed vertical icon rail on the left. | A WebGL (Three.js) 3D scene. An Explore/Manage tab pair and a command palette (⌘K) up top; the left icon rail reorganized into Portfolios / Search / Summary / Compare / Simulation / News / Settings. |
 
 **What actually got better**
 
-| Area | Then | Now |
+| Area | Initial | Current |
 | --- | --- | --- |
 | Auth / storage | None — localStorage only | Clerk login + Postgres/JSON storage, isolated per workspace |
 | Quote reliability | Yahoo → Stooq, two-step fallback | KIS (official) → Naver/Mirae raced concurrently → Yahoo → Stooq, with a circuit breaker, failure tracking, and outage alerting |

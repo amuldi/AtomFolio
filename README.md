@@ -649,16 +649,16 @@ localStorage만 쓰는 웹 하나였습니다. 지금은 여기서 훨씬 더 �
 문서로 재작성되기 직전 README 원문은 [docs/updates/archive/](docs/updates/archive/)에 그대로
 보존해 두었습니다.
 
-**원자 화면 — 그때와 지금**
+**원자 화면 — 초기 버전 대비**
 
-| 그때 (초기 커밋) | 지금 |
+| 초기 커밋 | 현재 |
 | --- | --- |
-| ![초기 원자 화면](docs/assets/atomfolio-dashboard.png) | ![지금의 원자 화면](docs/updates/assets/atomfolio-current-atomview.jpg) |
+| ![초기 원자 화면](docs/assets/atomfolio-dashboard.png) | ![현재 원자 화면](docs/updates/assets/atomfolio-current-atomview.jpg) |
 | 손그림에서 출발한 2D SVG 스케치. 왼쪽에 아이콘이 세로로 고정. | WebGL(Three.js) 3D 장면. 상단 탐색/관리 탭 + 명령 팔레트(⌘K), 왼쪽 아이콘은 포트폴리오·검색·요약·비교·시뮬레이션·뉴스·설정으로 재구성. |
 
-**무엇이 더 좋아졌나**
+**주요 변화**
 
-| 구분 | 그때 | 지금 |
+| 구분 | 초기 | 현재 |
 | --- | --- | --- |
 | 로그인/저장 | 없음 — localStorage만 | Clerk 로그인 + Postgres/JSON 저장소, workspace 단위 격리 |
 | 시세 안정성 | Yahoo → Stooq 2단 fallback | KIS(공식) → Naver/Mirae 동시 경쟁 → Yahoo → Stooq, 서킷 브레이커 + 실패 추적 + 장애 알림 |

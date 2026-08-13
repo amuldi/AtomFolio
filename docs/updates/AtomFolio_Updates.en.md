@@ -4,9 +4,9 @@
 > for the app itself (how to run it, what it does, its architecture); this document is a **dated
 > changelog**. The newest entry is at the top, and each entry carries screenshots actually
 > captured from the app running locally at that point — nothing here is mocked up or imagined.
-> This used to be a single "then vs. now" comparison document; from now on, a new entry is added
-> above the rest for each meaningful batch of work. The old content wasn't deleted — it's kept
-> below as the "baseline" entry.
+> This used to be a single document comparing the initial version against the current one all at
+> once; from now on, a new entry is added above the rest for each meaningful batch of work. The
+> old content wasn't deleted — it's kept below as the "baseline" entry.
 
 ## 2026-08-13 — Menu bar widget interaction polish (drag, click-through, category, sleep)
 
@@ -80,13 +80,13 @@ Uncomment once the files above exist:
 
 ## 2026-08-13 — Market-data resilience + this update log's own creation (baseline)
 
-> Everything below is the single "then vs. now" document that existed before this log switched to
+> Everything below is the single comparison document that existed before this log switched to
 > a dated-entry structure, moved here as-is rather than rewritten. Covers the cumulative changes
 > from the very first commit up through when this entry was originally written.
 
 ### The short version
 
-| Area | Then (earliest commits) | Now |
+| Area | Earliest commits | Current |
 | --- | --- | --- |
 | Auth | None — localStorage only | Clerk email/password login + guest-workspace promotion |
 | Storage | localStorage only | localStorage + Postgres (Neon) / JSON-file fallback, isolated per workspace |
@@ -255,16 +255,16 @@ genuinely floating over the desktop, not a mockup:
 (Note: these three were captured before the info-box-overlapping-the-atom issue was fixed in the
 entry above — see that entry's own screenshots for the current look.)
 
-### Screenshots — then vs. now
+### Screenshots — compared to the initial version
 
 #### The atom scene
 
-**Then** (earliest commits, `docs/assets/atomfolio-dashboard.png`): thin sketch lines and small
+**Earliest commits** (`docs/assets/atomfolio-dashboard.png`): thin sketch lines and small
 circular nodes, with a fixed vertical rail of X/star/crown/hexagon/ring icons on the left.
 
-![Then — the original atom scene](../assets/atomfolio-dashboard.png)
+![The original atom scene](../assets/atomfolio-dashboard.png)
 
-**Now** (captured locally when this entry was written): the same "radiating from a center" concept
+**Current** (captured locally when this entry was written): the same "radiating from a center" concept
 persists, but there's now an Explore/Manage tab pair and a command palette (⌘K) up top, and the
 left icon rail has been reorganized into Portfolios / Search / Summary / Compare / Simulation /
 News / Settings.
