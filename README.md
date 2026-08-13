@@ -1,5 +1,7 @@
 # AtomFolio
 
+[한국어](README.md) · [English](README.en.md)
+
 투자 CSV, 직접 입력한 보유 종목, 실시간 시세, 뉴스, 투자 시뮬레이션을 하나의 포트폴리오 화면으로 묶어 보여주는 투자 데이터 대시보드입니다.
 
 AtomFolio는 표 형태로 흩어진 투자 데이터를 “중앙 포트폴리오와 주변 보유 종목” 구조로 바꿔 보여줍니다. 처음 구상은 노트에 직접 그린 원자형 포트폴리오 스케치에서 시작했습니다. 여러 계좌와 종목이 한눈에 안 들어오는 문제를 해결하려고, 보유 종목을 중심에서 뻗어나가는 노드로 표현했습니다.
@@ -15,6 +17,7 @@ AtomFolio는 표 형태로 흩어진 투자 데이터를 “중앙 포트폴리�
 - 기획서 Markdown: [docs/proposal/AtomFolio_Proposal.md](docs/proposal/AtomFolio_Proposal.md)
 - 기획서 HTML: [docs/proposal/AtomFolio_Proposal.html](docs/proposal/AtomFolio_Proposal.html)
 - 기획서 PDF: [docs/proposal/AtomFolio_Proposal.pdf](docs/proposal/AtomFolio_Proposal.pdf)
+- 업데이트 노트 (그때와 지금, 실행 화면 캡처 포함): [docs/updates/AtomFolio_Updates.md](docs/updates/AtomFolio_Updates.md) · [English](docs/updates/AtomFolio_Updates.en.md)
 
 ## 사용 기술
 
