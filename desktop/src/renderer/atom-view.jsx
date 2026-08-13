@@ -842,10 +842,7 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
           isSelected: atom.id === selectedAtomId,
           isGroupMatch,
           // Same-category atoms stay at full opacity alongside the selected one — only genuinely
-          // unrelated holdings dim out. Without the `&& !isGroupMatch` clause here, every atom but
-          // the one actually clicked would dim regardless of category, which would make the
-          // connecting lines drawn below (see .atom-group-links) point at nodes the rest of the
-          // scene was simultaneously fading into the background — visually working against itself.
+          // unrelated holdings dim out.
           dimmed: selectedAtomId ? atom.id !== selectedAtomId && !isGroupMatch : false,
           hoverMix: 0,
           dragMix: isDraggingThis ? 1 : 0,
@@ -875,21 +872,6 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
       ) ?? null
     : null;
   const selectedInfo = buildSelectedInfo(selectedHolding, selectedItem);
-
-  // One line per same-category match, from the selected atom out to each — drawn as a plain SVG
-  // overlay in this file rather than inside the shared AtomSketch component (off-limits for this
-  // task, see the file header). `atoms` already carries each node's current-frame projected x/y
-  // (same projectPoint call AtomSketch itself uses for bond lines), so this only has to connect
-  // dots that are already computed, not re-derive any position math of its own.
-  const groupLinks = selectedAtom
-    ? atoms.filter((atom) => atom.isGroupMatch).map((atom) => ({
-        id: atom.id,
-        x1: selectedAtom.x,
-        y1: selectedAtom.y,
-        x2: atom.x,
-        y2: atom.y,
-      }))
-    : [];
 
   return (
     <div className="atom-section">
@@ -922,27 +904,6 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
               setSelectedAtomId((current) => (current === atomId ? null : atomId))
             }
           />
-          {/* Nested inside .atom-materialize-wrapper, not a sibling of it — this box is exactly
-              .sketch-svg's own box (same viewBox, same effective size), while .atom-visual-stage
-              itself is taller (it reserves 52px at the bottom for .atom-readout, see that
-              element's own comment). A sibling here previously spanned the *stage's* full height
-              instead of the wrapper's shrunk one, so the viewBox math put every line's endpoints
-              somewhere other than the actual node circles — the "이상한 선" bug. Also now
-              inherits the materialize scale for free, instead of needing its own copy of it. */}
-          {groupLinks.length ? (
-            <svg className="atom-group-links" viewBox="-320 -320 640 640" aria-hidden="true">
-              {groupLinks.map((link) => (
-                <line
-                  key={link.id}
-                  className="atom-group-link"
-                  x1={link.x1}
-                  y1={link.y1}
-                  x2={link.x2}
-                  y2={link.y2}
-                />
-              ))}
-            </svg>
-          ) : null}
         </div>
         {hintVisible ? (
           <div className="atom-hint" role="status">

@@ -15,6 +15,8 @@
 - ⚠️ Fixed, not live-verified — the code fix landed and automated checks passed, but wasn't
   confirmed by actually operating the running app before the commit (noted honestly in the commit
   message itself)
+- 🗑️ Feature removed — the same problem recurred, so instead of fixing it again the feature was
+  removed outright
 
 ---
 
@@ -22,7 +24,8 @@
 
 | Symptom | Root cause | Fix | Status | Commit |
 | --- | --- | --- | --- | --- |
-| Same-category connecting lines rendered in the wrong position | `.atom-group-links` was a sibling of `.atom-materialize-wrapper`, so its `viewBox` was mapped against `.atom-visual-stage`'s full height (including the 52px reserved bottom padding) instead of the actual node coordinate space | Moved the SVG inside `.atom-materialize-wrapper`, so it shares the same box and materialize scale as the nodes it needs to align with | ✅ Fixed | `800397a` |
+| Same-category connecting lines still looked wrong after the coordinate fix below (confirmed by a real screenshot the user captured) | The coordinate-space bug itself was genuinely fixed in `800397a`, but most holdings in the test portfolio shared the same category (mostly ETFs), so nearly every node counted as a "match" — the lines were positioned correctly but still read as a confusing fan/burst radiating from the selected node | Recurred a second time, so instead of fixing it again, the **line rendering was removed outright** (the `.atom-group-links` SVG and its `groupLinks` computation). The non-dimming highlight for same-category nodes was kept | 🗑️ Feature removed | (next commit) |
+| Same-category connecting lines rendered in the wrong position (1st occurrence) | `.atom-group-links` was a sibling of `.atom-materialize-wrapper`, so its `viewBox` was mapped against `.atom-visual-stage`'s full height (including the 52px reserved bottom padding) instead of the actual node coordinate space | Moved the SVG inside `.atom-materialize-wrapper` so it shares the same box and materialize scale as the nodes it needs to align with — the underlying coordinate bug was genuinely fixed, but the feature still recurred as a usability problem (see entry above) and was later removed | ✅ Coordinate bug itself fixed (feature later removed) | `800397a` |
 | Rotation looked unnatural while the widget was in sleep mode | A sleeping widget is fully click-through and can never receive window focus, so the rotation loop's "engaged" check stayed permanently false, crawling at 0.12x speed forever | Broadcast `state.sleeping` from the main process; the renderer's rAF loop treats sleeping as always-"engaged" (full speed) via a ref | ✅ Fixed | `800397a` |
 | The sleep toggle was hard to discover, buried in the settings panel | Placement mistake — it belongs next to the widget's on/off state, not in a separate settings group | Moved to the tray icon's right-click menu, next to "Show atom widget" | ✅ Fixed | `0f7f165` |
 | The widget didn't always re-center on a fresh app launch (only worked when toggled off/on from the tray menu) | `createAtomWidget()` called `atomWidget.showInactive()` directly, bypassing `setAtomWidgetVisible()`, which is where the centering logic lives | Routed `createAtomWidget()` through `setAtomWidgetVisible(true)` | ✅ Fixed | `0f7f165` |

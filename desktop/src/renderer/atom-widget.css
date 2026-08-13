@@ -132,31 +132,6 @@ body {
   transform-origin: 50% 50%;
 }
 
-/* Same-category connecting lines (atom-view.jsx's own groupLinks) — a sibling overlay to
-   .atom-materialize-wrapper, not something drawn inside AtomSketch itself (that component is
-   shared with the web app and off-limits here). Same viewBox and the same scale(1.1) .sketch-svg
-   uses (atom-sketch.css) so a line's endpoints land exactly on the node circles atom-view.jsx
-   already computed x/y for, not just approximately near them. pointer-events: none throughout —
-   this is a display-only annotation layer sitting on top of live node-hit targets, and must never
-   intercept a click meant for the atom beneath it (or, per the click-through effect above, for
-   whatever's on the desktop behind the widget). */
-.atom-group-links {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  transform: scale(1.1);
-  pointer-events: none;
-}
-
-.atom-group-link {
-  fill: none;
-  stroke: rgba(var(--atom-ink), 0.5);
-  stroke-width: 1.3;
-  stroke-linecap: round;
-}
-
 /* Minimal total-value readout — no card, no background, just text with a soft dark halo so it
    stays legible over any desktop wallpaper (light or dark, photo or plain). */
 :root {
