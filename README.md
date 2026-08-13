@@ -17,7 +17,7 @@ AtomFolio는 표 형태로 흩어진 투자 데이터를 “중앙 포트폴리�
 - 기획서 Markdown: [docs/proposal/AtomFolio_Proposal.md](docs/proposal/AtomFolio_Proposal.md)
 - 기획서 HTML: [docs/proposal/AtomFolio_Proposal.html](docs/proposal/AtomFolio_Proposal.html)
 - 기획서 PDF: [docs/proposal/AtomFolio_Proposal.pdf](docs/proposal/AtomFolio_Proposal.pdf)
-- 업데이트 노트 (그때와 지금, 실행 화면 캡처 포함): [docs/updates/AtomFolio_Updates.md](docs/updates/AtomFolio_Updates.md) · [English](docs/updates/AtomFolio_Updates.en.md)
+- 업데이트 노트: [docs/updates/AtomFolio_Updates.md](docs/updates/AtomFolio_Updates.md) · [English](docs/updates/AtomFolio_Updates.en.md)
 
 ## 사용 기술
 
