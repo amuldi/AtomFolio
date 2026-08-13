@@ -397,9 +397,27 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
   }, []);
 
   useEffect(() => {
+    // Shared by handleMove (⌘ released mid-drag, mouse button still down) and handleUp (button
+    // released) — either one ends the drag the same way, so main.js's snap-to-edge handler (see
+    // its atomfolio:widget-move-end handler) fires exactly once per drag regardless of which one
+    // triggered it.
+    const endDrag = () => {
+      widgetDragRef.current.active = false;
+      window.atomfolio?.moveWidgetEnd?.();
+    };
     const handleMove = (event) => {
       const drag = widgetDragRef.current;
       if (!drag.active || event.pointerId !== drag.pointerId) {
+        return;
+      }
+      // ⌘ gates this drag (handleStagePointerDown above never starts one without it already held),
+      // but releasing ⌘ mid-drag doesn't itself fire a pointer event — the *next* pointermove is
+      // the first chance to notice metaKey has gone false, at which point the drag ends here
+      // instead of waiting for pointerup. The mouse button can still be held at this point; ending
+      // the drag (active = false) means this same handler's own `!drag.active` check above no-ops
+      // every further pointermove until a fresh ⌘+drag starts a new one.
+      if (!event.metaKey) {
+        endDrag();
         return;
       }
       const dx = event.screenX - drag.lastScreenX;
@@ -415,10 +433,7 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId }) {
       if (!drag.active || event.pointerId !== drag.pointerId) {
         return;
       }
-      widgetDragRef.current.active = false;
-      // Snap-to-edge (main.js) only fires from this explicit "drag actually ended" signal, not on
-      // every intermediate move — see main.js's atomfolio:widget-move-end handler.
-      window.atomfolio?.moveWidgetEnd?.();
+      endDrag();
     };
     window.addEventListener('pointermove', handleMove);
     window.addEventListener('pointerup', handleUp);
