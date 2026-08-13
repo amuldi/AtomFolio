@@ -1,4 +1,4 @@
-# AtomFolio Update Notes — What's Changed Since the Beginning
+# AtomFolio Update Notes 
 
 > This document does not replace [`README.md`](../../README.md). The README stays the reference
 > for the app itself (how to run it, what it does, its architecture); this document is a separate,
