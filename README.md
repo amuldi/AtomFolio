@@ -42,6 +42,7 @@ AtomFolio는 표 형태로 흩어진 투자 데이터를 “중앙 포트폴리�
 9. [실행 방법](#실행-방법)
 10. [환경 변수와 배포](#환경-변수와-배포)
 11. [검증](#검증)
+12. [업데이트 — 그때와 지금](#업데이트--그때와-지금)
 
 ## 개발 목적
 
@@ -555,3 +556,38 @@ Vercel 설정은 [vercel.json](vercel.json)에 있습니다.
 ## 주의사항
 
 AtomFolio는 투자 데이터를 정리하고 가정을 계산하는 도구입니다. 투자 조언이나 매수/매도 추천 서비스가 아닙니다. 외부 시세와 뉴스는 공개 엔드포인트를 사용하므로 네트워크 상태나 제공자 정책에 따라 응답이 제한될 수 있습니다.
+
+## 업데이트 — 그때와 지금
+
+원래 AtomFolio는 손그림에서 출발한 2D SVG 스케치 하나에, 로그인도 없이 브라우저
+localStorage만 쓰는 웹 하나였습니다. 지금은 여기서 훨씬 더 나아갔습니다 — 아래는 그 변화를
+실제로 로컬에서 실행하고 캡처한 화면으로 정리한 것입니다(전체 기록은
+[docs/updates/AtomFolio_Updates.md](docs/updates/AtomFolio_Updates.md)에 더 자세히 있습니다).
+
+**원자 화면 — 그때와 지금**
+
+| 그때 (초기 커밋) | 지금 |
+| --- | --- |
+| ![초기 원자 화면](docs/assets/atomfolio-dashboard.png) | ![지금의 원자 화면](docs/updates/assets/atomfolio-current-atomview.jpg) |
+| 손그림에서 출발한 2D SVG 스케치. 왼쪽에 아이콘이 세로로 고정. | WebGL(Three.js) 3D 장면. 상단 탐색/관리 탭 + 명령 팔레트(⌘K), 왼쪽 아이콘은 포트폴리오·검색·요약·비교·시뮬레이션·뉴스·설정으로 재구성. |
+
+**무엇이 더 좋아졌나**
+
+| 구분 | 그때 | 지금 |
+| --- | --- | --- |
+| 로그인/저장 | 없음 — localStorage만 | Clerk 로그인 + Postgres/JSON 저장소, workspace 단위 격리 |
+| 시세 안정성 | Yahoo → Stooq 2단 fallback | KIS(공식) → Naver/Mirae 동시 경쟁 → Yahoo → Stooq, 서킷 브레이커 + 실패 추적 + 장애 알림 |
+| 탐색 | 사이드 아이콘 고정 노출 | 명령 팔레트(⌘K)로 모든 포트폴리오 통합 검색, 관리 테이블 뷰 |
+| 플랫폼 | 웹 하나 | 웹 + macOS 메뉴바 동반 앱(Electron) |
+| 테스트 | 거의 없음 | `node --test` 78개 (인증 격리·레이트리밋·KIS 라우팅 등) |
+
+**macOS 메뉴바 앱** — 원자 위젯이 포트폴리오 총액을 중심으로 도는 궤도로 항상 떠 있고,
+트레이 아이콘을 누르면 뉴스/빠른 종목 추가/설정이 담긴 팝오버가 뜹니다. 아래는 실제로
+로컬에서 앱을 띄우고 macOS에서 직접 캡처한 화면입니다.
+
+![메뉴바 원자 위젯 — 실제 macOS 캡처](docs/updates/assets/atomfolio-menubar-widget-live.jpg)
+
+더 자세한 기능별 스크린샷, 아키텍처 다이어그램, 이번에 작업한 시세 복원력(서킷 브레이커,
+공급자 경쟁, 장애 알림, KIS 이름 검색 라우팅)의 구체적인 변경 내용은
+[docs/updates/AtomFolio_Updates.md](docs/updates/AtomFolio_Updates.md)(영문:
+[AtomFolio_Updates.en.md](docs/updates/AtomFolio_Updates.en.md))에 정리해 두었습니다.

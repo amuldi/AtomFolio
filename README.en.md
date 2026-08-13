@@ -42,6 +42,7 @@ AtomFolio turns investment data that's normally scattered across tables into a "
 9. [Running it](#running-it)
 10. [Environment variables & deployment](#environment-variables--deployment)
 11. [Verification](#verification)
+12. [Update — then vs. now](#update--then-vs-now)
 
 ## Why this exists
 
@@ -559,3 +560,39 @@ Recently confirmed:
 ## Disclaimer
 
 AtomFolio is a tool for organizing investment data and computing outcomes from stated assumptions. It is not investment advice or a buy/sell recommendation service. External quotes and news use public endpoints, so responses may be rate-limited or restricted depending on network conditions or provider policy.
+
+## Update — then vs. now
+
+AtomFolio started as a single 2D SVG sketch drawn from a hand-drawn concept, with no login at all
+— just a web app running on browser localStorage. It's moved well past that since. Below is that
+change, summarized with screenshots actually captured from a local run (the full record lives in
+[docs/updates/AtomFolio_Updates.en.md](docs/updates/AtomFolio_Updates.en.md)).
+
+**The atom scene — then and now**
+
+| Then (earliest commits) | Now |
+| --- | --- |
+| ![Original atom scene](docs/assets/atomfolio-dashboard.png) | ![Current atom scene](docs/updates/assets/atomfolio-current-atomview.jpg) |
+| A 2D SVG sketch drawn from a hand-drawn concept, with a fixed vertical icon rail on the left. | A WebGL (Three.js) 3D scene. An Explore/Manage tab pair and a command palette (⌘K) up top; the left icon rail reorganized into Portfolios / Search / Summary / Compare / Simulation / News / Settings. |
+
+**What actually got better**
+
+| Area | Then | Now |
+| --- | --- | --- |
+| Auth / storage | None — localStorage only | Clerk login + Postgres/JSON storage, isolated per workspace |
+| Quote reliability | Yahoo → Stooq, two-step fallback | KIS (official) → Naver/Mirae raced concurrently → Yahoo → Stooq, with a circuit breaker, failure tracking, and outage alerting |
+| Navigation | Fixed sidebar icons | Command palette (⌘K) searching across every portfolio, a separate management table view |
+| Platforms | Web only | Web + a macOS menu bar companion app (Electron) |
+| Tests | Almost none | 78 (`node --test`) — auth isolation, rate limiting, KIS routing, and more |
+
+**The macOS menu bar app** — an atom widget floats permanently, holdings orbiting the portfolio
+total; clicking the tray icon opens a popover with news, quick-add, and settings. The screenshot
+below was captured directly on macOS from the app actually running locally:
+
+![Menu bar atom widget — real macOS capture](docs/updates/assets/atomfolio-menubar-widget-live.jpg)
+
+More detailed per-feature screenshots, architecture diagrams, and the specifics of this round's
+market-data resilience work (circuit breaker, provider racing, outage alerting, KIS name-based
+routing) are written up in
+[docs/updates/AtomFolio_Updates.en.md](docs/updates/AtomFolio_Updates.en.md) (Korean:
+[AtomFolio_Updates.md](docs/updates/AtomFolio_Updates.md)).
