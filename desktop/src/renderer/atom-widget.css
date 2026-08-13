@@ -155,7 +155,6 @@ body {
   stroke: rgba(var(--atom-ink), 0.5);
   stroke-width: 1.3;
   stroke-linecap: round;
-  stroke-dasharray: 3 4;
 }
 
 /* Minimal total-value readout — no card, no background, just text with a soft dark halo so it
