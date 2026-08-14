@@ -12,6 +12,52 @@
 > sessions that actually did the work. Bugs found along the way are tracked separately in
 > [`AtomFolio_Bugs.en.md`](AtomFolio_Bugs.en.md).
 
+## 2026-08-14 — Redesigned the currency model: purchase currency vs. quote currency
+
+Follow-up to the entry right below (the "buy-price currency badge" fix). The user reproduced it
+directly: adding QQQM at a buy price of 370,000, 6 shares, with the toggle on USD, showed a correct
+₩2,553,365 market value but a nonsensical -₩3,131,864,635 profit. Reproduced it myself and found the
+real gap — the previous fix only worked if the user actively switched the toggle. Its default is the
+security's own trading currency (USD), so leaving it untouched and typing 370,000 anyway stored that
+number as "370,000 USD", reproduced the original -99% bug against the real ~$300 quote, and then got
+multiplied by the exchange rate on the profit side into the billions.
+
+### What changed at the root
+
+**Treated "the currency the user actually paid in" as a field completely separate from "the
+currency the security trades in."**
+
+- `resolvePosition` (`src/lib/portfolioAnalyticsSummary.js`) now tracks each holding's
+  `purchaseCurrency` (what currency the buy price was actually entered in) independently of its
+  `nativeCurrency` (what currency the security is quoted in). The buy amount converts from
+  `purchaseCurrency`; the market value always converts from `nativeCurrency`; both get compared in
+  the same base currency (KRW). When the two currencies match (the common case), return% is
+  computed directly in that currency, completely unaffected by exchange-rate movement; when they
+  differ (e.g. a real 원 cost basis for a USD-quoted stock), it's computed from the KRW amounts
+  instead, correctly capturing the real return including FX movement. **Return% is now computed
+  from actual amounts first, not trusted from a stored input.**
+- **The buy-price field no longer pre-converts what's typed at all** — it stores the raw number
+  exactly as entered, alongside the toggle's chosen currency as its own explicit `purchaseCurrency`
+  field, instead of silently forcing it into USD the way the previous version did.
+- **Switching the currency toggle now converts whatever's already typed** (e.g. an auto-filled
+  "301.77" USD price becomes "425,581" when switched to 원) — previously the digits stayed the
+  same and only the label changed, which was its own separate bug (an auto-filled USD price
+  misread as 원 produced a +140,000% return once discovered).
+- Fixed the holding-detail card's own buy-price display, which was still converting using the
+  security's quote currency instead of its actual purchase currency.
+- Holdings list rows and the detail card now show a secondary native-currency profit figure
+  alongside the primary KRW one, for the case where that number is actually well-defined.
+
+### Verified
+
+Added the user's exact three verification formulas (foreign/원-purchase, foreign/USD-purchase,
+domestic) as permanent automated tests — e.g. QQQM at 370,000원, 6 shares, a 1,410 exchange rate
+→ market value ≈₩1,809,171, buy amount ₩2,220,000, profit ≈-₩410,829, return ≈-18.5% (plus the
+opposite-sign case). Reproduced the reported scenario locally and confirmed the fix directly: QQQM
+at 370,000원, 6 shares now shows market value ₩2,551,621 ($1,808.16), profit +₩331,621, return
++14.9%. `npm run build`, `npx eslint .`, `node --test` (96 tests, 95 pass + 1 pre-existing skip)
+all clean.
+
 ## 2026-08-14 — Fixed foreign-holding currency math; cleaned up the portfolio screen
 
 Chasing down "foreign stock buy price/valuation math looks wrong," the real cause wasn't where the
