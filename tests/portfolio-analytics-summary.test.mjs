@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
-import { createPortfolioAnalyticsSummary } from '../src/lib/portfolioAnalyticsSummary.js';
+import { createPortfolioAnalyticsSummary, resolveHoldingPosition } from '../src/lib/portfolioAnalyticsSummary.js';
 
 const fixtureItems = [
   {
@@ -183,6 +183,32 @@ test('a holding with a 6-digit KRX-style code infers KRW even without an explici
   // No conversion should happen for a KRW holding against the default KRW base currency.
   assert.equal(position.marketValue, position.nativeMarketValue);
   assert.equal(position.marketValue, 730000);
+});
+
+test('a 수익률 (return-rate) field is never mistaken for the 평가손익 (profit-amount) field', () => {
+  // Reproduces a user-reported bug: a manually-added QQQM holding with only a "수익률" field
+  // ("+15.04%", no explicit "평가손익"/"손익" field at all) showed a nonsensical total profit —
+  // the fuzzy label matcher was reading "수익률" as a match for the profitAmount candidate list
+  // (which includes bare "수익"/"손익", both substrings of "수익률"), parsing "+15.04%" as if it
+  // were an amount (15.04), then FX-converting that into a wildly wrong "profit".
+  const item = {
+    label: 'Invesco NASDAQ 100 ETF',
+    code: 'QQQM',
+    currency: 'USD',
+    fields: [
+      { label: '매수가', value: '262.01' },
+      { label: '보유수량', value: '6' },
+      { label: '수익률', value: '+15.04%' },
+      { label: '현재가', value: '$301.41' },
+    ],
+  };
+
+  const position = resolveHoldingPosition(item, { baseCurrency: 'USD' });
+
+  // The real profit has to come from marketValue - buyAmount (236.40 native), never from the
+  // return-rate string's own number (15.04) leaking through as if it were an amount.
+  assert.equal(Math.round(position.nativeProfitAmount * 100) / 100, 236.4);
+  assert.notEqual(position.nativeProfitAmount, 15.04);
 });
 
 test('portfolio analytics summary totals reconcile with individual position profit/loss', () => {

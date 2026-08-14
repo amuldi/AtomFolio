@@ -329,7 +329,19 @@ function resolvePosition(item, index, { fxRates, baseCurrency } = {}) {
       '원금',
     ]),
   );
-  const explicitProfitAmount = parseNumber(findFieldValue(item?.fields, FIELD_CANDIDATES.profitAmount));
+  // findFieldValueExcept, not the plain findFieldValue — profitAmount's own candidate list
+  // includes bare '손익'/'수익', and Korean return-rate labels ('수익률', '손익률', '평가손익률')
+  // all literally contain one of those as a substring, so the fuzzy second pass in findFieldValue
+  // was matching a *rate* field (e.g. "+15.04%") as if it were the *amount* field. That string
+  // parsed to a small number (15.04) which used to just look like a wrong-but-small figure — but
+  // once resolvePosition started converting profitAmount by the live FX rate (to fix the
+  // currency-mixing bug), the same mismatch multiplied that number by ~1,000+ into a wildly wrong,
+  // very-visible one. Reproduced directly: a QQQM holding's 수익률 field ("+15.04%") was being read
+  // as its 평가손익, then FX-converted, instead of the real profit ever being computed from
+  // marketValue - buyAmount at all.
+  const explicitProfitAmount = parseNumber(
+    findFieldValueExcept(item?.fields, FIELD_CANDIDATES.profitAmount, FIELD_CANDIDATES.returnRate),
+  );
   const returnRate = readReturnRate(item);
 
   const buyAmount =
