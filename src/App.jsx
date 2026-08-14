@@ -223,7 +223,7 @@ const UI_TEXT = {
     settingsCurrencyUsd: 'USD',
     settingsSectionDateBasis: '날짜 기준',
     settingsDateBasisKst: '한국 시간',
-    settingsDateBasisLocal: '내 기기 시간',
+    settingsDateBasisLocal: '기기 시간',
     settingsSectionAutoSave: '자동 저장',
     settingsAutoSaveOn: '켜짐',
     settingsAutoSaveOff: '꺼짐',

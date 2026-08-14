@@ -2547,7 +2547,7 @@ body::after {
 
 .settings-panel__rows {
   display: grid;
-  gap: 0.3rem;
+  gap: 0.62rem;
 }
 
 /* Label on the left, its control on the right, on one line whenever there's room. Wraps to a
@@ -2564,22 +2564,25 @@ body::after {
 .settings-panel__row-label {
   flex: 1 1 auto;
   min-width: 5.2rem;
-  color: rgba(var(--frame-ink-secondary), 0.76);
+  color: rgba(var(--frame-ink-secondary), 0.72);
   font-family: var(--ui-font);
-  font-size: 0.76rem;
+  font-size: 0.68rem;
   font-weight: 600;
 }
 
 /* Segmented control — one continuous pill sharing a single border, not separate floating boxes.
    Same dark/translucent surface and hairline border the rest of the app's chrome uses; only the
    selected segment gets the brighter cream fill (--frame-ink-a is already that cream tone, see
-   :root). Fully rounded (stadium-shaped) per direct sizing reference, not a rounded rect. */
+   :root). Fixed width (not sized to each row's own label text) so every row's control lines up
+   at the same width down the list, rather than 한국어/영어 being visibly narrower than 한국
+   시간/기기 시간. */
 .settings-panel__options {
   display: inline-flex;
-  flex: 0 0 auto;
+  flex: none;
+  width: 8.6rem;
   max-width: 100%;
   border: 1px solid rgba(var(--frame-hairline), 0.16);
-  border-radius: 999px;
+  border-radius: 7px;
   background: rgba(var(--frame-ink-a), 0.04);
   overflow: hidden;
 }
@@ -2596,12 +2599,12 @@ body::after {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 2.1rem;
-  padding: 0.5rem 1.05rem;
+  min-height: 1.5rem;
+  padding: 0.26rem 0.6rem;
   color: rgba(var(--frame-ink-a), 0.6);
   font-family: var(--ui-font);
-  font-size: 0.8rem;
-  font-weight: 650;
+  font-size: 0.66rem;
+  font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.01em;
   text-align: center;
@@ -7607,9 +7610,9 @@ body::after {
   }
 
   .settings-option {
-    min-height: 1.9rem;
-    padding: 0.42rem 0.5rem;
-    font-size: 0.74rem;
+    min-height: 1.5rem;
+    padding: 0.28rem 0.32rem 0.3rem;
+    font-size: 0.62rem;
     line-height: 1.2;
   }
 
