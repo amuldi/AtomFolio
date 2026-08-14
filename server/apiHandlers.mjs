@@ -25,6 +25,10 @@ import {
   updatePortfolio,
 } from './portfolioStore.mjs';
 import {
+  issueDeviceTokenForUser,
+  revokeDeviceTokensForUser,
+} from './deviceTokens.mjs';
+import {
   getOperationalEventStats,
   recordOperationalEvent,
 } from './operationalEvents.mjs';
@@ -731,4 +735,62 @@ export async function handleWorkspaceClaimGuestRequest({
       error: errorMessage(error, 'Workspace claim failed.'),
     });
   }
+}
+
+export async function handleWorkspaceDeviceTokenRequest({
+  method,
+  authContext,
+  sendJson,
+}) {
+  if (!authContext?.user) {
+    sendJson(401, {
+      error: 'Authentication is required.',
+      code: 'workspace-auth-required',
+    });
+    return;
+  }
+
+  if (method === 'POST') {
+    // Requiring a real Clerk session (not an existing device token) to mint a new one is the
+    // actual revocation boundary this feature has: if a device token leaks, the legitimate owner
+    // signs into the web app with Clerk and generates a new one, which immediately invalidates
+    // whatever leaked (issueDeviceTokenForUser revokes any prior token for that user first).
+    if (authContext.user.authProvider !== 'clerk') {
+      sendJson(403, {
+        error: 'Sign in with your account in the browser (not a device connection code) to create a new one.',
+        code: 'device-token-requires-clerk-session',
+      });
+      return;
+    }
+
+    try {
+      const token = await issueDeviceTokenForUser(authContext.user.id);
+      sendJson(201, { ok: true, token, workspaceId: `user:${authContext.user.id}` });
+    } catch (error) {
+      recordApiError('workspace', 'device-token-issue-failed', error);
+      sendJson(500, {
+        error: errorMessage(error, 'Could not create a desktop connection code.'),
+      });
+    }
+    return;
+  }
+
+  if (method === 'DELETE') {
+    // Revoking only ever affects the caller's own tokens (userId comes from the verified auth
+    // context, never client input), so allowing either a Clerk session or an existing device
+    // token to trigger this is safe — "I lost my laptop, kill all desktop connections" is a
+    // reasonable thing to do from either.
+    try {
+      const revoked = await revokeDeviceTokensForUser(authContext.user.id);
+      sendJson(200, { ok: true, revoked });
+    } catch (error) {
+      recordApiError('workspace', 'device-token-revoke-failed', error);
+      sendJson(500, {
+        error: errorMessage(error, 'Could not revoke desktop connection codes.'),
+      });
+    }
+    return;
+  }
+
+  sendMethodNotAllowed(sendJson);
 }

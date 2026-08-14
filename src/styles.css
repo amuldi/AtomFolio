@@ -2535,98 +2535,176 @@ body::after {
   gap: 0.2rem;
 }
 
-.settings-panel__section {
-  position: relative;
+/* Short, fixed header — not a section, just orients the panel before the grouped content below.
+   Kept deliberately brief per design direction: one line of title, one short line of subtitle,
+   no marketing copy. */
+.settings-panel__header {
   display: grid;
-  gap: 0.4rem;
+  gap: 0.16rem;
+  padding-bottom: 0.6rem;
+  margin-bottom: 0.36rem;
+  border-bottom: 1px solid rgba(var(--frame-hairline), 0.14);
 }
 
-.settings-panel__section:first-child {
+.settings-panel__header-title {
+  margin: 0;
+  color: rgba(var(--frame-ink-a), 0.94);
+  font-family: var(--ui-font);
+  font-size: 0.86rem;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+
+.settings-panel__header-subtitle {
+  margin: 0;
+  color: rgba(var(--frame-ink-a), 0.5);
+  font-family: var(--ui-font);
+  font-size: 0.66rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* One visual tier above individual settings — "보기 및 표시" / "저장 및 동기화" /
+   "계정 및 워크스페이스". This is the level that actually carries the panel's information
+   hierarchy; individual settings (.settings-panel__row) are quiet by comparison so the three
+   group titles are what a glance lands on first. */
+.settings-panel__group {
+  position: relative;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.settings-panel__group:first-of-type {
   padding-top: 0;
 }
 
-.settings-panel__section + .settings-panel__section {
-  margin-top: 0.64rem;
-  padding-top: 0.64rem;
+.settings-panel__group + .settings-panel__group {
+  margin-top: 0.72rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid rgba(var(--frame-hairline), 0.1);
 }
 
-.settings-panel__section:last-child {
+.settings-panel__group:last-child {
   padding-bottom: 0;
 }
 
-.settings-panel__title {
+.settings-panel__group-title {
   margin: 0;
-  color: rgba(var(--frame-ink-a), 0.44);
+  color: rgba(var(--frame-ink-a), 0.46);
   font-family: var(--ui-font);
-  font-size: 0.62rem;
+  font-size: 0.64rem;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.settings-panel__options {
+.settings-panel__subsection-title {
+  margin: 0;
+  color: rgba(var(--frame-ink-a), 0.68);
+  font-family: var(--ui-font);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.settings-panel__rows {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.32rem;
+  gap: 0.44rem;
+}
+
+/* Label on the left, its control on the right, on one line whenever there's room — this is what
+   replaces the old "title above / 2-column button grid below" layout for 언어/기준 통화/날짜
+   기준/자동 저장/일별 손익 누적. Wraps to a stacked layout only once the row genuinely can't fit
+   both (narrow drawer widths), rather than always reserving two lines for every setting. */
+.settings-panel__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.7rem;
+  flex-wrap: wrap;
   min-width: 0;
+}
+
+.settings-panel__row-label {
+  flex: 1 1 auto;
+  min-width: 5.2rem;
+  color: rgba(var(--frame-ink-secondary), 0.76);
+  font-family: var(--ui-font);
+  font-size: 0.7rem;
+  font-weight: 650;
+}
+
+/* Segmented control — one continuous pill sharing a single border, not separate floating boxes.
+   Same dark/translucent surface and hairline border the rest of the app's chrome uses; only the
+   selected segment gets the brighter cream fill (--frame-ink-a is already that cream tone, see
+   :root). */
+.settings-panel__options {
+  display: inline-flex;
+  flex: 0 0 auto;
+  max-width: 100%;
+  border: 1px solid rgba(var(--frame-hairline), 0.18);
+  border-radius: 8px;
+  background: rgba(var(--frame-ink-a), 0.04);
+  overflow: hidden;
 }
 
 .settings-option {
   appearance: none;
-  width: 100%;
+  flex: 1 1 auto;
   min-width: 0;
   box-sizing: border-box;
-  border: 1px solid rgba(var(--frame-hairline), 0.16);
-  border-radius: 10px;
-  background: rgba(var(--frame-ink-a), 0.04);
+  border: none;
+  border-radius: 0;
+  background: transparent;
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 1.9rem;
-  padding: 0.36rem 0.5rem;
-  color: rgba(var(--frame-ink-a), 0.72);
+  min-height: 1.7rem;
+  padding: 0.34rem 0.7rem;
+  color: rgba(var(--frame-ink-a), 0.62);
   font-family: var(--ui-font);
-  font-size: 0.72rem;
-  font-weight: 600;
+  font-size: 0.68rem;
+  font-weight: 630;
   line-height: 1.2;
   letter-spacing: -0.01em;
   text-align: center;
-  white-space: normal;
-  word-break: break-word;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
   cursor: pointer;
   transition:
     color 160ms ease,
-    border-color 160ms ease,
-    background-color 160ms ease,
-    box-shadow 160ms ease;
+    background-color 160ms ease;
+}
+
+.settings-option + .settings-option {
+  border-left: 1px solid rgba(var(--frame-hairline), 0.14);
 }
 
 .settings-option:hover,
 .settings-option:focus-visible {
-  color: rgba(var(--frame-ink-a), 0.94);
-  border-color: rgba(var(--frame-ink-a), 0.32);
+  color: rgba(var(--frame-ink-a), 0.9);
   background: rgba(var(--frame-ink-a), 0.07);
   outline: none;
 }
 
 .settings-option.is-active {
-  color: rgba(var(--frame-ink-a), 1);
-  border-color: rgba(var(--frame-ink-a), 0.48);
-  background: rgba(var(--frame-ink-a), 0.1);
-  box-shadow:
-    0 0 16px rgba(var(--frame-ink-d), 0.08),
-    0 0 0 1px rgba(var(--frame-ink-a), 0.1) inset;
+  color: rgba(20, 17, 12, 0.92);
+  background: rgba(var(--frame-ink-a), 0.86);
+  font-weight: 700;
 }
 
-.settings-panel__section--workspace {
-  gap: 0.5rem;
+.settings-option.is-active:hover,
+.settings-option.is-active:focus-visible {
+  color: rgba(20, 17, 12, 0.92);
+  background: rgba(var(--frame-ink-a), 0.86);
+}
+
+.settings-panel__group--account {
+  gap: 0.6rem;
 }
 
 .settings-workspace {
   display: grid;
-  gap: 0.34rem;
+  gap: 0.36rem;
   margin: 0;
   min-width: 0;
 }
@@ -2663,9 +2741,67 @@ body::after {
   white-space: nowrap;
 }
 
-/* Click-to-copy workspace ID. Looks and behaves like a real interactive control (pointer cursor,
-   hover state, an icon that reads as "copyable") rather than plain text a user has to
-   triple-click/select-and-copy themselves. */
+/* 게스트 / 로그인됨 status badge — a small filled pill instead of plain text, so account state
+   reads at a glance the same way a sync/connection indicator would elsewhere in a finance app. */
+.settings-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--frame-hairline), 0.16);
+  background: rgba(var(--frame-ink-a), 0.06);
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+
+.settings-status-pill::before {
+  content: '';
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: rgba(var(--frame-ink-secondary), 0.4);
+}
+
+.settings-status-pill.is-signed-in::before {
+  background: #3ddc84;
+}
+
+.settings-status-pill.is-guest::before {
+  background: #e0a83d;
+}
+
+.settings-panel__account-auth {
+  display: grid;
+  gap: 0.4rem;
+}
+
+/* Desktop connection code block — visually its own quiet subsection within "계정 및
+   워크스페이스" rather than blending into the general account rows, since generating/revoking a
+   code is a distinct, slightly more consequential action than the settings above it. */
+.settings-panel__desktop-connect {
+  display: grid;
+  gap: 0.36rem;
+  margin-top: 0.2rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(var(--frame-hairline), 0.1);
+}
+
+.settings-panel__desktop-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.settings-panel__desktop-actions .settings-action {
+  flex: 1 1 auto;
+  min-width: 7rem;
+}
+
+/* Click-to-copy workspace ID / device connection code. Looks and behaves like a real interactive
+   control (pointer cursor, hover state, an icon that reads as "copyable") rather than plain text
+   a user has to triple-click/select-and-copy themselves. Long values (a full device token is much
+   longer than a workspace id) ellipsize instead of wrapping or overflowing the drawer. */
 .settings-workspace__copy {
   display: inline-flex;
   position: relative;
@@ -2680,6 +2816,16 @@ body::after {
   font-family: var(--ui-font);
   cursor: pointer;
   transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+/* .is-block: the device connection code is long enough that squeezing it into the same
+   label-width-constrained column as the workspace ID would ellipsize almost the whole value —
+   this variant takes the full row width instead. */
+.settings-workspace__copy.is-block {
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.4rem 0.5rem;
 }
 
 .settings-workspace__copy:hover {
@@ -2785,6 +2931,22 @@ body::after {
 .settings-action:disabled {
   cursor: not-allowed;
   opacity: 0.48;
+}
+
+/* Quieter variant for a lower-stakes/secondary action sitting next to a primary .settings-action
+   (e.g. "모든 데스크톱 연결 해제" beside "연결 코드 생성") — same shape and sizing so they read as
+   a pair, not a plain button losing a fight with a styled one. */
+.settings-action--ghost {
+  border-color: rgba(var(--frame-hairline), 0.16);
+  background: transparent;
+  color: rgba(var(--frame-ink-a), 0.62);
+}
+
+.settings-action--ghost:hover,
+.settings-action--ghost:focus-visible {
+  border-color: rgba(var(--frame-ink-a), 0.32);
+  background: rgba(var(--frame-ink-a), 0.06);
+  color: rgba(var(--frame-ink-a), 0.85);
 }
 
 .settings-workspace__hint {
@@ -7504,21 +7666,37 @@ body::after {
     padding: 0.72rem 0.8rem;
   }
 
-  .settings-panel__section + .settings-panel__section {
-    margin-top: 0.34rem;
-    padding-top: 0.36rem;
+  .settings-panel__group + .settings-panel__group {
+    margin-top: 0.4rem;
+    padding-top: 0.42rem;
   }
 
-  .settings-panel__section {
+  .settings-panel__group {
     padding-inline: 0.28rem 0.2rem;
   }
 
-  .settings-panel__section:first-child {
+  .settings-panel__group:first-of-type {
     padding-top: 0.08rem;
   }
 
-  .settings-panel__section:last-child {
+  .settings-panel__group:last-child {
     padding-inline: 0.36rem 0.3rem;
+  }
+
+  /* Below this width a label + its full segmented control no longer reliably fit on one line —
+     stack them instead of letting the segmented control shrink until its labels clip. The
+     segmented control itself then stretches to the row's full width so it still reads as one
+     deliberate control, not a leftover fragment. */
+  .settings-panel__row {
+    align-items: stretch;
+  }
+
+  .settings-panel__row-label {
+    min-width: 100%;
+  }
+
+  .settings-panel__options {
+    width: 100%;
   }
 
   .settings-option {
@@ -7526,6 +7704,10 @@ body::after {
     padding: 0.3rem 0.36rem 0.34rem;
     font-size: 0.64rem;
     line-height: 1.2;
+  }
+
+  .settings-panel__desktop-actions {
+    flex-direction: column;
   }
 
   .upload-plus-hint {

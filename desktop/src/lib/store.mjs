@@ -6,6 +6,11 @@ import path from 'node:path';
 
 const DEFAULTS = {
   workspaceId: null,
+  // Set only when the user connected with a device connection code (atomfolio_dt_..., generated
+  // from the web app's settings panel) instead of a plain guest workspace ID — see
+  // src/lib/api.mjs. Sent as a Bearer token on every request; never logged or shown again once
+  // saved (same one-time-reveal principle as the server side, see server/deviceTokens.mjs).
+  deviceToken: null,
   apiBaseUrl: process.env.ATOMFOLIO_API_BASE_URL || 'https://atomfolio.vercel.app',
   pollIntervalSec: 60,
   lastSeenArticleIds: [],

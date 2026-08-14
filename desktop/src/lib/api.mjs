@@ -1,10 +1,17 @@
 // Reuses the existing AtomFolio HTTP API exactly as the web client does — same header-based
 // workspace resolution as server/workspaceAccess.mjs's resolveWorkspaceId (x-atomfolio-workspace-id).
-// No new auth: the desktop app operates as a guest-workspace client (see README's "connect" flow).
+//
+// Two ways to connect, both reusing existing server-side auth exactly as-is (no new backend
+// concept beyond server/deviceTokens.mjs's already-generic Bearer-token handling):
+//   - A plain guest:<uuid> workspace ID — no auth, works with just the header, same as always.
+//   - A device connection code (atomfolio_dt_...) generated from the web app's settings panel
+//     while signed in — sent as `Authorization: Bearer <token>`, resolves server-side to that
+//     account's own user:<id> workspace. This is what lets the desktop app follow a signed-in
+///    account's data instead of only ever seeing a local/guest workspace.
 const WORKSPACE_HEADER = 'x-atomfolio-workspace-id';
 const REQUEST_TIMEOUT_MS = 10000;
 
-async function requestJson(baseUrl, pathname, { workspaceId, searchParams, method = 'GET', body } = {}) {
+async function requestJson(baseUrl, pathname, { workspaceId, deviceToken, searchParams, method = 'GET', body } = {}) {
   const url = new URL(pathname, baseUrl);
 
   if (searchParams) {
@@ -24,6 +31,7 @@ async function requestJson(baseUrl, pathname, { workspaceId, searchParams, metho
       signal: controller.signal,
       headers: {
         ...(workspaceId ? { [WORKSPACE_HEADER]: workspaceId } : {}),
+        ...(deviceToken ? { Authorization: `Bearer ${deviceToken}` } : {}),
         // Only PUT/POST callers below pass a body — a plain GET (the common case) sends none of
         // this, matching what requestJson always sent before body support existed.
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
@@ -41,11 +49,11 @@ async function requestJson(baseUrl, pathname, { workspaceId, searchParams, metho
   }
 }
 
-export function createApiClient({ apiBaseUrl, workspaceId }) {
+export function createApiClient({ apiBaseUrl, workspaceId, deviceToken }) {
   return {
-    fetchPortfolios: () => requestJson(apiBaseUrl, '/api/portfolio', { workspaceId }),
+    fetchPortfolios: () => requestJson(apiBaseUrl, '/api/portfolio', { workspaceId, deviceToken }),
     fetchPortfolio: (portfolioId) =>
-      requestJson(apiBaseUrl, `/api/portfolio/${encodeURIComponent(portfolioId)}`, { workspaceId }),
+      requestJson(apiBaseUrl, `/api/portfolio/${encodeURIComponent(portfolioId)}`, { workspaceId, deviceToken }),
     // PUT with the full portfolio document — the same call the web app's own edit flows make
     // (src/utils/storage.js's updateServerPortfolio) against this same
     // handlePortfolioItemRequest endpoint (server/apiHandlers.mjs). There's no narrower
@@ -55,12 +63,14 @@ export function createApiClient({ apiBaseUrl, workspaceId }) {
     updatePortfolio: (portfolioId, portfolio) =>
       requestJson(apiBaseUrl, `/api/portfolio/${encodeURIComponent(portfolioId)}`, {
         workspaceId,
+        deviceToken,
         method: 'PUT',
         body: portfolio,
       }),
     fetchHoldingNews: (tickers = []) =>
       requestJson(apiBaseUrl, '/api/market/news', {
         workspaceId,
+        deviceToken,
         searchParams: {
           mode: 'today',
           tickers: tickers.slice(0, 5).join(','),
@@ -72,7 +82,12 @@ export function createApiClient({ apiBaseUrl, workspaceId }) {
     searchNews: (query) =>
       requestJson(apiBaseUrl, '/api/market/news', {
         workspaceId,
+        deviceToken,
         searchParams: { mode: 'search', query },
       }),
+    // Only meaningful with a deviceToken — resolves it to the signed-in account's own workspace
+    // id server-side (handleWorkspaceSessionRequest), so the caller never has to know/guess the
+    // user:<id> shape itself.
+    fetchWorkspaceSession: () => requestJson(apiBaseUrl, '/api/workspace/session', { workspaceId, deviceToken }),
   };
 }

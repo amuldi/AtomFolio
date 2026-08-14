@@ -118,6 +118,20 @@ const SCHEMA_STATEMENTS = [
     PRIMARY KEY (workspace_id, broker),
     CHECK (status IN ('connected', 'expired', 'error'))
   )`,
+  // Lets a non-browser client (the desktop menu bar app) act as a specific authenticated user
+  // without running a full OAuth flow — see server/deviceTokens.mjs. Only a SHA-256 hash of the
+  // token is ever stored, never the token itself, the same "don't keep a recoverable copy of the
+  // secret" principle atomfolio_broker_credentials follows via encryption instead of hashing
+  // (hashing here because nothing ever needs to recover the original token, only compare against
+  // it).
+  `CREATE TABLE IF NOT EXISTS atomfolio_device_tokens (
+    token_hash text PRIMARY KEY,
+    user_id text NOT NULL REFERENCES atomfolio_users(id) ON DELETE CASCADE,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    last_used_at timestamptz
+  )`,
+  `CREATE INDEX IF NOT EXISTS atomfolio_device_tokens_user_idx
+    ON atomfolio_device_tokens (user_id)`,
 ];
 
 let sqlClient = null;
@@ -862,4 +876,40 @@ export async function claimPostgresGuestWorkspace({
     targetWorkspaceId,
     copied,
   };
+}
+
+export async function createPostgresDeviceToken(userId, tokenHash) {
+  await query(
+    `INSERT INTO atomfolio_device_tokens (token_hash, user_id, created_at)
+     VALUES ($1, $2, now())`,
+    [tokenHash, userId],
+  );
+}
+
+// Returns the owning userId and bumps last_used_at in one round trip, or null when the hash isn't
+// (or is no longer) valid — a revoked/regenerated token simply isn't in the table anymore.
+export async function verifyPostgresDeviceToken(tokenHash) {
+  const rows = await query(
+    `UPDATE atomfolio_device_tokens
+     SET last_used_at = now()
+     WHERE token_hash = $1
+     RETURNING user_id`,
+    [tokenHash],
+  );
+
+  return rows[0]?.user_id ? String(rows[0].user_id) : null;
+}
+
+// A user only ever has one live device token at a time (see deviceTokens.mjs) — issuing a new one
+// revokes whatever came before, and this is also the standalone "disconnect all desktop devices"
+// action.
+export async function revokePostgresDeviceTokensForUser(userId) {
+  const rows = await query(
+    `DELETE FROM atomfolio_device_tokens
+     WHERE user_id = $1
+     RETURNING token_hash`,
+    [userId],
+  );
+
+  return rows.length;
 }

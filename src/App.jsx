@@ -35,6 +35,7 @@ import { fetchCompanyFinancials } from './lib/companyFinancials.js';
 import { fetchMarketNews, formatNewsTime } from './lib/marketNews.js';
 import {
   createServerPortfolio,
+  createDesktopDeviceToken,
   deleteServerPortfolio,
   claimGuestWorkspace,
   fetchWorkspaceSession,
@@ -42,6 +43,7 @@ import {
   isGuestPortfolioWorkspaceId,
   listServerPortfolios,
   readStoredOption,
+  revokeDesktopDeviceTokens,
   setPortfolioWorkspaceId,
   saveServerImportHistory,
 } from './utils/storage.js';
@@ -222,13 +224,24 @@ const UI_TEXT = {
     settingsSectionDateBasis: '날짜 기준',
     settingsDateBasisKst: '한국 시간',
     settingsDateBasisLocal: '내 기기 시간',
+    settingsPanelSubtitle: '표시, 저장, 계정 상태를 관리합니다',
+    settingsGroupDisplay: '보기 및 표시',
+    settingsGroupSync: '저장 및 동기화',
     settingsSectionAutoSave: '자동 저장',
     settingsAutoSaveOn: '켜짐',
     settingsAutoSaveOff: '꺼짐',
     settingsSectionDailySnapshots: '일별 손익 누적',
     settingsDailySnapshotsOn: '켜짐',
     settingsDailySnapshotsOff: '꺼짐',
-    settingsSectionWorkspace: '서비스 계정',
+    settingsSectionWorkspace: '계정 및 워크스페이스',
+    desktopConnectTitle: '데스크톱 연결',
+    desktopConnectHint: '메뉴바 앱을 이 계정에 연결하려면 코드를 생성해 붙여넣으세요.',
+    desktopConnectGenerateButton: '데스크톱 연결 코드 생성',
+    desktopConnectRegenerateButton: '연결 코드 재발급',
+    desktopConnectPending: '처리 중',
+    desktopConnectRevealHint: '이 코드는 다시 표시되지 않습니다. 지금 복사해 메뉴바 앱에 붙여넣으세요.',
+    desktopConnectRevokeButton: '모든 데스크톱 연결 해제',
+    desktopConnectError: '연결 코드를 처리하지 못했습니다.',
     workspaceStatusLabel: '상태',
     workspaceStatusGuest: '게스트',
     workspaceStatusSignedIn: '로그인됨',
@@ -364,13 +377,24 @@ const UI_TEXT = {
     settingsSectionDateBasis: 'Date Basis',
     settingsDateBasisKst: 'Korea time',
     settingsDateBasisLocal: 'Device time',
+    settingsPanelSubtitle: 'Manage display, storage, and account status',
+    settingsGroupDisplay: 'Display',
+    settingsGroupSync: 'Storage & Sync',
     settingsSectionAutoSave: 'Auto Save',
     settingsAutoSaveOn: 'On',
     settingsAutoSaveOff: 'Off',
     settingsSectionDailySnapshots: 'Daily P/L History',
     settingsDailySnapshotsOn: 'On',
     settingsDailySnapshotsOff: 'Off',
-    settingsSectionWorkspace: 'Service Account',
+    settingsSectionWorkspace: 'Account & Workspace',
+    desktopConnectTitle: 'Desktop Connection',
+    desktopConnectHint: 'Generate a code to link the menu bar app to this account.',
+    desktopConnectGenerateButton: 'Generate desktop connection code',
+    desktopConnectRegenerateButton: 'Regenerate connection code',
+    desktopConnectPending: 'Working',
+    desktopConnectRevealHint: "This code won't be shown again — copy it now and paste it into the menu bar app.",
+    desktopConnectRevokeButton: 'Disconnect all desktop devices',
+    desktopConnectError: 'Could not process the connection code.',
     workspaceStatusLabel: 'Status',
     workspaceStatusGuest: 'Guest',
     workspaceStatusSignedIn: 'Signed in',
@@ -5796,6 +5820,15 @@ export default function App() {
   const [workspaceSession, setWorkspaceSession] = useState(null);
   const [workspaceClaimStatus, setWorkspaceClaimStatus] = useState('idle');
   const [workspaceClaimError, setWorkspaceClaimError] = useState('');
+  // Desktop connection code (server/deviceTokens.mjs) — 'idle' | 'pending' | 'revealed' | 'failed'.
+  // The raw token only ever exists in deviceTokenValue right after a successful generate call;
+  // nothing re-fetches it later (the server only ever stores its hash), so navigating away or
+  // regenerating is the only way it leaves this state.
+  const [deviceTokenStatus, setDeviceTokenStatus] = useState('idle');
+  const [deviceTokenValue, setDeviceTokenValue] = useState('');
+  const [deviceTokenError, setDeviceTokenError] = useState('');
+  const [deviceTokenCopyStatus, setDeviceTokenCopyStatus] = useState('idle');
+  const deviceTokenCopyResetTimerRef = useRef(null);
 
   portfolioEntriesRef.current = portfolioEntries;
 
@@ -7777,9 +7810,13 @@ export default function App() {
   const groupOptions = useMemo(() => groupOptionsFor(language), [language]);
   const scoreAxes = useMemo(() => scoreAxesFor(language), [language]);
   const displayFxRates = useMemo(() => buildDisplayFxRates(usdKrwRate), [usdKrwRate]);
+  // `group` clusters these into the settings panel's "보기 및 표시" / "저장 및 동기화" sections
+  // (renderSettingsPanel below) — each item still renders as its own labeled row within the
+  // group, this only changes which shared group header it falls under.
   const settingsSections = [
     {
       key: 'language',
+      group: 'display',
       title: text.settingsSectionLanguage,
       options: LANGUAGE_OPTIONS.map((option) => ({
         key: option,
@@ -7790,6 +7827,7 @@ export default function App() {
     },
     {
       key: 'base-currency',
+      group: 'display',
       title: text.settingsSectionBaseCurrency,
       options: BASE_CURRENCY_OPTIONS.map((option) => ({
         key: option,
@@ -7800,6 +7838,7 @@ export default function App() {
     },
     {
       key: 'date-basis',
+      group: 'display',
       title: text.settingsSectionDateBasis,
       options: DATE_BASIS_OPTIONS.map((option) => ({
         key: option,
@@ -7810,6 +7849,7 @@ export default function App() {
     },
     {
       key: 'auto-save',
+      group: 'sync',
       title: text.settingsSectionAutoSave,
       options: SETTING_TOGGLE_OPTIONS.map((option) => ({
         key: option,
@@ -7820,6 +7860,7 @@ export default function App() {
     },
     {
       key: 'daily-snapshots',
+      group: 'sync',
       title: text.settingsSectionDailySnapshots,
       options: SETTING_TOGGLE_OPTIONS.map((option) => ({
         key: option,
@@ -7829,6 +7870,13 @@ export default function App() {
       })),
     },
   ];
+  const settingsGroups = [
+    { key: 'display', title: text.settingsGroupDisplay },
+    { key: 'sync', title: text.settingsGroupSync },
+  ].map((group) => ({
+    ...group,
+    sections: settingsSections.filter((section) => section.group === group.key),
+  }));
   const currentWorkspaceIsGuest = isGuestPortfolioWorkspaceId(currentWorkspaceId);
   const workspaceAuthenticated = Boolean(workspaceSession?.authenticated);
   const workspaceUserLabel =
@@ -7909,34 +7957,123 @@ export default function App() {
     setWorkspaceIdCopyStatus(copied ? 'copied' : 'failed');
     workspaceIdCopyResetTimerRef.current = setTimeout(() => setWorkspaceIdCopyStatus('idle'), 1800);
   }, [currentWorkspaceId, noteInteraction]);
+  const handleGenerateDeviceToken = useCallback(async () => {
+    noteInteraction();
+    setDeviceTokenStatus('pending');
+    setDeviceTokenError('');
+
+    try {
+      const payload = await createDesktopDeviceToken();
+      if (!payload?.ok || !payload?.token) {
+        throw new Error(payload?.error ?? text.desktopConnectError);
+      }
+
+      setDeviceTokenValue(payload.token);
+      setDeviceTokenStatus('revealed');
+    } catch (error) {
+      setDeviceTokenStatus('failed');
+      setDeviceTokenError(error instanceof Error && error.message ? error.message : text.desktopConnectError);
+    }
+  }, [noteInteraction, text.desktopConnectError]);
+  const handleRevokeDeviceTokens = useCallback(async () => {
+    noteInteraction();
+    setDeviceTokenStatus('pending');
+    setDeviceTokenError('');
+
+    try {
+      await revokeDesktopDeviceTokens();
+      setDeviceTokenValue('');
+      setDeviceTokenStatus('idle');
+    } catch (error) {
+      setDeviceTokenStatus('failed');
+      setDeviceTokenError(error instanceof Error && error.message ? error.message : text.desktopConnectError);
+    }
+  }, [noteInteraction, text.desktopConnectError]);
+  // Same click-to-copy pattern as handleCopyWorkspaceId — kept separate rather than
+  // parameterizing that one, since this copies from React state (deviceTokenValue) instead of a
+  // prop, and the two controls have independent feedback timers.
+  const handleCopyDeviceToken = useCallback(async () => {
+    noteInteraction();
+    let copied = false;
+
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await Promise.race([
+          navigator.clipboard.writeText(deviceTokenValue),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('clipboard-write-timeout')), 800)),
+        ]);
+        copied = true;
+      }
+    } catch {
+      copied = false;
+    }
+
+    if (!copied && typeof document !== 'undefined') {
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = deviceTokenValue;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        copied = document.execCommand('copy');
+        document.body.removeChild(textarea);
+      } catch {
+        copied = false;
+      }
+    }
+
+    clearTimeout(deviceTokenCopyResetTimerRef.current);
+    setDeviceTokenCopyStatus(copied ? 'copied' : 'failed');
+    deviceTokenCopyResetTimerRef.current = setTimeout(() => setDeviceTokenCopyStatus('idle'), 1800);
+  }, [deviceTokenValue, noteInteraction]);
   const renderSettingsPanel = () => (
     <div className="tool-drawer__settings">
-      {settingsSections.map((section) => (
-        <section key={section.key} className="settings-panel__section">
-          <p className="settings-panel__title">{section.title}</p>
-          <div className="settings-panel__options">
-            {section.options.map((option) => (
-              <button
-                key={option.key}
-                type="button"
-                className={`settings-option${option.active ? ' is-active' : ''}`}
-                onClick={() => {
-                  noteInteraction();
-                  option.onSelect();
-                }}
-              >
-                {option.label}
-              </button>
+      <header className="settings-panel__header">
+        <p className="settings-panel__header-title">{text.settings}</p>
+        <p className="settings-panel__header-subtitle">{text.settingsPanelSubtitle}</p>
+      </header>
+
+      {settingsGroups.map((group) => (
+        <section key={group.key} className="settings-panel__group">
+          <p className="settings-panel__group-title">{group.title}</p>
+          <div className="settings-panel__rows">
+            {group.sections.map((section) => (
+              <div key={section.key} className="settings-panel__row">
+                <span className="settings-panel__row-label">{section.title}</span>
+                <div className="settings-panel__options">
+                  {section.options.map((option) => (
+                    <button
+                      key={option.key}
+                      type="button"
+                      className={`settings-option${option.active ? ' is-active' : ''}`}
+                      onClick={() => {
+                        noteInteraction();
+                        option.onSelect();
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </section>
       ))}
-      <section className="settings-panel__section settings-panel__section--workspace">
-        <p className="settings-panel__title">{text.settingsSectionWorkspace}</p>
+
+      <section className="settings-panel__group settings-panel__group--account">
+        <p className="settings-panel__group-title">{text.settingsSectionWorkspace}</p>
         <dl className="settings-workspace">
           <div className="settings-workspace__row">
             <dt>{text.workspaceStatusLabel}</dt>
-            <dd>{workspaceAuthenticated ? text.workspaceStatusSignedIn : text.workspaceStatusGuest}</dd>
+            <dd>
+              <span
+                className={`settings-status-pill${workspaceAuthenticated ? ' is-signed-in' : ' is-guest'}`}
+              >
+                {workspaceAuthenticated ? text.workspaceStatusSignedIn : text.workspaceStatusGuest}
+              </span>
+            </dd>
           </div>
           <div className="settings-workspace__row">
             <dt>{text.workspaceIdLabel}</dt>
@@ -7987,23 +8124,92 @@ export default function App() {
             </div>
           ) : null}
         </dl>
-        {CLERK_PUBLISHABLE_KEY ? (
-          <AuthPanel text={text} onAuthenticated={handleAuthPanelSuccess} workspaceId={currentWorkspaceId} />
+
+        <div className="settings-panel__account-auth">
+          {CLERK_PUBLISHABLE_KEY ? (
+            <AuthPanel text={text} onAuthenticated={handleAuthPanelSuccess} workspaceId={currentWorkspaceId} />
+          ) : null}
+          <button
+            type="button"
+            className="settings-action"
+            disabled={workspaceClaimDisabled}
+            onClick={() => {
+              noteInteraction();
+              void handleClaimGuestWorkspace();
+            }}
+          >
+            {workspaceClaimStatus === 'pending' ? text.workspaceClaimPending : text.workspaceClaimButton}
+          </button>
+          <p className={`settings-workspace__hint${workspaceClaimStatus === 'failed' ? ' is-error' : ''}`}>
+            {workspaceClaimStatusText}
+          </p>
+        </div>
+
+        {workspaceAuthenticated ? (
+          <div className="settings-panel__desktop-connect">
+            <p className="settings-panel__subsection-title">{text.desktopConnectTitle}</p>
+            <p className="settings-workspace__hint">{text.desktopConnectHint}</p>
+            {deviceTokenStatus === 'revealed' && deviceTokenValue ? (
+              <>
+                <button
+                  type="button"
+                  className={`settings-workspace__copy is-block${deviceTokenCopyStatus !== 'idle' ? ` is-${deviceTokenCopyStatus}` : ''}`}
+                  onClick={handleCopyDeviceToken}
+                  title={deviceTokenCopyStatus === 'idle' ? text.workspaceIdCopyHint : undefined}
+                >
+                  <span className="settings-workspace__copy-value">{deviceTokenValue}</span>
+                  {deviceTokenCopyStatus === 'copied' ? (
+                    <svg className="settings-workspace__copy-icon" viewBox="0 0 20 20" aria-hidden="true">
+                      <path d="M4 10.5L8 14.5L16 5.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  ) : (
+                    <svg className="settings-workspace__copy-icon" viewBox="0 0 20 20" aria-hidden="true">
+                      <rect x="7" y="7" width="10" height="10" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                      <path d="M4 13V4.6C4 4.27 4.27 4 4.6 4H13" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                    </svg>
+                  )}
+                  <span className="settings-workspace__copy-feedback" role="status" aria-live="polite">
+                    {deviceTokenCopyStatus === 'copied'
+                      ? text.workspaceIdCopied
+                      : deviceTokenCopyStatus === 'failed'
+                        ? text.workspaceIdCopyFailed
+                        : ''}
+                  </span>
+                </button>
+                <p className="settings-workspace__hint">{text.desktopConnectRevealHint}</p>
+              </>
+            ) : null}
+            <div className="settings-panel__desktop-actions">
+              <button
+                type="button"
+                className="settings-action"
+                disabled={deviceTokenStatus === 'pending'}
+                onClick={() => {
+                  void handleGenerateDeviceToken();
+                }}
+              >
+                {deviceTokenStatus === 'pending'
+                  ? text.desktopConnectPending
+                  : deviceTokenValue
+                    ? text.desktopConnectRegenerateButton
+                    : text.desktopConnectGenerateButton}
+              </button>
+              <button
+                type="button"
+                className="settings-action settings-action--ghost"
+                disabled={deviceTokenStatus === 'pending'}
+                onClick={() => {
+                  void handleRevokeDeviceTokens();
+                }}
+              >
+                {text.desktopConnectRevokeButton}
+              </button>
+            </div>
+            {deviceTokenStatus === 'failed' ? (
+              <p className="settings-workspace__hint is-error">{deviceTokenError}</p>
+            ) : null}
+          </div>
         ) : null}
-        <button
-          type="button"
-          className="settings-action"
-          disabled={workspaceClaimDisabled}
-          onClick={() => {
-            noteInteraction();
-            void handleClaimGuestWorkspace();
-          }}
-        >
-          {workspaceClaimStatus === 'pending' ? text.workspaceClaimPending : text.workspaceClaimButton}
-        </button>
-        <p className={`settings-workspace__hint${workspaceClaimStatus === 'failed' ? ' is-error' : ''}`}>
-          {workspaceClaimStatusText}
-        </p>
       </section>
     </div>
   );

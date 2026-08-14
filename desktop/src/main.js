@@ -725,7 +725,11 @@ async function refresh({ silent = false } = {}) {
     setState({ loading: true, lastError: null });
   }
 
-  const api = createApiClient({ apiBaseUrl: config.apiBaseUrl, workspaceId: config.workspaceId });
+  const api = createApiClient({
+    apiBaseUrl: config.apiBaseUrl,
+    workspaceId: config.workspaceId,
+    deviceToken: config.deviceToken,
+  });
 
   try {
     const portfolioPayload = await api.fetchPortfolios();
@@ -940,30 +944,57 @@ function registerIpcHandlers() {
     atomWidget.setIgnoreMouseEvents(sleeping ? true : Boolean(shouldIgnore), { forward: true });
   });
 
-  ipcMain.handle('atomfolio:connect', async (_event, workspaceId) => {
-    const cleanId = String(workspaceId ?? '').trim();
+  ipcMain.handle('atomfolio:connect', async (_event, rawValue) => {
+    const cleanValue = String(rawValue ?? '').trim();
 
-    if (!cleanId) {
+    if (!cleanValue) {
       return { ok: false, error: 'workspace-id-required' };
     }
 
-    // Probe with this ID before saving config or calling the shared refresh() — refresh() sets
-    // connected:true as a side effect even when it fails (right for a *silent* poll keeping an
-    // already-working connection alive through a network blip; wrong here, since it briefly
-    // flips the main view on and then this handler flips it back off for a workspace ID that was
-    // never valid to begin with — a flash, not a clean "that ID didn't work"). Validating first,
-    // before touching config/state at all, means a bad ID never gets past the connect screen in
-    // the first place: no flash, and .connect__error's message actually reaches the button that
-    // triggered it instead of racing a state-broadcast re-render that replaces it out from
-    // under the pending promise.
+    // Two accepted shapes: a plain guest:<uuid> workspace ID (no auth, as always), or a
+    // atomfolio_dt_-prefixed device connection code generated from the web app's settings panel
+    // while signed in (server/deviceTokens.mjs) — that one doesn't carry its own workspace id, so
+    // it's resolved server-side via the same session check the web app uses rather than guessing
+    // the user:<id> shape here.
+    //
+    // Probing before saving config or calling the shared refresh() in either case — refresh()
+    // sets connected:true as a side effect even when it fails (right for a *silent* poll keeping
+    // an already-working connection alive through a network blip; wrong here, since it briefly
+    // flips the main view on and then this handler flips it back off for a value that was never
+    // valid to begin with — a flash, not a clean "that didn't work"). Validating first, before
+    // touching config/state at all, means a bad value never gets past the connect screen in the
+    // first place: no flash, and .connect__error's message actually reaches the button that
+    // triggered it instead of racing a state-broadcast re-render that replaces it out from under
+    // the pending promise.
+    const isDeviceToken = cleanValue.startsWith('atomfolio_dt_');
+
     try {
-      const probeApi = createApiClient({ apiBaseUrl: loadConfig().apiBaseUrl, workspaceId: cleanId });
-      await probeApi.fetchPortfolios();
+      if (isDeviceToken) {
+        const sessionApi = createApiClient({ apiBaseUrl: loadConfig().apiBaseUrl, deviceToken: cleanValue });
+        const session = await sessionApi.fetchWorkspaceSession();
+
+        if (!session?.authenticated || !session?.workspaceId) {
+          return { ok: false, error: 'atomfolio-connect-token-invalid' };
+        }
+
+        const probeApi = createApiClient({
+          apiBaseUrl: loadConfig().apiBaseUrl,
+          workspaceId: session.workspaceId,
+          deviceToken: cleanValue,
+        });
+        await probeApi.fetchPortfolios();
+
+        saveConfig({ workspaceId: session.workspaceId, deviceToken: cleanValue, lastSeenArticleIds: [] });
+      } else {
+        const probeApi = createApiClient({ apiBaseUrl: loadConfig().apiBaseUrl, workspaceId: cleanValue });
+        await probeApi.fetchPortfolios();
+
+        saveConfig({ workspaceId: cleanValue, deviceToken: null, lastSeenArticleIds: [] });
+      }
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : 'atomfolio-connect-failed' };
     }
 
-    saveConfig({ workspaceId: cleanId, lastSeenArticleIds: [] });
     notifiedThisSessionIds.clear();
     await refresh();
     startPolling();
@@ -971,7 +1002,7 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('atomfolio:disconnect', () => {
-    saveConfig({ workspaceId: null, lastSeenArticleIds: [], selectedPortfolioId: null });
+    saveConfig({ workspaceId: null, deviceToken: null, lastSeenArticleIds: [], selectedPortfolioId: null });
     notifiedThisSessionIds.clear();
 
     if (pollTimer) {
@@ -1013,7 +1044,11 @@ function registerIpcHandlers() {
     }
 
     const config = loadConfig();
-    const api = createApiClient({ apiBaseUrl: config.apiBaseUrl, workspaceId: config.workspaceId });
+    const api = createApiClient({
+    apiBaseUrl: config.apiBaseUrl,
+    workspaceId: config.workspaceId,
+    deviceToken: config.deviceToken,
+  });
 
     try {
       const { portfolio } = await api.fetchPortfolio(portfolioId);
@@ -1047,7 +1082,11 @@ function registerIpcHandlers() {
     if (!config.workspaceId) {
       return { items: [] };
     }
-    const api = createApiClient({ apiBaseUrl: config.apiBaseUrl, workspaceId: config.workspaceId });
+    const api = createApiClient({
+    apiBaseUrl: config.apiBaseUrl,
+    workspaceId: config.workspaceId,
+    deviceToken: config.deviceToken,
+  });
     try {
       return await api.searchNews(String(query ?? '').trim());
     } catch {

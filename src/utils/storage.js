@@ -140,3 +140,15 @@ export async function claimGuestWorkspace({
     }),
   });
 }
+
+// Generates a fresh device connection code for the signed-in account (server/deviceTokens.mjs) —
+// paste it into the desktop menu bar app to have it follow this account's own workspace instead
+// of a local guest one. Issuing a new code silently revokes whatever code came before it, so this
+// doubles as "regenerate" with no separate action needed.
+export async function createDesktopDeviceToken() {
+  return fetchJson('/api/workspace/device-token', { method: 'POST' });
+}
+
+export async function revokeDesktopDeviceTokens() {
+  return fetchJson('/api/workspace/device-token', { method: 'DELETE' });
+}

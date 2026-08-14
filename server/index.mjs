@@ -14,6 +14,7 @@ import {
   handlePortfolioItemRequest,
   handleSecurityEnrichRequest,
   handleWorkspaceClaimGuestRequest,
+  handleWorkspaceDeviceTokenRequest,
   handleWorkspaceSessionRequest,
 } from './apiHandlers.mjs';
 import {
@@ -204,6 +205,17 @@ const server = http.createServer(async (request, response) => {
         headers: request.headers,
       }),
       readBody,
+      sendJson: sendApiJson,
+    });
+    return;
+  }
+
+  if (requestUrl.pathname === '/api/workspace/device-token') {
+    await handleWorkspaceDeviceTokenRequest({
+      method: request.method,
+      authContext: await resolveAuthContext({
+        headers: request.headers,
+      }),
       sendJson: sendApiJson,
     });
     return;

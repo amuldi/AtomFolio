@@ -12,6 +12,34 @@
 > sessions that actually did the work. Bugs found along the way are tracked separately in
 > [`AtomFolio_Bugs.en.md`](AtomFolio_Bugs.en.md).
 
+## 2026-08-15 — Real Neon/Clerk connection, desktop account login, settings panel overhaul
+
+Followed through on the previous day's readiness check for real. Provisioned Neon Postgres and
+Clerk directly through the Vercel Marketplace (both on free plans) and wired
+`DATABASE_URL`/`CLERK_SECRET_KEY`/`VITE_CLERK_PUBLISHABLE_KEY`/`ATOMFOLIO_BROKER_ENCRYPTION_KEY`
+into production — confirmed live that `readiness.level` dropped from `blocked` to `warning` (only
+the expected in-memory-rate-limit warning left), and that real workspace data is actually being
+written to and read from Postgres.
+
+Found and fixed two bugs along the way while using it for real (see
+[`AtomFolio_Bugs.en.md`](AtomFolio_Bugs.en.md) for symptoms/root causes): workspace status staying
+stuck on "guest" after a reload even while signed in (a missing session re-check in
+`AuthPanel.jsx`), and the desktop menu bar app failing to connect when given a signed-in account's
+workspace ID — it turned out the desktop app only ever sent a workspace ID header with no way to
+send an auth token at all (it was a guest-only client by design). Fixed for real this time with a
+new `server/deviceTokens.mjs`: generate a "desktop connection code" from the web settings panel
+(`atomfolio_dt_...`), and the desktop app sends it as a Bearer token to connect to the actual
+signed-in account. Only a SHA-256 hash of the code is ever stored, generating a new one instantly
+revokes the previous one, and "disconnect all desktop devices" in the web settings kills all of
+them at once.
+
+Rebuilt the settings panel with an actual information hierarchy — language/base currency/date
+basis/auto-save/daily snapshots used to all sit at the same flat level; now they're grouped into
+Display / Storage & Sync / Account & Workspace, and each setting is a label + segmented-control row
+on one line (kept the existing dark tone, hairlines, and cream-colored selection highlight —
+did not turn this into a white card UI). The desktop connection code generate/regenerate/revoke-all
+UI now lives naturally inside that account section.
+
 ## 2026-08-14 — Login/workspace security and production-readiness audit
 
 Extended `GET /api/health` with a `readiness` field (new `server/productionReadiness.mjs`) that

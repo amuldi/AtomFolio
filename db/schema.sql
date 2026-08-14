@@ -114,3 +114,16 @@ CREATE TABLE IF NOT EXISTS atomfolio_portfolio_snapshots (
 
 CREATE INDEX IF NOT EXISTS atomfolio_portfolio_snapshots_portfolio_idx
   ON atomfolio_portfolio_snapshots (workspace_id, portfolio_id, snapshot_date DESC);
+
+-- Lets a non-browser client (the desktop menu bar app) act as a specific authenticated user
+-- without a full OAuth flow — see server/deviceTokens.mjs. Only a SHA-256 hash of the token is
+-- ever stored, never the token itself.
+CREATE TABLE IF NOT EXISTS atomfolio_device_tokens (
+  token_hash text PRIMARY KEY,
+  user_id text NOT NULL REFERENCES atomfolio_users(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  last_used_at timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS atomfolio_device_tokens_user_idx
+  ON atomfolio_device_tokens (user_id);

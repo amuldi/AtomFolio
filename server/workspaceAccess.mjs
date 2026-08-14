@@ -4,6 +4,7 @@ import {
   ensureWorkspaceAccess,
   resolveWorkspaceId,
 } from './portfolioStore.mjs';
+import { isDeviceTokenFormat, verifyDeviceToken } from './deviceTokens.mjs';
 
 const TRUSTED_AUTH_HEADER_FLAG = 'ATOMFOLIO_TRUSTED_AUTH_HEADERS';
 const BEARER_TOKEN_PATTERN = /^Bearer\s+(.+)$/i;
@@ -84,6 +85,26 @@ async function verifyClerkSessionToken(token) {
   }
 }
 
+// A Bearer token is either a Clerk session JWT (the browser) or an atomfolio_dt_-prefixed device
+// token (the desktop app, see deviceTokens.mjs) — cheap to tell apart by prefix before doing any
+// verification work, so this only ever does the one real check that applies.
+async function verifyClerkOrDeviceToken(token) {
+  if (isDeviceTokenFormat(token)) {
+    const userId = await verifyDeviceToken(token);
+    return userId
+      ? {
+          id: userId,
+          email: '',
+          displayName: '',
+          authProvider: 'device-token',
+          authSubject: userId,
+        }
+      : null;
+  }
+
+  return verifyClerkSessionToken(token);
+}
+
 function shouldAllowQueryWorkspaceId() {
   return (
     process.env.NODE_ENV !== 'production' ||
@@ -102,7 +123,7 @@ function hasExplicitWorkspaceId(requestOrValue) {
   return Boolean(headerWorkspaceId || queryWorkspaceId);
 }
 
-export async function resolveAuthContext(requestOrValue, { verifyBearerToken = verifyClerkSessionToken } = {}) {
+export async function resolveAuthContext(requestOrValue, { verifyBearerToken = verifyClerkOrDeviceToken } = {}) {
   const headers = requestOrValue?.headers ?? {};
   const bearerToken = getBearerToken(headers);
 

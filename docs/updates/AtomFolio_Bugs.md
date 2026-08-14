@@ -17,11 +17,18 @@
 
 ---
 
+## 2026-08-15
+
+| 증상 | 원인 | 수정 | 상태 | 커밋 |
+| --- | --- | --- | --- | --- |
+| 웹에서 로그인해도 새로고침하면 설정 패널 상태가 계속 "게스트"로 표시됨 — 직접 API를 호출해보면 서버는 인증을 정상적으로 인식하는데 화면만 안 바뀜 | `App.jsx`의 `loadWorkspaceSession()`이 마운트 시 딱 한 번만 실행되는 `useEffect`에 있었는데, Clerk의 비동기 초기화(브라우저에 이미 저장된 로그인 세션 복원 포함)와 경쟁 상태였음 — 새로고침 시 이 경쟁에서 대부분 지는 바람에 Authorization 헤더가 아직 없는 상태로 세션 확인 요청이 나가고, 그 결과(미인증)가 이후로도 다시 확인되지 않고 그대로 굳어버림 | `AuthPanel.jsx`가 Clerk 로그인 상태를 확인하는 자기 자신의 `useEffect`에서, 폼 제출 직후뿐 아니라 "Clerk가 이미 로그인 상태로 판단될 때마다"(새로고침 포함) `onAuthenticated()`를 같이 호출하도록 수정 — 핸들러 자체가 멱등이라 여러 번 불려도 안전함 | ✅ 수정됨 | `bfdcd34` |
+| 데스크톱 메뉴바 앱 연결 화면에서 로그인 계정의 워크스페이스 ID(`user:...`)를 붙여넣으면 연결 실패 — 웹 설정 화면 안내를 그대로 따라 했는데도 안 됨 | 데스크톱 앱은 애초에 `x-atomfolio-workspace-id` 헤더만 보내고 인증 토큰(Authorization 헤더)을 보낼 방법이 코드에 전혀 없었음(`desktop/src/lib/api.mjs`) — `user:<id>` 워크스페이스는 서버가 인증 없이는 절대 내주지 않으므로, 웹 화면의 "로그인 후 연결" 안내 자체가 애초에 데스크톱 앱이 지원하지 않는 흐름을 가리키고 있었음 | `server/deviceTokens.mjs` 신설 — 로그인 상태에서 웹이 발급하는 연결 코드(`atomfolio_dt_...`, SHA-256 해시로만 저장)를 데스크톱 앱이 Bearer 토큰으로 보내면 서버가 Clerk 토큰과 동등하게 인증 처리. 데스크톱 연결 화면/설정 패널 양쪽에 생성·재발급·전체 해제 UI 추가 | ✅ 수정됨 | (해당 세션) |
+| (상용화 준비도 점검 중 발견, 2026-08-14) 프로덕션(`atomfolio.vercel.app`)의 `GET /api/health`가 `portfolioStore.driver: "memory"`를 반환 — Postgres가 연결되어 있지 않아 포트폴리오 데이터가 서버리스 인스턴스 메모리에만 존재함 | `DATABASE_URL`이 Vercel 프로덕션 환경 변수에 설정된 적이 없었음 | Vercel Marketplace로 Neon Postgres를 실제로 프로비저닝하고 `DATABASE_URL`을 연결 — `readiness.errors`의 `store-driver-not-durable`이 사라지고 `portfolioStore.driver: "postgres"`로 바뀐 것, 실제 읽기/쓰기가 Postgres에 반영되는 것까지 라이브로 확인 | ✅ 연결 완료 | (해당 세션) |
+
 ## 2026-08-14
 
 | 증상 | 원인 | 수정 | 상태 | 커밋 |
 | --- | --- | --- | --- | --- |
-| (상용화 준비도 점검 중 발견) 프로덕션(`atomfolio.vercel.app`)의 `GET /api/health`가 `portfolioStore.driver: "memory"`를 반환 — Postgres가 연결되어 있지 않아 포트폴리오 데이터가 서버리스 인스턴스 메모리에만 존재함 | `DATABASE_URL`이 Vercel 프로덕션 환경 변수에 설정된 적이 없음 — `server/portfolioStore.mjs`가 이 경우 조용히 `memory` 드라이버로 폴백하도록 설계되어 있어, 겉보기엔 정상 동작하지만 콜드 스타트/재배포마다 데이터가 사라질 수 있는 상태로 계속 운영되어 왔음 | 코드 자체는 폴백이 필요하므로 그대로 두되, `GET /api/health`에 `readiness` 필드(`server/productionReadiness.mjs` 신설)를 추가해 이 상태가 `readiness.errors`에 `store-driver-not-durable`로 눈에 띄게 나타나도록 함. 실제 해결(=Neon `DATABASE_URL` 연결)은 코드 변경이 아닌 운영 조치라 이 커밋에는 포함되지 않음 — `docs/production-readiness.md`에 최우선 조치 항목으로 기록 | ⚠️ 감지만 구현, 실제 연결은 미완료 | (해당 세션) |
 | 게스트 워크스페이스 ID가 서명되지 않은 문자열이라, 짧고 추측 가능한 `guest:test`류 값이나 로그인 없이 워크스페이스 ID를 안 보낸 요청에 떨어지는 공유 버킷 `anonymous`도 프로덕션에서 owner 권한을 그대로 내주고 있었음 | `ensureWorkspaceAccess`(`server/portfolioStore.mjs`)의 비인증 분기가 `isGuestWorkspaceId`(prefix만 검사)만 통과하면 조건 없이 owner를 부여 | 프로덕션에서만 `guest:<id>`의 `<id>`가 실제 UUID 형식인지 검사하고 `anonymous`를 거부하는 `isAcceptableGuestWorkspaceId` 추가. 정상적으로 앱이 생성한 게스트(UUID)는 영향 없음 | ✅ 수정됨 | (해당 세션) |
 | 해외 주식이 섞인 포트폴리오의 총 평가금액/총 매입금액/총 평가손익이 부정확함 | `portfolioAnalyticsSummary.js`의 `resolvePosition`이 종목별 통화를 전혀 구분하지 않고 buyAmount/marketValue를 그냥 합산 — USD 포지션의 원본 숫자가 KRW 포지션과 같은 단위인 것처럼 더해짐 | 종목마다 통화를 판별(실시간 시세 → 티커 형태 추정 → KRW 기본값)해서 기준 통화로 환산한 뒤 합산하도록 수정 (`src/utils/currency.js` 신설) | ✅ 수정됨 | `5f20c80` |
 | 매수가 입력창에 통화 단위 표시가 전혀 없어 해외 종목 매수가를 USD/원 중 무엇으로 입력해야 하는지 알 수 없음 | UI에 단위 표시 자체가 없었음 | 입력창 라벨 옆에 해당 종목의 통화(USD/원) 배지 추가 | ✅ 수정됨 | `5f20c80` |

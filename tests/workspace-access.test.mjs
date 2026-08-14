@@ -257,6 +257,26 @@ test('an invalid bearer token falls back to unauthenticated in production', asyn
   assert.equal(authContext.user, null);
 });
 
+test('a device-connection-code-shaped bearer token is recognized and routed, not treated as a Clerk JWT', async () => {
+  process.env.NODE_ENV = 'production';
+  process.env.VERCEL = '1';
+  delete process.env.ATOMFOLIO_TRUSTED_AUTH_HEADERS;
+
+  // No CLERK_SECRET_KEY/Postgres wired up in this test file's env, so the real default resolver
+  // (server/workspaceAccess.mjs's verifyClerkOrDeviceToken) can't actually authenticate this —
+  // the point here is that it fails *gracefully* as "unauthenticated" rather than the
+  // atomfolio_dt_-prefixed value ever being handed to Clerk's verifyToken as if it were a JWT
+  // (which would be a wasted round trip in production and a confusing error either way).
+  const authContext = await workspaceAccess.resolveAuthContext({
+    headers: {
+      authorization: `Bearer atomfolio_dt_${'a'.repeat(32)}`,
+    },
+  });
+
+  assert.equal(authContext.trusted, false);
+  assert.equal(authContext.user, null);
+});
+
 test('claimGuestWorkspaceForUser copies guest records into a user workspace once', async () => {
   process.env.NODE_ENV = 'test';
   delete process.env.VERCEL;

@@ -359,13 +359,13 @@ function renderConnect(state) {
   container.append(el('div', 'connect__title', ['AtomFolio']));
   container.append(
     el('div', 'connect__copy', [
-      '웹에서 로그인 후 연결하세요. 웹 대시보드의 설정 → Workspace 항목에 표시된 ID를 아래에 붙여넣으면 됩니다.',
+      '웹 대시보드에 로그인한 상태에서 설정 → 계정 및 워크스페이스 → "데스크톱 연결 코드 생성"으로 만든 코드를 붙여넣으세요. 로그인 없이 게스트로만 쓰던 Workspace ID도 그대로 사용할 수 있습니다.',
     ]),
   );
 
   const input = el('input', 'connect__input');
   input.type = 'text';
-  input.placeholder = 'Workspace ID';
+  input.placeholder = '연결 코드 또는 Workspace ID';
   input.spellcheck = false;
 
   const errorLine = el('div', 'connect__error', []);
@@ -384,7 +384,10 @@ function renderConnect(state) {
     const result = await window.atomfolio.connect(value);
 
     if (!result.ok) {
-      errorLine.textContent = '연결에 실패했습니다. Workspace ID를 확인해주세요.';
+      errorLine.textContent =
+        result.error === 'atomfolio-connect-token-invalid'
+          ? '연결 코드가 만료되었거나 유효하지 않습니다. 웹에서 새로 생성해주세요.'
+          : '연결에 실패했습니다. 연결 코드 또는 Workspace ID를 확인해주세요.';
       button.disabled = false;
       button.textContent = '연결';
     }
