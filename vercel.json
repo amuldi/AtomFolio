@@ -4,6 +4,10 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/workspace/device-token",
+      "destination": "/api/workspace/session"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
