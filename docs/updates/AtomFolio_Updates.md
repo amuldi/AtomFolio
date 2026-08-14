@@ -11,6 +11,42 @@
 > 당시 세션에서 직접 검증하며 쓴 상세 기록입니다. 발견된 버그/오류는 이 문서와 별도로
 > [`AtomFolio_Bugs.md`](AtomFolio_Bugs.md)에 계속 정리합니다.
 
+## 2026-08-14 — 로그인/워크스페이스 보안, 상용화 준비도 점검
+
+`GET /api/health`가 프로덕션에서 Postgres/Clerk/암호화 키가 실제로 설정됐는지, 레이트
+리밋이 durable한지를 `readiness` 필드로 보고하도록 확장했다(`server/productionReadiness.mjs`
+신설) — 배포 후 콘솔을 뒤지지 않아도 "이 배포가 실제로 상용 서비스로 안전한가"를 한 번에
+확인할 수 있다. 실제로 돌려보니 프로덕션(`atomfolio.vercel.app`)에 `DATABASE_URL`이 아직
+연결되어 있지 않아 포트폴리오 저장소가 `memory` 드라이버로 동작 중이라는 것을 이 점검
+과정에서 직접 확인했다 — 콜드 스타트/재배포마다 데이터가 사라질 수 있는 상태라, 가장 먼저
+해결해야 할 항목으로 [`docs/production-readiness.md`](production-readiness.md)에 정리해
+두었다(신설 문서, 배포 전 체크리스트).
+
+게스트 워크스페이스 접근 정책을 프로덕션에서 강화했다 — 게스트 ID는 서명되지 않은 값이라
+ID 자체가 유일한 자격증명이라는 한계는 남지만, 최소한 (1) 실제 `crypto.randomUUID()` 형식이
+아닌 `guest:<id>`는 거부하고 (2) 로그인 없이 워크스페이스 ID를 안 보낸 요청이 떨어지는 공유
+버킷 `anonymous`도 프로덕션에서는 거부하도록 `server/portfolioStore.mjs`의
+`ensureWorkspaceAccess`를 수정했다. 정상적으로 앱에서 생성된 게스트 워크스페이스(실제
+UUID)는 전혀 영향받지 않는다 — 로컬 개발용 짧은 테스트 ID만 프로덕션에서 막힌다.
+
+레이트 리밋(`server/rateLimit.mjs`)을 드라이버 아키텍처로 재구성했다 — 기존 in-memory
+동작은 그대로 기본값으로 두고, `ATOMFOLIO_RATE_LIMIT_DRIVER=redis` + 연결 정보를 설정하면
+실제 Redis 클라이언트 구현만 끼워 넣을 수 있는 확장 지점을 만들었다(이 저장소 자체는 외부
+의존성을 추가하지 않았다 — 연결 정보가 없으면 경고 로그만 남기고 이전과 동일하게
+in-memory로 동작).
+
+로그인 UI(`src/components/auth/AuthPanel.jsx`)에 Clerk headless API 기반 비밀번호 재설정
+흐름(이메일 코드 → 새 비밀번호), 로그인 상태일 때 이메일 표시, 계정/데이터 삭제 요청
+진입점(연락처가 설정되어 있으면 워크스페이스 ID를 채운 메일 링크, 없으면 비활성화 상태로
+명확히 안내)을 추가했다. 화면 오른쪽 위, 빠른 검색(⌘K) 힌트 바로 아래에 항상 보이는 로그인
+상태 칩(게스트/로그인됨)을 새로 추가해 — 이전에는 설정 패널을 열어야만 알 수 있던 "내
+데이터가 브라우저에만 있는지, 계정에 저장되는지"를 어디서든 한눈에 확인할 수 있게 했다.
+
+`tests/workspace-access.test.mjs`에 프로덕션 환경에서의 비인증 커스텀 워크스페이스 거부,
+UUID 형식 게스트 ID 허용/비UUID 거부, `anonymous` 거부 테스트를 추가했고,
+`tests/production-readiness.test.mjs`(신설)와 `tests/rate-limit.test.mjs`의 드라이버 관련
+테스트를 더했다 — `npm test`(109개), `npm run lint`, `npm run build` 모두 통과 확인.
+
 ## 2026-08-14 — 통화 모델 재설계: "매수 통화"를 "종목 거래 통화"와 분리
 
 바로 아래 항목("매수가 통화 배지" 추가)의 후속입니다. 사용자가 QQQM을 매수가 370,000·6주·USD

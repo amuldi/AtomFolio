@@ -3,6 +3,7 @@ import { beforeEach, test } from 'node:test';
 
 import {
   checkRateLimit,
+  getRateLimitStatus,
   resetRateLimitState,
   resolveClientKey,
 } from '../server/rateLimit.mjs';
@@ -81,6 +82,57 @@ test('checkRateLimit isolates buckets and client keys', () => {
   assert.equal(checkRateLimit({ bucket: 'a', clientKey: 'ip-1', limit: 1, now }).ok, false);
   assert.equal(checkRateLimit({ bucket: 'b', clientKey: 'ip-1', limit: 1, now }).ok, true);
   assert.equal(checkRateLimit({ bucket: 'a', clientKey: 'ip-2', limit: 1, now }).ok, true);
+});
+
+test('getRateLimitStatus reports the memory driver by default', () => {
+  const originalDriver = process.env.ATOMFOLIO_RATE_LIMIT_DRIVER;
+  delete process.env.ATOMFOLIO_RATE_LIMIT_DRIVER;
+
+  try {
+    const status = getRateLimitStatus();
+    assert.equal(status.driver, 'memory');
+    assert.equal(status.durable, false);
+    assert.equal(status.configured, true);
+  } finally {
+    if (originalDriver == null) {
+      delete process.env.ATOMFOLIO_RATE_LIMIT_DRIVER;
+    } else {
+      process.env.ATOMFOLIO_RATE_LIMIT_DRIVER = originalDriver;
+    }
+  }
+});
+
+test('selecting the redis driver without a connection configured falls back to in-memory limiting, not a crash', () => {
+  const originalDriver = process.env.ATOMFOLIO_RATE_LIMIT_DRIVER;
+  const originalRedisUrl = process.env.ATOMFOLIO_REDIS_URL;
+  process.env.ATOMFOLIO_RATE_LIMIT_DRIVER = 'redis';
+  delete process.env.ATOMFOLIO_REDIS_URL;
+  delete process.env.UPSTASH_REDIS_REST_URL;
+  delete process.env.UPSTASH_REDIS_REST_TOKEN;
+
+  try {
+    const status = getRateLimitStatus();
+    assert.equal(status.driver, 'redis');
+    assert.equal(status.configured, false);
+    assert.equal(status.durable, false);
+
+    // Still actually rate-limits (via the underlying memory behavior) rather than silently
+    // allowing everything through because the "real" backend isn't wired up.
+    resetRateLimitState();
+    assert.equal(checkRateLimit({ bucket: 'redis-fallback', clientKey: 'ip', limit: 1, now: 9_000_000 }).ok, true);
+    assert.equal(checkRateLimit({ bucket: 'redis-fallback', clientKey: 'ip', limit: 1, now: 9_000_000 }).ok, false);
+  } finally {
+    if (originalDriver == null) {
+      delete process.env.ATOMFOLIO_RATE_LIMIT_DRIVER;
+    } else {
+      process.env.ATOMFOLIO_RATE_LIMIT_DRIVER = originalDriver;
+    }
+    if (originalRedisUrl == null) {
+      delete process.env.ATOMFOLIO_REDIS_URL;
+    } else {
+      process.env.ATOMFOLIO_REDIS_URL = originalRedisUrl;
+    }
+  }
 });
 
 test('resolveClientKey prefers x-forwarded-for over socket address', () => {

@@ -2871,6 +2871,72 @@ body::after {
   line-height: 1.3;
 }
 
+.auth-panel__links {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.auth-panel__identity {
+  margin: 0 0 0.1rem;
+  overflow: hidden;
+  color: rgba(var(--frame-ink-a), 0.72);
+  font-family: var(--ui-font);
+  font-size: 0.68rem;
+  font-weight: 650;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-panel__danger-zone {
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(var(--frame-hairline), 0.14);
+}
+
+.auth-panel__danger-title {
+  margin: 0;
+  color: rgba(var(--frame-ink-a), 0.75);
+  font-family: var(--ui-font);
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.auth-panel__danger-action {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-height: 1.8rem;
+  padding: 0 0.7rem;
+  border: 1px solid rgba(255, 148, 148, 0.36);
+  border-radius: 8px;
+  background: rgba(255, 148, 148, 0.08);
+  color: rgba(255, 148, 148, 0.86);
+  font-family: var(--ui-font);
+  font-size: 0.64rem;
+  font-weight: 650;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.auth-panel__danger-action:hover {
+  background: rgba(255, 148, 148, 0.14);
+  border-color: rgba(255, 148, 148, 0.5);
+}
+
+.auth-panel__danger-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .upload-plus {
   position: relative;
   width: 2.95rem;
@@ -7945,6 +8011,61 @@ body::after {
    itself already follows at small sizes. */
 @media (max-width: 640px) {
   .command-palette-hint__label {
+    display: none;
+  }
+}
+
+/* Stacked directly below .command-palette-hint in the same top-right corner — always-visible
+   login state (guest vs. signed-in) so a user never has to open settings just to find out where
+   their data lives. Clicking opens the settings panel, which already hosts the full account UI. */
+.auth-status-chip {
+  position: fixed;
+  top: 2.7rem;
+  right: 1.1rem;
+  z-index: var(--z-view-toggle);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.34rem 0.7rem;
+  border: 1px solid rgba(var(--frame-hairline), 0.12);
+  border-radius: 999px;
+  background: rgba(var(--frame-surface), 0.7);
+  backdrop-filter: blur(8px);
+  color: rgba(var(--frame-ink-secondary), 0.68);
+  font-family: var(--ui-font);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.auth-status-chip:hover {
+  background: rgba(var(--frame-ink-a), 0.08);
+  color: rgba(var(--frame-ink-b), 0.9);
+}
+
+.auth-status-chip__dot {
+  width: 0.44rem;
+  height: 0.44rem;
+  border-radius: 50%;
+  background: rgba(var(--frame-ink-secondary), 0.4);
+  flex-shrink: 0;
+}
+
+.auth-status-chip.is-signed-in .auth-status-chip__dot {
+  background: #3ddc84;
+}
+
+.auth-status-chip.is-guest .auth-status-chip__dot {
+  background: #e0a83d;
+}
+
+@media (max-width: 640px) {
+  .auth-status-chip {
+    padding: 0.34rem 0.5rem;
+  }
+
+  .auth-status-chip__label {
     display: none;
   }
 }

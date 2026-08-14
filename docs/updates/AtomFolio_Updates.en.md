@@ -12,6 +12,44 @@
 > sessions that actually did the work. Bugs found along the way are tracked separately in
 > [`AtomFolio_Bugs.en.md`](AtomFolio_Bugs.en.md).
 
+## 2026-08-14 — Login/workspace security and production-readiness audit
+
+Extended `GET /api/health` with a `readiness` field (new `server/productionReadiness.mjs`) that
+reports whether Postgres/Clerk/the encryption key are actually configured in production, and
+whether rate limiting is durable — so "is this deployment actually safe to run as a real
+service" is answerable from the health endpoint instead of digging through console logs. Running
+this check for real surfaced that production (`atomfolio.vercel.app`) currently has no
+`DATABASE_URL` wired up, so the portfolio store is running on the `memory` driver — data can be
+lost on any cold start or redeploy. Wrote that up as the top item in the new
+[`docs/production-readiness.md`](production-readiness.md) pre-deploy checklist.
+
+Hardened the guest-workspace access policy in production — a guest id is still an unsigned
+credential (that residual limitation is documented, not solved, in this pass), but
+`server/portfolioStore.mjs`'s `ensureWorkspaceAccess` now rejects (1) any `guest:<id>` whose id
+isn't a real `crypto.randomUUID()` shape and (2) the shared `anonymous` bucket that unauthenticated
+requests fall back to when no workspace id is sent at all — both only in production. Guest
+workspaces created normally by the app (real UUIDs) are unaffected; only short/guessable dev-only
+ids get blocked in production.
+
+Restructured rate limiting (`server/rateLimit.mjs`) into a driver architecture — the existing
+in-memory behavior stays the default, and setting `ATOMFOLIO_RATE_LIMIT_DRIVER=redis` plus a
+connection string gives a real extension point for plugging in an actual Redis client (this repo
+still doesn't add an external dependency itself — with no connection configured it logs a warning
+and keeps running on the in-memory behavior).
+
+Added a Clerk-headless password reset flow (email code → new password), an email display when
+signed in, and an account/data-deletion request entry point (a mailto link pre-filled with the
+workspace id when a contact address is configured, otherwise a clearly disabled state) to
+`src/components/auth/AuthPanel.jsx`. Added an always-visible sign-in status chip (guest/signed-in)
+in the top-right corner, just under the ⌘K hint — previously that state was only visible by
+opening the settings panel.
+
+Added tests: production rejecting unauthenticated custom workspaces, UUID-shaped guest ids being
+accepted while non-UUID ones are rejected, `anonymous` being rejected in production
+(`tests/workspace-access.test.mjs`), a new `tests/production-readiness.test.mjs`, and rate-limit
+driver coverage in `tests/rate-limit.test.mjs`. `npm test` (109 tests), `npm run lint`, and
+`npm run build` all pass.
+
 ## 2026-08-14 — Redesigned the currency model: purchase currency vs. quote currency
 
 Follow-up to the entry right below (the "buy-price currency badge" fix). The user reproduced it

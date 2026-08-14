@@ -102,6 +102,43 @@ export function isGuestWorkspaceId(workspaceId) {
   return safeWorkspaceId === DEFAULT_WORKSPACE_ID || safeWorkspaceId.startsWith(GUEST_WORKSPACE_PREFIX);
 }
 
+// Same "production" definition used by server/workspaceAccess.mjs's shouldTrustAuthHeaders() and
+// server/productionReadiness.mjs's isProductionEnvironment() (duplicated rather than imported —
+// productionReadiness.mjs already imports from this module, and importing back would create a
+// cycle for a two-line check).
+function isProductionEnvironment() {
+  return process.env.VERCEL === '1' || process.env.NODE_ENV === 'production';
+}
+
+// A guest workspace's id IS its credential — nothing signs it, no cookie or session backs it up,
+// whoever presents `guest:<id>` in the x-atomfolio-workspace-id header gets owner access to it
+// (see ensureWorkspaceAccess below). That's fine as long as the id is actually unguessable: the
+// client always creates it via crypto.randomUUID() (src/utils/storage.js's createWorkspaceId).
+// This checks that a workspace id claiming to be a guest id in production actually has that
+// shape, rather than trusting the guest:/anonymous prefix alone:
+//   - the bare "anonymous" id is rejected — it's a single shared bucket every unauthenticated
+//     visitor can already reach on day one, guessable by definition, so it's not a meaningful
+//     per-user credential at all.
+//   - "guest:<anything>" is only accepted when <anything> is a real UUID (what createWorkspaceId
+//     actually generates), not an arbitrary short/guessable string an attacker could type.
+// Outside production (local dev, tests) the looser historical behavior is kept on purpose so
+// existing dev workflows and test fixtures using short ids like "guest:test-workspace" keep
+// working — this is a production-only tightening, not a breaking change to the guest model.
+const GUEST_WORKSPACE_UUID_PATTERN =
+  /^guest:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isAcceptableGuestWorkspaceId(safeWorkspaceId) {
+  if (!isGuestWorkspaceId(safeWorkspaceId)) {
+    return false;
+  }
+
+  if (!isProductionEnvironment()) {
+    return true;
+  }
+
+  return GUEST_WORKSPACE_UUID_PATTERN.test(safeWorkspaceId);
+}
+
 function safeArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -349,12 +386,27 @@ export async function ensureWorkspaceAccess(workspaceId, userContext = null, { r
   const user = sanitizeUserContext(userContext);
 
   if (!user) {
-    if (isGuestWorkspaceId(safeWorkspaceId)) {
+    if (isAcceptableGuestWorkspaceId(safeWorkspaceId)) {
       return createAccessResult({
         ok: true,
         workspaceId: safeWorkspaceId,
         role: 'owner',
         mode: 'guest',
+      });
+    }
+
+    if (isGuestWorkspaceId(safeWorkspaceId)) {
+      // Guest-shaped id (guest:* or "anonymous"), but rejected by the stricter production policy
+      // above — a bare "anonymous" workspace or a non-UUID guest:* suffix. Treat this the same as
+      // any other unauthenticated request for a workspace it can't prove ownership of, instead of
+      // silently granting owner access to a guessable id.
+      return createAccessResult({
+        ok: false,
+        workspaceId: safeWorkspaceId,
+        mode: 'guest-rejected',
+        statusCode: 401,
+        code: 'guest-workspace-id-invalid',
+        error: 'This guest workspace id is not accepted in production. Reload the app to get a new one.',
       });
     }
 

@@ -264,6 +264,23 @@ const UI_TEXT = {
     authSwitchToSignUp: '계정이 없으신가요? 회원가입',
     authSwitchToSignIn: '이미 계정이 있으신가요? 로그인',
     authGenericError: '요청을 처리하지 못했습니다. 다시 시도해주세요.',
+    authForgotPasswordLink: '비밀번호를 잊으셨나요?',
+    authForgotPasswordHint: '가입한 이메일로 비밀번호 재설정 코드를 보내드려요.',
+    authSendResetCodeButton: '재설정 코드 받기',
+    authResetCodeSentHint: '이메일로 받은 코드와 새 비밀번호를 입력하세요.',
+    authNewPasswordPlaceholder: '새 비밀번호',
+    authResetPasswordButton: '비밀번호 재설정',
+    authBackToSignIn: '로그인으로 돌아가기',
+    authDeleteAccountTitle: '계정 및 데이터 삭제',
+    authDeleteAccountHint: '계정과 저장된 포트폴리오 데이터 삭제를 요청할 수 있습니다. 요청 확인 후 처리됩니다.',
+    authDeleteAccountButton: '삭제 요청 보내기',
+    authDeleteAccountUnavailable: '문의처가 아직 설정되지 않았습니다.',
+    authDeleteAccountEmailSubject: 'AtomFolio 계정 및 데이터 삭제 요청',
+    authDeleteAccountEmailBody: '아래 계정/워크스페이스의 데이터 삭제를 요청합니다.',
+    authStatusChipGuest: '게스트 모드',
+    authStatusChipSignedIn: '로그인됨',
+    authStatusChipAria: '로그인 상태 확인 및 계정 설정 열기',
+    authGuestModeHint: '데이터가 이 브라우저에만 저장돼요. 로그인하면 계정에 안전하게 보관됩니다.',
     uploadAria: '투자 데이터 업로드',
     uploadHint: '투자 데이터를 업로드 해주세요',
     uploadDragHint: 'CSV 파일을 여기에 끌어다 놓으세요',
@@ -393,6 +410,23 @@ const UI_TEXT = {
     authSwitchToSignUp: "Don't have an account? Sign up",
     authSwitchToSignIn: 'Already have an account? Sign in',
     authGenericError: 'Something went wrong. Please try again.',
+    authForgotPasswordLink: 'Forgot your password?',
+    authForgotPasswordHint: "We'll email a reset code to your account address.",
+    authSendResetCodeButton: 'Send reset code',
+    authResetCodeSentHint: 'Enter the code we emailed you and a new password.',
+    authNewPasswordPlaceholder: 'New password',
+    authResetPasswordButton: 'Reset password',
+    authBackToSignIn: 'Back to sign in',
+    authDeleteAccountTitle: 'Delete account & data',
+    authDeleteAccountHint: 'Request deletion of your account and stored portfolio data. Handled after we confirm the request.',
+    authDeleteAccountButton: 'Send deletion request',
+    authDeleteAccountUnavailable: 'No contact channel is configured yet.',
+    authDeleteAccountEmailSubject: 'AtomFolio account & data deletion request',
+    authDeleteAccountEmailBody: 'Requesting deletion of data for the account/workspace below.',
+    authStatusChipGuest: 'Guest mode',
+    authStatusChipSignedIn: 'Signed in',
+    authStatusChipAria: 'Check sign-in status and open account settings',
+    authGuestModeHint: 'Your data is only stored in this browser. Sign in to keep it safe in your account.',
     uploadAria: 'Upload investment data',
     uploadHint: 'Please upload your investment data',
     uploadDragHint: 'Drop CSV files here',
@@ -7961,7 +7995,9 @@ export default function App() {
             </div>
           ) : null}
         </dl>
-        {CLERK_PUBLISHABLE_KEY ? <AuthPanel text={text} onAuthenticated={handleAuthPanelSuccess} /> : null}
+        {CLERK_PUBLISHABLE_KEY ? (
+          <AuthPanel text={text} onAuthenticated={handleAuthPanelSuccess} workspaceId={currentWorkspaceId} />
+        ) : null}
         <button
           type="button"
           className="settings-action"
@@ -8258,6 +8294,29 @@ export default function App() {
           ⌘K
         </span>
       </button>
+
+      {/* Always-visible login state — previously this was only discoverable by opening settings.
+          Financial data tied to "just a browser" vs. an actual account is exactly the kind of
+          state a user shouldn't have to go hunting for. Clicking it opens the same settings panel
+          (which already hosts the full AuthPanel/workspace UI) rather than duplicating a second
+          login form here. */}
+      {CLERK_PUBLISHABLE_KEY ? (
+        <button
+          type="button"
+          className={`auth-status-chip${workspaceAuthenticated ? ' is-signed-in' : ' is-guest'}`}
+          aria-label={text.authStatusChipAria}
+          title={workspaceAuthenticated ? workspaceUserLabel : text.authGuestModeHint}
+          onClick={() => {
+            noteInteraction();
+            handleDrawerToolSelect('settings');
+          }}
+        >
+          <span className="auth-status-chip__dot" aria-hidden="true" />
+          <span className="auth-status-chip__label">
+            {workspaceAuthenticated ? text.authStatusChipSignedIn : text.authStatusChipGuest}
+          </span>
+        </button>
+      ) : null}
 
       <CommandPalette
         open={commandPaletteOpen}

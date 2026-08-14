@@ -148,6 +148,71 @@ test('production ignores trusted auth headers even when the flag is explicitly e
   assert.equal(stillIgnoredContext.statusCode, 401);
 });
 
+test('production rejects unauthenticated access to a non-guest workspace id', async () => {
+  process.env.NODE_ENV = 'production';
+  process.env.VERCEL = '1';
+  delete process.env.ATOMFOLIO_TRUSTED_AUTH_HEADERS;
+
+  const context = await workspaceAccess.resolveWorkspaceRequestContext({
+    headers: { 'x-atomfolio-workspace-id': 'team-prod-guess' },
+  });
+
+  assert.equal(context.ok, false);
+  assert.equal(context.statusCode, 401);
+  assert.equal(context.code, 'workspace-auth-required');
+});
+
+test('production accepts a guest workspace id shaped like a real UUID (what the client actually generates)', async () => {
+  process.env.NODE_ENV = 'production';
+  process.env.VERCEL = '1';
+
+  const context = await workspaceAccess.resolveWorkspaceRequestContext(
+    { headers: { 'x-atomfolio-workspace-id': 'guest:3fa85f64-5717-4562-b3fc-2c963f66afa6' } },
+    { requiredRole: 'editor' },
+  );
+
+  assert.equal(context.ok, true);
+  assert.equal(context.mode, 'guest');
+  assert.equal(context.role, 'owner');
+});
+
+test('production rejects a guessable/short guest workspace id', async () => {
+  process.env.NODE_ENV = 'production';
+  process.env.VERCEL = '1';
+
+  const context = await workspaceAccess.resolveWorkspaceRequestContext({
+    headers: { 'x-atomfolio-workspace-id': 'guest:test-workspace' },
+  });
+
+  assert.equal(context.ok, false);
+  assert.equal(context.statusCode, 401);
+  assert.equal(context.code, 'guest-workspace-id-invalid');
+});
+
+test('production rejects the shared "anonymous" workspace id from unauthenticated requests', async () => {
+  process.env.NODE_ENV = 'production';
+  process.env.VERCEL = '1';
+
+  const context = await workspaceAccess.resolveWorkspaceRequestContext({ headers: {} });
+
+  assert.equal(context.ok, false);
+  assert.equal(context.statusCode, 401);
+  assert.equal(context.code, 'guest-workspace-id-invalid');
+});
+
+test('outside production, a short guest workspace id (dev fixtures) is still accepted', async () => {
+  process.env.NODE_ENV = 'test';
+  delete process.env.VERCEL;
+
+  const context = await workspaceAccess.resolveWorkspaceRequestContext(
+    { headers: { 'x-atomfolio-workspace-id': 'guest:dev-fixture' } },
+    { requiredRole: 'editor' },
+  );
+
+  assert.equal(context.ok, true);
+  assert.equal(context.mode, 'guest');
+});
+
 test('a verified bearer token authenticates a request even in production', async () => {
   process.env.NODE_ENV = 'production';
   process.env.VERCEL = '1';

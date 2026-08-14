@@ -316,9 +316,16 @@ Naver와 Mirae Asset 프록시는 서로 독립적인 소스라 순차 대기 �
 
 **Vercel 한계**: 레이트 리밋과 시세 캐시는 인메모리 상태라서 Vercel 서버리스에서는
 인스턴스별로 따로 계산된다. 인스턴스가 여러 개 뜨면 실제 허용량이 한도보다 커질 수
-있으므로 best-effort 방어로 이해해야 한다. 엄격한 전역 한도가 필요해지면 Upstash
-Redis 같은 공유 저장소로 교체한다. 로컬 Node 서버(`server/index.mjs`)는 단일
+있으므로 best-effort 방어로 이해해야 한다. 로컬 Node 서버(`server/index.mjs`)는 단일
 프로세스라 한도가 정확히 적용된다.
+
+**드라이버 아키텍처**: `server/rateLimit.mjs`는 드라이버 기반으로 되어 있어
+`ATOMFOLIO_RATE_LIMIT_DRIVER=redis` + 연결 정보(`ATOMFOLIO_REDIS_URL` 또는
+`UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN`)를 설정하면 실제 Redis 클라이언트만
+구현해 끼워 넣을 수 있는 확장 지점이 이미 준비되어 있다(이 저장소 자체는 외부 의존성을
+추가하지 않기로 해서 아직 in-memory 동작으로 폴백한다). 프로덕션에서 이 값이 여전히
+`memory`이면 `GET /api/health`의 `readiness.warnings`에 `rate-limit-not-durable`로 표시된다.
+자세한 내용과 권장값은 [`docs/production-readiness.md`](docs/production-readiness.md) 참고.
 
 ### 인증
 
@@ -352,7 +359,21 @@ workspace로 옮긴다. 이 흐름 자체는 Clerk 도입 전과 동일하다.
 
 **환경 변수**: `CLERK_SECRET_KEY`(서버), `VITE_CLERK_PUBLISHABLE_KEY`(클라이언트).
 `VITE_CLERK_PUBLISHABLE_KEY`가 없으면 `src/main.jsx`가 `<ClerkProvider>`로 감싸지
-않고, `AuthPanel`도 렌더링하지 않는다 — 게스트 전용 모드로 그대로 동작한다.
+않고, `AuthPanel`도 렌더링하지 않는다 — 게스트 전용 모드로 그대로 동작한다. 프로덕션에서
+이 값들이 비어 있으면 `GET /api/health`의 `readiness.errors`/`readiness.warnings`에 각각
+`clerk-secret-missing`/`clerk-publishable-missing`으로 표시된다 — 자세한 내용은
+[`docs/production-readiness.md`](docs/production-readiness.md) 참고.
+
+**게스트 워크스페이스 정책**: 게스트 워크스페이스 ID(`guest:<uuid>`)는 서명되지 않은
+값이라 그 ID를 아는 사람이 곧 owner 권한을 가진다 — ID 자체가 유일한 자격증명이다.
+프로덕션에서는 이 전제를 최소한으로 방어한다(`server/portfolioStore.mjs`의
+`isAcceptableGuestWorkspaceId`): `guest:<id>`의 `<id>`가 클라이언트가 실제로 생성하는
+UUID 형식이 아니면 거부하고, 로그인 없이 워크스페이스 ID를 아예 안 보낸 요청이 떨어지는
+공유 단일 버킷 `anonymous`도 프로덕션에서는 거부한다. 로컬 개발/테스트에서는 기존처럼
+짧은 게스트 ID(`guest:test-workspace` 등)도 그대로 허용된다 — 프로덕션 전용 강화다.
+서명된 게스트 세션/쿠키 발급까지는 아직 구현하지 않았다 — 남은 리스크는
+[`docs/production-readiness.md`](docs/production-readiness.md)의 "게스트 워크스페이스
+정책" 절에 정리했다.
 
 ## 데이터 흐름
 
@@ -592,6 +613,10 @@ VITE_CLERK_PUBLISHABLE_KEY="pk_test_..."
 ATOMFOLIO_TRUSTED_AUTH_HEADERS="true"
 ```
 
+배포 전 체크리스트(필수 환경 변수, Clerk/Neon 설정, 게스트 워크스페이스 정책, 레이트 리밋
+권장값, 개인정보/삭제 정책 등)는 [`docs/production-readiness.md`](docs/production-readiness.md)에
+정리되어 있습니다.
+
 Vercel 설정은 [vercel.json](vercel.json)에 있습니다.
 
 ```json
@@ -611,7 +636,7 @@ Vercel 설정은 [vercel.json](vercel.json)에 있습니다.
 
 | API | 역할 |
 | --- | --- |
-| `GET /api/health` | 서버와 저장소 상태 확인 |
+| `GET /api/health` | 서버와 저장소 상태 확인 (`readiness` 필드: Clerk/DB/레이트리밋 설정 여부와 프로덕션 준비도 경고·에러) |
 | `GET /api/market/live` | 현재가, 변동률, 차트 데이터 조회 |
 | `GET /api/market/search` | 종목 후보 검색 |
 | `GET /api/market/news` | 시장 뉴스 조회 |

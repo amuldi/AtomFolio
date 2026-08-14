@@ -29,6 +29,7 @@ import {
   recordOperationalEvent,
 } from './operationalEvents.mjs';
 import { checkRateLimit } from './rateLimit.mjs';
+import { getProductionReadiness } from './productionReadiness.mjs';
 import {
   getLiveMarketDataWithCache,
   getMarketDataCacheStats,
@@ -212,6 +213,10 @@ export async function handleHealthRequest({ method, query, sendJson }) {
   }
 
   sendJson(200, {
+    // `ok` reflects basic liveness only (the endpoint itself responded) — it intentionally does
+    // NOT flip to false when production-readiness finds a problem, so uptime/monitoring pings
+    // against this endpoint don't start treating "Postgres isn't configured yet" as "the service
+    // is down". Use `readiness.level`/`readiness.errors` for that signal instead.
     ok: true,
     generatedAt: new Date().toISOString(),
     uptimeSeconds:
@@ -224,6 +229,11 @@ export async function handleHealthRequest({ method, query, sendJson }) {
     operationalEvents: getOperationalEventStats({
       includeRecent: queryValue(query, 'details') === 'events',
     }),
+    // Auth/database/rate-limit production-readiness — see server/productionReadiness.mjs and
+    // docs/production-readiness.md. Always present so both local dev and prod can see the same
+    // shape; `isProduction: false` outside Vercel/production means the warnings/errors below are
+    // informational only.
+    readiness: getProductionReadiness(),
   });
 }
 
