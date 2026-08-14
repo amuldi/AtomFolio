@@ -359,7 +359,7 @@ function renderConnect(state) {
   container.append(el('div', 'connect__title', ['AtomFolio']));
   container.append(
     el('div', 'connect__copy', [
-      '웹 대시보드에 로그인한 상태에서 설정 → 계정 및 워크스페이스 → "데스크톱 연결 코드 생성"으로 만든 코드를 붙여넣으세요. 로그인 없이 게스트로만 쓰던 Workspace ID도 그대로 사용할 수 있습니다.',
+      '웹 대시보드에 로그인한 상태에서 설정 → 계정 아래 "데스크톱 연결 코드 생성"을 눌러 나오는 코드(atomfolio_dt_로 시작)를 붙여넣으세요. WORKSPACE 칸에 있는 값이 아닙니다. 로그인 없이 게스트로만 쓰던 Workspace ID도 그대로 사용할 수 있습니다.',
     ]),
   );
 
@@ -384,10 +384,17 @@ function renderConnect(state) {
     const result = await window.atomfolio.connect(value);
 
     if (!result.ok) {
+      // A bare "user:<id>" value is the account's workspace id shown in the web settings
+      // WORKSPACE field — it deliberately isn't accepted here on its own (see api.mjs's own
+      // comment on why), so this specific shape gets its own message instead of the generic one,
+      // pointing at the actual fix (the connection code) rather than leaving it looking like a
+      // random failure.
       errorLine.textContent =
         result.error === 'atomfolio-connect-token-invalid'
           ? '연결 코드가 만료되었거나 유효하지 않습니다. 웹에서 새로 생성해주세요.'
-          : '연결에 실패했습니다. 연결 코드 또는 Workspace ID를 확인해주세요.';
+          : value.startsWith('user:')
+            ? 'WORKSPACE 값만으로는 연결할 수 없습니다. 설정 → 계정에서 "데스크톱 연결 코드 생성"을 눌러 나오는 코드를 붙여넣어주세요.'
+            : '연결에 실패했습니다. 연결 코드 또는 Workspace ID를 확인해주세요.';
       button.disabled = false;
       button.textContent = '연결';
     }

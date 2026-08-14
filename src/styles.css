@@ -2564,22 +2564,22 @@ body::after {
 .settings-panel__row-label {
   flex: 1 1 auto;
   min-width: 5.2rem;
-  color: rgba(var(--frame-ink-secondary), 0.72);
+  color: rgba(var(--frame-ink-secondary), 0.76);
   font-family: var(--ui-font);
-  font-size: 0.68rem;
+  font-size: 0.76rem;
   font-weight: 600;
 }
 
 /* Segmented control — one continuous pill sharing a single border, not separate floating boxes.
    Same dark/translucent surface and hairline border the rest of the app's chrome uses; only the
    selected segment gets the brighter cream fill (--frame-ink-a is already that cream tone, see
-   :root). */
+   :root). Fully rounded (stadium-shaped) per direct sizing reference, not a rounded rect. */
 .settings-panel__options {
   display: inline-flex;
   flex: 0 0 auto;
   max-width: 100%;
   border: 1px solid rgba(var(--frame-hairline), 0.16);
-  border-radius: 7px;
+  border-radius: 999px;
   background: rgba(var(--frame-ink-a), 0.04);
   overflow: hidden;
 }
@@ -2596,12 +2596,12 @@ body::after {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 1.5rem;
-  padding: 0.26rem 0.6rem;
+  min-height: 2.1rem;
+  padding: 0.5rem 1.05rem;
   color: rgba(var(--frame-ink-a), 0.6);
   font-family: var(--ui-font);
-  font-size: 0.66rem;
-  font-weight: 600;
+  font-size: 0.8rem;
+  font-weight: 650;
   line-height: 1.2;
   letter-spacing: -0.01em;
   text-align: center;
@@ -7607,9 +7607,9 @@ body::after {
   }
 
   .settings-option {
-    min-height: 1.5rem;
-    padding: 0.28rem 0.32rem 0.3rem;
-    font-size: 0.62rem;
+    min-height: 1.9rem;
+    padding: 0.42rem 0.5rem;
+    font-size: 0.74rem;
     line-height: 1.2;
   }
 
