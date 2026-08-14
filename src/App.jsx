@@ -224,18 +224,13 @@ const UI_TEXT = {
     settingsSectionDateBasis: '날짜 기준',
     settingsDateBasisKst: '한국 시간',
     settingsDateBasisLocal: '내 기기 시간',
-    settingsPanelSubtitle: '표시, 저장, 계정 상태를 관리합니다',
-    settingsGroupDisplay: '보기 및 표시',
-    settingsGroupSync: '저장 및 동기화',
     settingsSectionAutoSave: '자동 저장',
     settingsAutoSaveOn: '켜짐',
     settingsAutoSaveOff: '꺼짐',
     settingsSectionDailySnapshots: '일별 손익 누적',
     settingsDailySnapshotsOn: '켜짐',
     settingsDailySnapshotsOff: '꺼짐',
-    settingsSectionWorkspace: '계정 및 워크스페이스',
-    desktopConnectTitle: '데스크톱 연결',
-    desktopConnectHint: '메뉴바 앱을 이 계정에 연결하려면 코드를 생성해 붙여넣으세요.',
+    settingsSectionWorkspace: '계정',
     desktopConnectGenerateButton: '데스크톱 연결 코드 생성',
     desktopConnectRegenerateButton: '연결 코드 재발급',
     desktopConnectPending: '처리 중',
@@ -377,18 +372,13 @@ const UI_TEXT = {
     settingsSectionDateBasis: 'Date Basis',
     settingsDateBasisKst: 'Korea time',
     settingsDateBasisLocal: 'Device time',
-    settingsPanelSubtitle: 'Manage display, storage, and account status',
-    settingsGroupDisplay: 'Display',
-    settingsGroupSync: 'Storage & Sync',
     settingsSectionAutoSave: 'Auto Save',
     settingsAutoSaveOn: 'On',
     settingsAutoSaveOff: 'Off',
     settingsSectionDailySnapshots: 'Daily P/L History',
     settingsDailySnapshotsOn: 'On',
     settingsDailySnapshotsOff: 'Off',
-    settingsSectionWorkspace: 'Account & Workspace',
-    desktopConnectTitle: 'Desktop Connection',
-    desktopConnectHint: 'Generate a code to link the menu bar app to this account.',
+    settingsSectionWorkspace: 'Account',
     desktopConnectGenerateButton: 'Generate desktop connection code',
     desktopConnectRegenerateButton: 'Regenerate connection code',
     desktopConnectPending: 'Working',
@@ -7810,13 +7800,11 @@ export default function App() {
   const groupOptions = useMemo(() => groupOptionsFor(language), [language]);
   const scoreAxes = useMemo(() => scoreAxesFor(language), [language]);
   const displayFxRates = useMemo(() => buildDisplayFxRates(usdKrwRate), [usdKrwRate]);
-  // `group` clusters these into the settings panel's "보기 및 표시" / "저장 및 동기화" sections
-  // (renderSettingsPanel below) — each item still renders as its own labeled row within the
-  // group, this only changes which shared group header it falls under.
+  // One flat list, rendered in this order, no sub-grouping — keeps the settings panel to a single
+  // quick-glance list rather than reintroducing section headers for five items.
   const settingsSections = [
     {
       key: 'language',
-      group: 'display',
       title: text.settingsSectionLanguage,
       options: LANGUAGE_OPTIONS.map((option) => ({
         key: option,
@@ -7827,7 +7815,6 @@ export default function App() {
     },
     {
       key: 'base-currency',
-      group: 'display',
       title: text.settingsSectionBaseCurrency,
       options: BASE_CURRENCY_OPTIONS.map((option) => ({
         key: option,
@@ -7838,7 +7825,6 @@ export default function App() {
     },
     {
       key: 'date-basis',
-      group: 'display',
       title: text.settingsSectionDateBasis,
       options: DATE_BASIS_OPTIONS.map((option) => ({
         key: option,
@@ -7849,7 +7835,6 @@ export default function App() {
     },
     {
       key: 'auto-save',
-      group: 'sync',
       title: text.settingsSectionAutoSave,
       options: SETTING_TOGGLE_OPTIONS.map((option) => ({
         key: option,
@@ -7860,7 +7845,6 @@ export default function App() {
     },
     {
       key: 'daily-snapshots',
-      group: 'sync',
       title: text.settingsSectionDailySnapshots,
       options: SETTING_TOGGLE_OPTIONS.map((option) => ({
         key: option,
@@ -7870,13 +7854,6 @@ export default function App() {
       })),
     },
   ];
-  const settingsGroups = [
-    { key: 'display', title: text.settingsGroupDisplay },
-    { key: 'sync', title: text.settingsGroupSync },
-  ].map((group) => ({
-    ...group,
-    sections: settingsSections.filter((section) => section.group === group.key),
-  }));
   const currentWorkspaceIsGuest = isGuestPortfolioWorkspaceId(currentWorkspaceId);
   const workspaceAuthenticated = Boolean(workspaceSession?.authenticated);
   const workspaceUserLabel =
@@ -8029,41 +8006,33 @@ export default function App() {
   }, [deviceTokenValue, noteInteraction]);
   const renderSettingsPanel = () => (
     <div className="tool-drawer__settings">
-      <header className="settings-panel__header">
-        <p className="settings-panel__header-title">{text.settings}</p>
-        <p className="settings-panel__header-subtitle">{text.settingsPanelSubtitle}</p>
-      </header>
+      <p className="settings-panel__title">{text.settings}</p>
 
-      {settingsGroups.map((group) => (
-        <section key={group.key} className="settings-panel__group">
-          <p className="settings-panel__group-title">{group.title}</p>
-          <div className="settings-panel__rows">
-            {group.sections.map((section) => (
-              <div key={section.key} className="settings-panel__row">
-                <span className="settings-panel__row-label">{section.title}</span>
-                <div className="settings-panel__options">
-                  {section.options.map((option) => (
-                    <button
-                      key={option.key}
-                      type="button"
-                      className={`settings-option${option.active ? ' is-active' : ''}`}
-                      onClick={() => {
-                        noteInteraction();
-                        option.onSelect();
-                      }}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
+      <div className="settings-panel__rows">
+        {settingsSections.map((section) => (
+          <div key={section.key} className="settings-panel__row">
+            <span className="settings-panel__row-label">{section.title}</span>
+            <div className="settings-panel__options">
+              {section.options.map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  className={`settings-option${option.active ? ' is-active' : ''}`}
+                  onClick={() => {
+                    noteInteraction();
+                    option.onSelect();
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </section>
-      ))}
+        ))}
+      </div>
 
-      <section className="settings-panel__group settings-panel__group--account">
-        <p className="settings-panel__group-title">{text.settingsSectionWorkspace}</p>
+      <div className="settings-panel__account">
+        <p className="settings-panel__account-title">{text.settingsSectionWorkspace}</p>
         <dl className="settings-workspace">
           <div className="settings-workspace__row">
             <dt>{text.workspaceStatusLabel}</dt>
@@ -8113,12 +8082,12 @@ export default function App() {
               </button>
             </dd>
           </div>
-          <div className="settings-workspace__row">
+          <div className="settings-workspace__row settings-workspace__row--muted">
             <dt>{text.workspaceSyncLabel}</dt>
             <dd>{portfolioSyncStatusText}</dd>
           </div>
           {workspaceAuthenticated ? (
-            <div className="settings-workspace__row">
+            <div className="settings-workspace__row settings-workspace__row--muted">
               <dt>{text.workspaceUserLabel}</dt>
               <dd title={workspaceUserLabel}>{workspaceUserLabel}</dd>
             </div>
@@ -8146,9 +8115,7 @@ export default function App() {
         </div>
 
         {workspaceAuthenticated ? (
-          <div className="settings-panel__desktop-connect">
-            <p className="settings-panel__subsection-title">{text.desktopConnectTitle}</p>
-            <p className="settings-workspace__hint">{text.desktopConnectHint}</p>
+          <div className="settings-panel__links">
             {deviceTokenStatus === 'revealed' && deviceTokenValue ? (
               <>
                 <button
@@ -8179,38 +8146,36 @@ export default function App() {
                 <p className="settings-workspace__hint">{text.desktopConnectRevealHint}</p>
               </>
             ) : null}
-            <div className="settings-panel__desktop-actions">
-              <button
-                type="button"
-                className="settings-action"
-                disabled={deviceTokenStatus === 'pending'}
-                onClick={() => {
-                  void handleGenerateDeviceToken();
-                }}
-              >
-                {deviceTokenStatus === 'pending'
-                  ? text.desktopConnectPending
-                  : deviceTokenValue
-                    ? text.desktopConnectRegenerateButton
-                    : text.desktopConnectGenerateButton}
-              </button>
-              <button
-                type="button"
-                className="settings-action settings-action--ghost"
-                disabled={deviceTokenStatus === 'pending'}
-                onClick={() => {
-                  void handleRevokeDeviceTokens();
-                }}
-              >
-                {text.desktopConnectRevokeButton}
-              </button>
-            </div>
+            <button
+              type="button"
+              className="settings-link"
+              disabled={deviceTokenStatus === 'pending'}
+              onClick={() => {
+                void handleGenerateDeviceToken();
+              }}
+            >
+              {deviceTokenStatus === 'pending'
+                ? text.desktopConnectPending
+                : deviceTokenValue
+                  ? text.desktopConnectRegenerateButton
+                  : text.desktopConnectGenerateButton}
+            </button>
+            <button
+              type="button"
+              className="settings-link"
+              disabled={deviceTokenStatus === 'pending'}
+              onClick={() => {
+                void handleRevokeDeviceTokens();
+              }}
+            >
+              {text.desktopConnectRevokeButton}
+            </button>
             {deviceTokenStatus === 'failed' ? (
               <p className="settings-workspace__hint is-error">{deviceTokenError}</p>
             ) : null}
           </div>
         ) : null}
-      </section>
+      </div>
     </div>
   );
   const contributionPreview = useMemo(

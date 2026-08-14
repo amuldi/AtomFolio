@@ -2532,65 +2532,12 @@ body::after {
 
 .tool-drawer__settings {
   display: grid;
-  gap: 0.2rem;
-}
-
-/* Short, fixed header — not a section, just orients the panel before the grouped content below.
-   Kept deliberately brief per design direction: one line of title, one short line of subtitle,
-   no marketing copy. */
-.settings-panel__header {
-  display: grid;
-  gap: 0.16rem;
-  padding-bottom: 0.6rem;
-  margin-bottom: 0.36rem;
-  border-bottom: 1px solid rgba(var(--frame-hairline), 0.14);
-}
-
-.settings-panel__header-title {
-  margin: 0;
-  color: rgba(var(--frame-ink-a), 0.94);
-  font-family: var(--ui-font);
-  font-size: 0.86rem;
-  font-weight: 750;
-  letter-spacing: -0.01em;
-}
-
-.settings-panel__header-subtitle {
-  margin: 0;
-  color: rgba(var(--frame-ink-a), 0.5);
-  font-family: var(--ui-font);
-  font-size: 0.66rem;
-  font-weight: 600;
-  line-height: 1.3;
-}
-
-/* One visual tier above individual settings — "보기 및 표시" / "저장 및 동기화" /
-   "계정 및 워크스페이스". This is the level that actually carries the panel's information
-   hierarchy; individual settings (.settings-panel__row) are quiet by comparison so the three
-   group titles are what a glance lands on first. */
-.settings-panel__group {
-  position: relative;
-  display: grid;
   gap: 0.5rem;
 }
 
-.settings-panel__group:first-of-type {
-  padding-top: 0;
-}
-
-.settings-panel__group + .settings-panel__group {
-  margin-top: 0.72rem;
-  padding-top: 0.7rem;
-  border-top: 1px solid rgba(var(--frame-hairline), 0.1);
-}
-
-.settings-panel__group:last-child {
-  padding-bottom: 0;
-}
-
-.settings-panel__group-title {
-  margin: 0;
-  color: rgba(var(--frame-ink-a), 0.46);
+.settings-panel__title {
+  margin: 0 0 0.1rem;
+  color: rgba(var(--frame-ink-a), 0.5);
   font-family: var(--ui-font);
   font-size: 0.64rem;
   font-weight: 700;
@@ -2598,28 +2545,18 @@ body::after {
   text-transform: uppercase;
 }
 
-.settings-panel__subsection-title {
-  margin: 0;
-  color: rgba(var(--frame-ink-a), 0.68);
-  font-family: var(--ui-font);
-  font-size: 0.68rem;
-  font-weight: 700;
-}
-
 .settings-panel__rows {
   display: grid;
-  gap: 0.44rem;
+  gap: 0.3rem;
 }
 
-/* Label on the left, its control on the right, on one line whenever there's room — this is what
-   replaces the old "title above / 2-column button grid below" layout for 언어/기준 통화/날짜
-   기준/자동 저장/일별 손익 누적. Wraps to a stacked layout only once the row genuinely can't fit
-   both (narrow drawer widths), rather than always reserving two lines for every setting. */
+/* Label on the left, its control on the right, on one line whenever there's room. Wraps to a
+   stacked layout only once the row genuinely can't fit both (narrow drawer widths). */
 .settings-panel__row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem 0.7rem;
+  gap: 0.4rem 0.6rem;
   flex-wrap: wrap;
   min-width: 0;
 }
@@ -2627,10 +2564,10 @@ body::after {
 .settings-panel__row-label {
   flex: 1 1 auto;
   min-width: 5.2rem;
-  color: rgba(var(--frame-ink-secondary), 0.76);
+  color: rgba(var(--frame-ink-secondary), 0.72);
   font-family: var(--ui-font);
-  font-size: 0.7rem;
-  font-weight: 650;
+  font-size: 0.68rem;
+  font-weight: 600;
 }
 
 /* Segmented control — one continuous pill sharing a single border, not separate floating boxes.
@@ -2641,8 +2578,8 @@ body::after {
   display: inline-flex;
   flex: 0 0 auto;
   max-width: 100%;
-  border: 1px solid rgba(var(--frame-hairline), 0.18);
-  border-radius: 8px;
+  border: 1px solid rgba(var(--frame-hairline), 0.16);
+  border-radius: 7px;
   background: rgba(var(--frame-ink-a), 0.04);
   overflow: hidden;
 }
@@ -2659,12 +2596,12 @@ body::after {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 1.7rem;
-  padding: 0.34rem 0.7rem;
-  color: rgba(var(--frame-ink-a), 0.62);
+  min-height: 1.5rem;
+  padding: 0.26rem 0.6rem;
+  color: rgba(var(--frame-ink-a), 0.6);
   font-family: var(--ui-font);
-  font-size: 0.68rem;
-  font-weight: 630;
+  font-size: 0.66rem;
+  font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.01em;
   text-align: center;
@@ -2676,7 +2613,7 @@ body::after {
 }
 
 .settings-option + .settings-option {
-  border-left: 1px solid rgba(var(--frame-hairline), 0.14);
+  border-left: 1px solid rgba(var(--frame-hairline), 0.12);
 }
 
 .settings-option:hover,
@@ -2698,21 +2635,38 @@ body::after {
   background: rgba(var(--frame-ink-a), 0.86);
 }
 
-.settings-panel__group--account {
-  gap: 0.6rem;
+/* Everything below this line is the one small account block — deliberately not its own
+   "section" with a heavy title; just a hairline separator and a quiet label so it reads as a
+   short appendix to the settings list above, not a second screen. */
+.settings-panel__account {
+  display: grid;
+  gap: 0.36rem;
+  margin-top: 0.2rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(var(--frame-hairline), 0.1);
+}
+
+.settings-panel__account-title {
+  margin: 0;
+  color: rgba(var(--frame-ink-a), 0.4);
+  font-family: var(--ui-font);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .settings-workspace {
   display: grid;
-  gap: 0.36rem;
+  gap: 0.28rem;
   margin: 0;
   min-width: 0;
 }
 
 .settings-workspace__row {
   display: grid;
-  grid-template-columns: minmax(4.2rem, 0.64fr) minmax(0, 1fr);
-  gap: 0.42rem;
+  grid-template-columns: minmax(4rem, 0.6fr) minmax(0, 1fr);
+  gap: 0.4rem;
   align-items: center;
   min-width: 0;
 }
@@ -2726,39 +2680,47 @@ body::after {
 }
 
 .settings-workspace__row dt {
-  color: rgba(var(--frame-ink-a), 0.42);
-  font-size: 0.62rem;
+  color: rgba(var(--frame-ink-a), 0.4);
+  font-size: 0.6rem;
   font-weight: 700;
   text-transform: uppercase;
 }
 
 .settings-workspace__row dd {
-  color: rgba(var(--frame-ink-a), 0.82);
-  font-size: 0.68rem;
-  font-weight: 650;
+  color: rgba(var(--frame-ink-a), 0.8);
+  font-size: 0.66rem;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* 게스트 / 로그인됨 status badge — a small filled pill instead of plain text, so account state
-   reads at a glance the same way a sync/connection indicator would elsewhere in a finance app. */
+/* De-emphasized rows (sync status, account email) — same layout, quieter type, so the two rows
+   that actually matter for orientation (status, workspace id) stay what a glance lands on. */
+.settings-workspace__row--muted dt,
+.settings-workspace__row--muted dd {
+  font-size: 0.6rem;
+  font-weight: 550;
+  color: rgba(var(--frame-ink-a), 0.4);
+}
+
+/* 게스트 / 로그인됨 status badge — a small filled pill instead of plain text. */
 .settings-status-pill {
   display: inline-flex;
   align-items: center;
-  gap: 0.32rem;
-  padding: 0.1rem 0.5rem;
+  gap: 0.3rem;
+  padding: 0.06rem 0.44rem;
   border-radius: 999px;
-  border: 1px solid rgba(var(--frame-hairline), 0.16);
+  border: 1px solid rgba(var(--frame-hairline), 0.14);
   background: rgba(var(--frame-ink-a), 0.06);
-  font-size: 0.64rem;
+  font-size: 0.6rem;
   font-weight: 700;
 }
 
 .settings-status-pill::before {
   content: '';
-  width: 0.4rem;
-  height: 0.4rem;
+  width: 0.36rem;
+  height: 0.36rem;
   border-radius: 50%;
   background: rgba(var(--frame-ink-secondary), 0.4);
 }
@@ -2773,46 +2735,58 @@ body::after {
 
 .settings-panel__account-auth {
   display: grid;
-  gap: 0.4rem;
+  gap: 0.3rem;
 }
 
-/* Desktop connection code block — visually its own quiet subsection within "계정 및
-   워크스페이스" rather than blending into the general account rows, since generating/revoking a
-   code is a distinct, slightly more consequential action than the settings above it. */
-.settings-panel__desktop-connect {
-  display: grid;
-  gap: 0.36rem;
-  margin-top: 0.2rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid rgba(var(--frame-hairline), 0.1);
-}
-
-.settings-panel__desktop-actions {
+/* Secondary, lower-priority actions (desktop connect, disconnect) — small text links rather than
+   full buttons, so they don't compete with sign-in/sign-out for attention. */
+.settings-panel__links {
   display: flex;
-  gap: 0.4rem;
+  align-items: center;
+  gap: 0.7rem;
   flex-wrap: wrap;
+  margin-top: 0.1rem;
 }
 
-.settings-panel__desktop-actions .settings-action {
-  flex: 1 1 auto;
-  min-width: 7rem;
+.settings-link {
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  color: rgba(var(--frame-ink-a), 0.5);
+  font-family: var(--ui-font);
+  font-size: 0.64rem;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
 }
 
-/* Click-to-copy workspace ID / device connection code. Looks and behaves like a real interactive
-   control (pointer cursor, hover state, an icon that reads as "copyable") rather than plain text
-   a user has to triple-click/select-and-copy themselves. Long values (a full device token is much
-   longer than a workspace id) ellipsize instead of wrapping or overflowing the drawer. */
+.settings-link:hover,
+.settings-link:focus-visible {
+  color: rgba(var(--frame-ink-a), 0.85);
+  outline: none;
+}
+
+.settings-link:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Click-to-copy workspace ID / device connection code — a small inline pill, not a card. Long
+   values (a device token is much longer than a workspace id) ellipsize instead of wrapping or
+   overflowing the drawer. */
 .settings-workspace__copy {
   display: inline-flex;
   position: relative;
   align-items: center;
-  gap: 0.34rem;
+  gap: 0.3rem;
   max-width: 100%;
-  padding: 0.14rem 0.4rem;
+  padding: 0.1rem 0.36rem;
   border: 1px solid rgba(var(--frame-hairline), 0.12);
-  border-radius: 7px;
+  border-radius: 999px;
   background: rgba(var(--frame-ink-a), 0.04);
-  color: rgba(var(--frame-ink-a), 0.82);
+  color: rgba(var(--frame-ink-a), 0.8);
   font-family: var(--ui-font);
   cursor: pointer;
   transition: background-color 140ms ease, border-color 140ms ease;
@@ -2820,17 +2794,18 @@ body::after {
 
 /* .is-block: the device connection code is long enough that squeezing it into the same
    label-width-constrained column as the workspace ID would ellipsize almost the whole value —
-   this variant takes the full row width instead. */
+   this variant takes the full row width instead (still a pill, just wider). */
 .settings-workspace__copy.is-block {
   display: flex;
   width: 100%;
   box-sizing: border-box;
-  padding: 0.4rem 0.5rem;
+  border-radius: 8px;
+  padding: 0.32rem 0.46rem;
 }
 
 .settings-workspace__copy:hover {
-  border-color: rgba(var(--frame-ink-a), 0.28);
-  background: rgba(var(--frame-ink-a), 0.09);
+  border-color: rgba(var(--frame-ink-a), 0.26);
+  background: rgba(var(--frame-ink-a), 0.08);
 }
 
 .settings-workspace__copy:focus-visible {
@@ -2840,17 +2815,17 @@ body::after {
 
 .settings-workspace__copy-value {
   overflow: hidden;
-  font-size: 0.68rem;
-  font-weight: 650;
+  font-size: 0.64rem;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .settings-workspace__copy-icon {
   flex: 0 0 auto;
-  width: 0.78rem;
-  height: 0.78rem;
-  color: rgba(var(--frame-ink-a), 0.48);
+  width: 0.7rem;
+  height: 0.7rem;
+  color: rgba(var(--frame-ink-a), 0.46);
 }
 
 .settings-workspace__copy:hover .settings-workspace__copy-icon {
@@ -2865,18 +2840,17 @@ body::after {
   color: var(--loss-color-strong);
 }
 
-/* "복사됨" / "Copied" feedback — a small pill that pops in above the control instead of a
-   page-level toast, so it reads as feedback about *this* value specifically. role="status" +
+/* "복사됨" / "Copied" feedback — small pill that pops in above the control. role="status" +
    aria-live means it's announced even though it's positioned off to the side visually. */
 .settings-workspace__copy-feedback {
   position: absolute;
-  bottom: calc(100% + 0.3rem);
+  bottom: calc(100% + 0.26rem);
   left: 0;
-  padding: 0.16rem 0.48rem;
+  padding: 0.14rem 0.44rem;
   border-radius: 999px;
   background: rgba(var(--frame-void), 0.92);
   color: rgba(var(--frame-white), 0.95);
-  font-size: 0.6rem;
+  font-size: 0.58rem;
   font-weight: 680;
   white-space: nowrap;
   opacity: 0;
@@ -2904,14 +2878,14 @@ body::after {
 .settings-action {
   appearance: none;
   width: 100%;
-  min-height: 2rem;
-  border: 1px solid rgba(var(--frame-ink-a), 0.22);
-  border-radius: 8px;
-  background: rgba(var(--frame-ink-a), 0.08);
-  color: rgba(var(--frame-ink-a), 0.9);
+  min-height: 1.7rem;
+  border: 1px solid rgba(var(--frame-ink-a), 0.2);
+  border-radius: 7px;
+  background: rgba(var(--frame-ink-a), 0.07);
+  color: rgba(var(--frame-ink-a), 0.88);
   font-family: var(--ui-font);
-  font-size: 0.72rem;
-  font-weight: 750;
+  font-size: 0.68rem;
+  font-weight: 700;
   line-height: 1.2;
   cursor: pointer;
   transition:
@@ -2923,8 +2897,8 @@ body::after {
 
 .settings-action:hover,
 .settings-action:focus-visible {
-  border-color: rgba(var(--frame-ink-a), 0.42);
-  background: rgba(var(--frame-ink-a), 0.13);
+  border-color: rgba(var(--frame-ink-a), 0.4);
+  background: rgba(var(--frame-ink-a), 0.12);
   outline: none;
 }
 
@@ -2933,28 +2907,12 @@ body::after {
   opacity: 0.48;
 }
 
-/* Quieter variant for a lower-stakes/secondary action sitting next to a primary .settings-action
-   (e.g. "모든 데스크톱 연결 해제" beside "연결 코드 생성") — same shape and sizing so they read as
-   a pair, not a plain button losing a fight with a styled one. */
-.settings-action--ghost {
-  border-color: rgba(var(--frame-hairline), 0.16);
-  background: transparent;
-  color: rgba(var(--frame-ink-a), 0.62);
-}
-
-.settings-action--ghost:hover,
-.settings-action--ghost:focus-visible {
-  border-color: rgba(var(--frame-ink-a), 0.32);
-  background: rgba(var(--frame-ink-a), 0.06);
-  color: rgba(var(--frame-ink-a), 0.85);
-}
-
 .settings-workspace__hint {
-  margin: -0.08rem 0 0;
-  color: rgba(var(--frame-ink-a), 0.48);
+  margin: -0.04rem 0 0;
+  color: rgba(var(--frame-ink-a), 0.42);
   font-family: var(--ui-font);
-  font-size: 0.64rem;
-  font-weight: 650;
+  font-size: 0.6rem;
+  font-weight: 600;
   line-height: 1.3;
 }
 
@@ -2964,21 +2922,21 @@ body::after {
 
 .auth-panel {
   display: grid;
-  gap: 0.42rem;
-  margin: 0.2rem 0;
+  gap: 0.32rem;
+  margin: 0.1rem 0;
 }
 
 .auth-panel__input {
   appearance: none;
   width: 100%;
-  min-height: 2rem;
-  padding: 0 0.6rem;
-  border: 1px solid rgba(var(--frame-ink-a), 0.22);
-  border-radius: 8px;
-  background: rgba(var(--frame-ink-a), 0.06);
+  min-height: 1.7rem;
+  padding: 0 0.5rem;
+  border: 1px solid rgba(var(--frame-ink-a), 0.2);
+  border-radius: 7px;
+  background: rgba(var(--frame-ink-a), 0.05);
   color: rgba(var(--frame-ink-a), 0.9);
   font-family: var(--ui-font);
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 600;
   line-height: 1.2;
   transition: border-color 160ms ease, background-color 160ms ease;
@@ -2990,7 +2948,7 @@ body::after {
 
 .auth-panel__input:focus-visible {
   border-color: rgba(var(--frame-ink-a), 0.5);
-  background: rgba(var(--frame-ink-a), 0.1);
+  background: rgba(var(--frame-ink-a), 0.09);
   outline: none;
 }
 
@@ -2999,10 +2957,10 @@ body::after {
   border: none;
   background: none;
   padding: 0;
-  color: rgba(var(--frame-ink-a), 0.55);
+  color: rgba(var(--frame-ink-a), 0.5);
   font-family: var(--ui-font);
-  font-size: 0.62rem;
-  font-weight: 650;
+  font-size: 0.6rem;
+  font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;
@@ -3011,16 +2969,16 @@ body::after {
 
 .auth-panel__switch:hover,
 .auth-panel__switch:focus-visible {
-  color: rgba(var(--frame-ink-a), 0.85);
+  color: rgba(var(--frame-ink-a), 0.82);
   outline: none;
 }
 
 .auth-panel__hint {
   margin: 0;
-  color: rgba(var(--frame-ink-a), 0.6);
+  color: rgba(var(--frame-ink-a), 0.55);
   font-family: var(--ui-font);
-  font-size: 0.64rem;
-  font-weight: 600;
+  font-size: 0.6rem;
+  font-weight: 550;
   line-height: 1.3;
 }
 
@@ -3028,7 +2986,7 @@ body::after {
   margin: 0;
   color: rgba(255, 148, 148, 0.86);
   font-family: var(--ui-font);
-  font-size: 0.64rem;
+  font-size: 0.62rem;
   font-weight: 650;
   line-height: 1.3;
 }
@@ -3043,60 +3001,26 @@ body::after {
 .auth-panel__identity {
   margin: 0 0 0.1rem;
   overflow: hidden;
-  color: rgba(var(--frame-ink-a), 0.72);
+  color: rgba(var(--frame-ink-a), 0.7);
   font-family: var(--ui-font);
-  font-size: 0.68rem;
-  font-weight: 650;
+  font-size: 0.66rem;
+  font-weight: 600;
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.auth-panel__danger-zone {
-  display: grid;
-  gap: 0.3rem;
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid rgba(var(--frame-hairline), 0.14);
+/* Small quiet danger link, not a bordered card — reuses .settings-link's shape, just tinted red
+   so account deletion still reads as a distinct, deliberate action without visually competing
+   with sign-out. */
+.auth-panel__danger-link {
+  margin-top: 0.2rem;
+  color: rgba(255, 148, 148, 0.7);
 }
 
-.auth-panel__danger-title {
-  margin: 0;
-  color: rgba(var(--frame-ink-a), 0.75);
-  font-family: var(--ui-font);
-  font-size: 0.66rem;
-  font-weight: 700;
-  line-height: 1.3;
-}
-
-.auth-panel__danger-action {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: fit-content;
-  min-height: 1.8rem;
-  padding: 0 0.7rem;
-  border: 1px solid rgba(255, 148, 148, 0.36);
-  border-radius: 8px;
-  background: rgba(255, 148, 148, 0.08);
-  color: rgba(255, 148, 148, 0.86);
-  font-family: var(--ui-font);
-  font-size: 0.64rem;
-  font-weight: 650;
-  text-decoration: none;
-  cursor: pointer;
-  transition: background-color 140ms ease, border-color 140ms ease;
-}
-
-.auth-panel__danger-action:hover {
-  background: rgba(255, 148, 148, 0.14);
-  border-color: rgba(255, 148, 148, 0.5);
-}
-
-.auth-panel__danger-action:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
+.auth-panel__danger-link:hover,
+.auth-panel__danger-link:focus-visible {
+  color: rgba(255, 148, 148, 0.95);
 }
 
 .upload-plus {
@@ -7666,23 +7590,6 @@ body::after {
     padding: 0.72rem 0.8rem;
   }
 
-  .settings-panel__group + .settings-panel__group {
-    margin-top: 0.4rem;
-    padding-top: 0.42rem;
-  }
-
-  .settings-panel__group {
-    padding-inline: 0.28rem 0.2rem;
-  }
-
-  .settings-panel__group:first-of-type {
-    padding-top: 0.08rem;
-  }
-
-  .settings-panel__group:last-child {
-    padding-inline: 0.36rem 0.3rem;
-  }
-
   /* Below this width a label + its full segmented control no longer reliably fit on one line —
      stack them instead of letting the segmented control shrink until its labels clip. The
      segmented control itself then stretches to the row's full width so it still reads as one
@@ -7700,14 +7607,10 @@ body::after {
   }
 
   .settings-option {
-    min-height: 1.56rem;
-    padding: 0.3rem 0.36rem 0.34rem;
-    font-size: 0.64rem;
+    min-height: 1.5rem;
+    padding: 0.28rem 0.32rem 0.3rem;
+    font-size: 0.62rem;
     line-height: 1.2;
-  }
-
-  .settings-panel__desktop-actions {
-    flex-direction: column;
   }
 
   .upload-plus-hint {

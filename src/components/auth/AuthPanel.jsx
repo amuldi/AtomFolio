@@ -235,23 +235,23 @@ export function AuthPanel({ text, onAuthenticated, workspaceId }) {
         >
           {text.authSignOut}
         </button>
-        <div className="auth-panel__danger-zone">
-          <p className="auth-panel__danger-title">{text.authDeleteAccountTitle}</p>
-          <p className="auth-panel__hint">{text.authDeleteAccountHint}</p>
-          {SUPPORT_EMAIL ? (
-            <a
-              className="auth-panel__danger-action"
-              href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(text.authDeleteAccountEmailSubject)}&body=${encodeURIComponent(deleteRequestBody)}`}
-            >
-              {text.authDeleteAccountButton}
-            </a>
-          ) : (
-            <button type="button" className="auth-panel__danger-action" disabled title={text.authDeleteAccountUnavailable}>
-              {text.authDeleteAccountButton}
-            </button>
-          )}
-          {!SUPPORT_EMAIL ? <p className="auth-panel__hint">{text.authDeleteAccountUnavailable}</p> : null}
-        </div>
+        {SUPPORT_EMAIL ? (
+          <a
+            className="settings-link auth-panel__danger-link"
+            href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(text.authDeleteAccountEmailSubject)}&body=${encodeURIComponent(deleteRequestBody)}`}
+          >
+            {text.authDeleteAccountButton}
+          </a>
+        ) : (
+          <button
+            type="button"
+            className="settings-link auth-panel__danger-link"
+            disabled
+            title={text.authDeleteAccountUnavailable}
+          >
+            {text.authDeleteAccountButton}
+          </button>
+        )}
       </div>
     );
   }
