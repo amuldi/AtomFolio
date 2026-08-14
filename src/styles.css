@@ -3821,6 +3821,48 @@ body::after {
   white-space: nowrap;
 }
 
+/* Real toggle (not just a label) for which currency the 매수가 number is being typed in — only
+   shown for a foreign (USD-native) holding, where a Korean user typing a 원 amount into an
+   ostensibly-USD field is a real, observed failure mode (see the JSX comment above this control's
+   usage for the exact case that surfaced it). */
+.tool-drawer__manual-field-currency-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 0.1rem;
+  border-radius: 999px;
+  background: rgba(var(--frame-ink-a), 0.06);
+}
+
+.tool-drawer__manual-field-currency-toggle button {
+  padding: 0.08rem 0.42rem;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(var(--frame-ink-c), 0.5);
+  font-family: var(--ui-font);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.tool-drawer__manual-field-currency-toggle button.is-active {
+  background: rgba(var(--frame-ink-a), 0.16);
+  color: rgba(var(--frame-ink-a), 0.92);
+}
+
+/* Live "≈ $X" preview when the user has switched entry to 원 for a foreign holding — confirms the
+   conversion actually happened, since the number they typed and the number that gets stored/used
+   for the return% calc are now two different figures. */
+.tool-drawer__manual-field-hint {
+  margin-top: 0.2rem;
+  color: rgba(var(--frame-ink-secondary), 0.5);
+  font-family: var(--ui-font);
+  font-size: 0.6rem;
+  font-weight: 560;
+}
+
 .tool-drawer__manual-field input,
 .tool-drawer__manual-field select {
   min-width: 0;

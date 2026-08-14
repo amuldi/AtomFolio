@@ -2635,6 +2635,29 @@ function resolveManualBuyPriceCurrency(ticker, marketData) {
   return normalizeCurrencyCode(marketData?.currency) || inferHoldingCurrency({ ticker }) || 'KRW';
 }
 
+// Converts whatever the user actually typed into 매수가 from the currency they entered it in
+// (entryCurrency — the toggle's current selection) into the security's own native currency
+// (nativeCurrency, from resolveManualBuyPriceCurrency) — because every downstream consumer of the
+// stored 매수가 field (calculateReturnRateFromBuyPrice, resolvePosition, the holdings list) assumes
+// it's already in the security's native currency, same as the live quote it gets compared against.
+// Doing this conversion once, right here, keeps that assumption true regardless of which currency
+// the user found easiest to type in — rather than teaching every one of those call sites about a
+// second "entry currency" that only manual entries even have.
+function resolveManualBuyPriceInNativeCurrency(rawValue, entryCurrency, nativeCurrency, fxRates) {
+  const trimmed = String(rawValue ?? '').trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+
+  const numeric = parseManualPriceValue(trimmed);
+  if (!Number.isFinite(numeric) || !entryCurrency || !nativeCurrency || entryCurrency === nativeCurrency) {
+    return trimmed;
+  }
+
+  const converted = convertCurrencyAmount(numeric, entryCurrency, nativeCurrency, fxRates);
+  return Number.isFinite(converted) ? String(converted) : trimmed;
+}
+
 function inferCurrencyFromText(value) {
   const text = String(value ?? '').trim();
 
@@ -3580,6 +3603,14 @@ function ToolSideDrawer({
   const [manualStockName, setManualStockName] = useState('');
   const [manualTicker, setManualTicker] = useState('');
   const [manualBuyPrice, setManualBuyPrice] = useState('');
+  // Which currency the *user* means by whatever's typed into 매수가 — null follows the resolved
+  // security's own currency (resolveManualBuyPriceCurrency), 'USD'/'KRW' is an explicit override
+  // from the toggle next to the field. Needed because a static "USD" label alone isn't enough:
+  // Korean users very commonly think of (and type) a foreign holding's buy price in 원 terms even
+  // when the field is labeled USD — see handleManualBuyPriceChange's own comment for the bug this
+  // caused (a real QQQM buy price of 370,000원 typed into a USD-labeled field, compared directly
+  // against the ~$300 native quote, produced a nonsensical -99.9% return).
+  const [manualBuyPriceCurrencyOverride, setManualBuyPriceCurrencyOverride] = useState(null);
   const [manualShares, setManualShares] = useState('');
   const [manualReturnRate, setManualReturnRate] = useState('');
   const [manualAssetClass, setManualAssetClass] = useState('주식');
@@ -3599,6 +3630,18 @@ function ToolSideDrawer({
     buyPrice: '',
     returnRate: '',
   });
+  // The security's actual trading currency (from a resolved live quote, or ticker-shape inference)
+  // vs. whichever currency the user has told the 매수가 field they're typing in right now (the
+  // override, or the same native currency by default). manualBuyPriceNative is what every
+  // calculation/storage path should use — see resolveManualBuyPriceInNativeCurrency's own comment.
+  const manualBuyPriceNativeCurrency = resolveManualBuyPriceCurrency(manualTicker, manualMarketData);
+  const manualBuyPriceEntryCurrency = manualBuyPriceCurrencyOverride || manualBuyPriceNativeCurrency;
+  const manualBuyPriceNative = resolveManualBuyPriceInNativeCurrency(
+    manualBuyPrice,
+    manualBuyPriceEntryCurrency,
+    manualBuyPriceNativeCurrency,
+    fxRates,
+  );
   // Command palette's "add" hands off here rather than reimplementing ticker lookup itself — see
   // App.jsx's openManualToolWithTicker. requestedAt (not just the ticker string) is what the
   // effect keys off of, so asking to add the same ticker twice in a row still seeds the field a
@@ -3615,6 +3658,7 @@ function ToolSideDrawer({
     setManualStockName('');
     setManualSuggestionLocked(false);
     setManualTicker(pendingManualTicker.ticker ?? '');
+    setManualBuyPriceCurrencyOverride(null);
   }, [pendingManualTicker]);
   const tools = [
     {
@@ -3836,8 +3880,9 @@ function ToolSideDrawer({
       return;
     }
 
+    // manualBuyPriceNative, not the raw manualBuyPrice — see resolveManualBuyPriceInNativeCurrency.
     const nextReturnRate = calculateReturnRateFromBuyPrice(
-      manualBuyPrice,
+      manualBuyPriceNative,
       manualMarketData?.latestPrice,
     );
 
@@ -3846,7 +3891,7 @@ function ToolSideDrawer({
     }
 
     setManualReturnRate((current) => (current === nextReturnRate ? current : nextReturnRate));
-  }, [manualBuyPrice, manualMarketData]);
+  }, [manualBuyPrice, manualBuyPriceNative, manualMarketData]);
 
   const handleResizePointerDown = useCallback(
     (event) => {
@@ -4055,12 +4100,17 @@ function ToolSideDrawer({
             : manualAccountName.trim() || '직접 입력 포트폴리오',
         stockName: resolveMarketDisplayName(manualMarketData) || manualStockName.trim() || manualTicker.trim(),
         ticker: manualMarketData?.symbol || manualTicker.trim() || '',
-        buyPrice: manualBuyPrice.trim() || formatMarketInputPrice(manualMarketData?.latestPrice),
+        // manualBuyPriceNative, not the raw manualBuyPrice — the stored 매수가 has to already be in
+        // the security's native currency for calculateReturnRateFromBuyPrice (and every later
+        // consumer of this field) to compare correctly against the native-currency live price. See
+        // resolveManualBuyPriceInNativeCurrency's own comment for why this conversion has to happen
+        // here rather than being left to whoever reads the field later.
+        buyPrice: manualBuyPriceNative || formatMarketInputPrice(manualMarketData?.latestPrice),
         shares: manualShares.trim(),
         returnRate:
           manualReturnRate.trim() ||
           calculateReturnRateFromBuyPrice(
-            manualBuyPrice.trim() || formatMarketInputPrice(manualMarketData?.latestPrice),
+            manualBuyPriceNative || formatMarketInputPrice(manualMarketData?.latestPrice),
             manualMarketData?.latestPrice,
           ),
         assetClass: manualAssetClass.trim() || '주식',
@@ -4082,7 +4132,7 @@ function ToolSideDrawer({
       language,
       manualAccountName,
       manualAssetClass,
-      manualBuyPrice,
+      manualBuyPriceNative,
       manualMarketData,
       manualReturnRate,
       manualShares,
@@ -4094,6 +4144,7 @@ function ToolSideDrawer({
     setManualStockName('');
     setManualTicker('');
     setManualBuyPrice('');
+    setManualBuyPriceCurrencyOverride(null);
     setManualShares('');
     setManualReturnRate('');
     setManualAssetClass('주식');
@@ -4247,6 +4298,10 @@ function ToolSideDrawer({
       setManualStockName(resolveHoldingName(item));
       setManualTicker(resolveHoldingTicker(item));
       setManualSuggestionLocked(true);
+      // The stored value is already in the security's native currency (every write path funnels
+      // through resolveManualBuyPriceInNativeCurrency now) — no override here, so the field starts
+      // out following the resolved native currency, matching what's actually in the value below.
+      setManualBuyPriceCurrencyOverride(null);
       setManualBuyPrice(resolveHoldingMetric(item, ['매수가', 'buyPrice', 'purchasePrice']));
       setManualShares(resolveHoldingMetric(item, ['보유수량', 'shares', 'quantity']));
       setManualReturnRate(
@@ -4399,8 +4454,20 @@ function ToolSideDrawer({
       const nextBuyPrice = event.target.value;
       setManualBuyPrice(nextBuyPrice);
 
-      const nextReturnRate = calculateReturnRateFromBuyPrice(
+      // Converts the just-typed value directly, rather than reading manualBuyPriceNative (which
+      // still reflects the *previous* render's manualBuyPrice — React state updates aren't visible
+      // until the next render, and waiting for that would show a stale/wrong return% for one
+      // keystroke every time). This is the exact bug this whole currency-entry mechanism exists to
+      // prevent: comparing an un-converted 원 amount against a native USD price produces a
+      // nonsensical return (e.g. 370,000 vs. a ~$300 quote reads as -99.9%).
+      const nextBuyPriceNative = resolveManualBuyPriceInNativeCurrency(
         nextBuyPrice,
+        manualBuyPriceEntryCurrency,
+        manualBuyPriceNativeCurrency,
+        fxRates,
+      );
+      const nextReturnRate = calculateReturnRateFromBuyPrice(
+        nextBuyPriceNative,
         manualMarketData?.latestPrice,
       );
 
@@ -4408,7 +4475,7 @@ function ToolSideDrawer({
         setManualReturnRate(nextReturnRate);
       }
     },
-    [manualMarketData],
+    [fxRates, manualBuyPriceEntryCurrency, manualBuyPriceNativeCurrency, manualMarketData],
   );
   const shouldShowManualSuggestions =
     !manualSuggestionLocked &&
@@ -4557,29 +4624,55 @@ function ToolSideDrawer({
           />
         </label>
         <label className="tool-drawer__manual-field">
-          {/* Explicit unit, not a bare number field — the manual buy-price input used to give no
-              signal at all about which currency to type in, so a foreign stock's price could
-              silently be entered as a KRW-scale number and corrupt every downstream 수익률/
-              평가손익 calculation that compares it against the (USD) live price. */}
+          {/* Explicit, *switchable* unit — a static "USD" label alone wasn't enough: a Korean user
+              buying a foreign stock very commonly thinks of (and wants to type) the price in 원
+              terms regardless of what the field is labeled, so a bare read-only badge just let the
+              same currency mismatch happen with extra steps (real case: 370,000 typed as a QQQM
+              buy price against a ~$300 native quote read as -99.9% return). For a foreign holding,
+              this is a real toggle — whichever currency the user picks is converted to the
+              security's native currency before it's ever compared against the live price or
+              stored (see resolveManualBuyPriceInNativeCurrency). A domestic (원-priced) holding has
+              no such ambiguity, so it stays a plain label. */}
           <span className="tool-drawer__manual-field-label-row">
             <span>{language === 'en' ? 'Buy Price' : '매수가'}</span>
-            <em className="tool-drawer__manual-field-currency">
-              {resolveManualBuyPriceCurrency(manualTicker, manualMarketData) === 'USD'
-                ? language === 'en'
-                  ? 'USD'
-                  : 'USD 달러'
-                : language === 'en'
-                  ? 'KRW'
-                  : '원'}
-            </em>
+            {manualBuyPriceNativeCurrency === 'USD' ? (
+              <span
+                className="tool-drawer__manual-field-currency-toggle"
+                role="group"
+                aria-label={language === 'en' ? 'Buy price currency' : '매수가 입력 통화'}
+              >
+                <button
+                  type="button"
+                  className={manualBuyPriceEntryCurrency === 'KRW' ? 'is-active' : ''}
+                  onClick={() => setManualBuyPriceCurrencyOverride('KRW')}
+                >
+                  {language === 'en' ? 'KRW' : '원'}
+                </button>
+                <button
+                  type="button"
+                  className={manualBuyPriceEntryCurrency === 'USD' ? 'is-active' : ''}
+                  onClick={() => setManualBuyPriceCurrencyOverride('USD')}
+                >
+                  USD
+                </button>
+              </span>
+            ) : (
+              <em className="tool-drawer__manual-field-currency">{language === 'en' ? 'KRW' : '원'}</em>
+            )}
           </span>
           <input
             type="text"
             inputMode="decimal"
             value={manualBuyPrice}
             onChange={handleManualBuyPriceChange}
-            placeholder={resolveManualBuyPriceCurrency(manualTicker, manualMarketData) === 'USD' ? '0.00' : '0'}
+            placeholder={manualBuyPriceEntryCurrency === 'USD' ? '0.00' : '0'}
           />
+          {manualBuyPriceNativeCurrency === 'USD' && manualBuyPriceEntryCurrency === 'KRW' && manualBuyPrice.trim() ? (
+            <small className="tool-drawer__manual-field-hint">
+              ≈ {formatCurrencyAmount(Number(manualBuyPriceNative), 'USD')}{' '}
+              {language === 'en' ? "(converted to the security's native USD)" : '(USD 환산)'}
+            </small>
+          ) : null}
         </label>
         <label className="tool-drawer__manual-field">
           <span>{language === 'en' ? 'Shares' : '보유수량'}</span>
