@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
 import { createPortfolioAnalyticsSummary, resolveHoldingPosition } from '../src/lib/portfolioAnalyticsSummary.js';
+import { buildFxRates } from '../src/utils/currency.js';
 
 const fixtureItems = [
   {
@@ -221,4 +222,72 @@ test('portfolio analytics summary totals reconcile with individual position prof
     Number(summary.totals.totalReturnRate.toFixed(4)),
     Number(((summary.totals.totalProfitAmount / summary.totals.totalBuyAmount) * 100).toFixed(4)),
   );
+});
+
+// Three end-to-end verification cases specified directly against resolveHoldingPosition, covering
+// every combination this currency model has to get right: a foreign holding bought in 원 terms, one
+// bought in its own native USD, and a plain domestic holding. Each asserts against the exact
+// figures worked out by hand for the case (not just internal self-consistency), so a future change
+// that makes the currency math wrong in a *new* way — not just reintroducing an old bug — still
+// gets caught.
+test('Case A — foreign stock, purchased in KRW terms, quoted in USD', () => {
+  const item = {
+    code: 'TEST-A',
+    currency: 'USD',
+    purchaseCurrency: 'KRW',
+    fields: [
+      { label: '매수가', value: '370000' },
+      { label: '보유수량', value: '6' },
+      { label: '현재가', value: '213.85' },
+    ],
+  };
+
+  const position = resolveHoldingPosition(item, { fxRates: buildFxRates(1410), baseCurrency: 'KRW' });
+
+  assert.equal(position.purchaseCurrency, 'KRW');
+  assert.equal(position.nativeCurrency, 'USD');
+  assert.equal(Math.round(position.marketValue), 1809171);
+  assert.equal(position.buyAmount, 2220000);
+  assert.equal(Math.round(position.profitAmount), -410829);
+  assert.equal(Math.round(position.returnRate * 10) / 10, -18.5);
+});
+
+test('Case B — foreign stock, purchased and quoted both in USD', () => {
+  const item = {
+    code: 'TEST-B',
+    currency: 'USD',
+    purchaseCurrency: 'USD',
+    fields: [
+      { label: '매수가', value: '263' },
+      { label: '보유수량', value: '6' },
+      { label: '현재가', value: '301.41' },
+    ],
+  };
+
+  const position = resolveHoldingPosition(item, { fxRates: buildFxRates(1410), baseCurrency: 'KRW' });
+
+  assert.equal(position.nativeBuyAmount, 1578);
+  assert.equal(Math.round(position.nativeMarketValue * 100) / 100, 1808.46);
+  assert.equal(Math.round(position.nativeProfitAmount * 100) / 100, 230.46);
+  assert.equal(position.buyAmount, 2224980);
+  assert.equal(Math.round(position.profitAmount), 324949);
+  assert.equal(Math.round(position.returnRate * 10) / 10, 14.6);
+});
+
+test('Case C — domestic stock, both sides in KRW', () => {
+  const item = {
+    code: '000001',
+    fields: [
+      { label: '매수가', value: '70000' },
+      { label: '보유수량', value: '10' },
+      { label: '현재가', value: '80500' },
+    ],
+  };
+
+  const position = resolveHoldingPosition(item, { baseCurrency: 'KRW' });
+
+  assert.equal(position.buyAmount, 700000);
+  assert.equal(position.marketValue, 805000);
+  assert.equal(position.profitAmount, 105000);
+  assert.equal(position.returnRate, 15);
 });

@@ -4773,12 +4773,26 @@ body::after {
    Selector is compounded with its parent (rather than a bare `.tool-drawer__holding-main-native`)
    so it outweighs the older `.tool-drawer__holding-main em` rule further down this file, which
    would otherwise win the cascade on color/font-size for this element too (both target an `em`
-   under the same `.tool-drawer__holding-main` ancestor). */
-.tool-drawer__holding-main-metric .tool-drawer__holding-main-native {
+   under the same `.tool-drawer__holding-main` ancestor). Same rule serves both the 평가금액 side
+   (nested in .tool-drawer__holding-main-metric) and the 평가손익 side (nested in
+   .tool-drawer__holding-main-profit-group). */
+.tool-drawer__holding-main-metric .tool-drawer__holding-main-native,
+.tool-drawer__holding-main-profit-group .tool-drawer__holding-main-native {
   color: rgba(var(--frame-ink-secondary), 0.4);
   font-size: 0.6rem;
   font-style: normal;
   font-weight: 560;
+}
+
+/* Wraps the primary (KRW) 평가손익 and, for a same-currency foreign purchase, its native-currency
+   equivalent underneath — the profit-side counterpart to .tool-drawer__holding-main-metric on the
+   value side. Right-aligned (its own parent row is a space-between flex) so both numbers still
+   read as "the second column" the way a single <strong> used to. */
+.tool-drawer__holding-main-profit-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.04rem;
 }
 
 /* Same specificity note as .tool-drawer__holding-main-native above — compounded with its own
@@ -4925,6 +4939,19 @@ body::after {
 
 .tool-drawer__holding-metrics strong.is-down {
   color: var(--loss-color);
+}
+
+/* 보조손익 — the native-currency (e.g. USD) equivalent of 평가손익, shown under the primary KRW
+   figure for a same-currency foreign purchase (see resolvePosition's sameCurrencyPurchase). Forces
+   its own block/wrap regardless of the parent <strong>'s single-line ellipsis treatment, since this
+   is meant to read as a second line, not get clipped into the first. */
+.tool-drawer__holding-metrics-native {
+  display: block;
+  overflow: visible;
+  color: rgba(var(--frame-ink-secondary), 0.5);
+  font-size: 0.58rem;
+  font-weight: 560;
+  white-space: normal;
 }
 
 .tool-drawer__manual-editing {

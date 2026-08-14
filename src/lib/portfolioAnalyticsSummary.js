@@ -1,4 +1,9 @@
-import { buildFxRates, convertCurrencyAmount, inferHoldingCurrency } from '../utils/currency.js';
+import {
+  buildFxRates,
+  convertCurrencyAmount,
+  inferHoldingCurrency,
+  normalizeCurrencyCode,
+} from '../utils/currency.js';
 
 function normalizeText(value) {
   return String(value ?? '')
@@ -224,6 +229,24 @@ const FIELD_CANDIDATES = {
   weight: ['weight', 'allocation', 'ratio', 'portion', 'portfolio', '비중', '편입비', '구성비', '보유비중'],
   assetClass: ['assetclass', 'assettype', 'assetcategory', '자산구분', '자산군', '자산유형'],
   region: ['region', 'country', 'market', '지역', '국가', '시장'],
+  // The security's own trading currency (what 현재가/평가금액 are denominated in) — set from a
+  // resolved live quote's own currency, or an explicit CSV "통화" column.
+  currency: ['currency', 'ccy', '통화', '화폐'],
+  // Separate from the above on purpose: which currency the *매수가* figure was actually entered
+  // in, independent of what the security trades in. A user buying a US stock through a Korean
+  // brokerage very often knows (and wants to record) their real cost basis in 원 terms — forcing
+  // that into a synthetic USD-native number at entry time was the root of a real bug (see
+  // resolvePosition's own comment below). Falls back to the security's own currency when absent
+  // (old data, or a CSV/API path that's never set this), preserving prior behavior exactly.
+  purchaseCurrency: [
+    'purchasecurrency',
+    'buycurrency',
+    'costcurrency',
+    'entrycurrency',
+    '매수통화',
+    '매입통화',
+    '취득통화',
+  ],
 };
 
 function readWeight(item) {
@@ -332,55 +355,93 @@ function resolvePosition(item, index, { fxRates, baseCurrency } = {}) {
   // findFieldValueExcept, not the plain findFieldValue — profitAmount's own candidate list
   // includes bare '손익'/'수익', and Korean return-rate labels ('수익률', '손익률', '평가손익률')
   // all literally contain one of those as a substring, so the fuzzy second pass in findFieldValue
-  // was matching a *rate* field (e.g. "+15.04%") as if it were the *amount* field. That string
-  // parsed to a small number (15.04) which used to just look like a wrong-but-small figure — but
-  // once resolvePosition started converting profitAmount by the live FX rate (to fix the
-  // currency-mixing bug), the same mismatch multiplied that number by ~1,000+ into a wildly wrong,
-  // very-visible one. Reproduced directly: a QQQM holding's 수익률 field ("+15.04%") was being read
-  // as its 평가손익, then FX-converted, instead of the real profit ever being computed from
-  // marketValue - buyAmount at all.
+  // was matching a *rate* field (e.g. "+15.04%") as if it were the *amount* field.
   const explicitProfitAmount = parseNumber(
     findFieldValueExcept(item?.fields, FIELD_CANDIDATES.profitAmount, FIELD_CANDIDATES.returnRate),
   );
-  const returnRate = readReturnRate(item);
+  const storedReturnRate = readReturnRate(item);
 
-  const buyAmount =
+  const resolvedBaseCurrency = baseCurrency || 'KRW';
+  const resolvedFxRates = fxRates || buildFxRates();
+
+  // The security's own trading/quote currency — what currentPrice (and therefore marketValue)
+  // are always denominated in, since a live price only ever comes quoted in one currency.
+  const nativeCurrency = inferHoldingCurrency({
+    ...item,
+    currency: item?.currency,
+    marketCurrency: item?.marketCurrency,
+  });
+  // Which currency the *buyPrice* figure was actually entered in — a deliberately separate
+  // concept from nativeCurrency above. Falls back to nativeCurrency when no explicit
+  // purchaseCurrency is recorded, which is exactly every holding's data shape before this field
+  // existed — old data keeps behaving exactly as it did.
+  //
+  // This distinction is the fix for a real, reproduced bug: a manual QQQM buy price of 370,000
+  // (a real 원 cost basis) was being forced into a synthetic "370,000 USD" native figure at entry
+  // time, compared against a ~$300 live quote, and produced a nonsensical -99% return / -billions
+  // won "loss". Keeping the user's actual entry currency separate from the security's quote
+  // currency — and only ever comparing like-for-like amounts, never a raw number assumed to
+  // already be in whichever currency happens to be convenient — is what prevents that.
+  const purchaseCurrency =
+    normalizeCurrencyCode(
+      item?.purchaseCurrency ?? findFieldValue(item?.fields, FIELD_CANDIDATES.purchaseCurrency),
+    ) || nativeCurrency;
+  const convertTo = (value, fromCurrency) =>
+    Number.isFinite(value)
+      ? convertCurrencyAmount(value, fromCurrency, resolvedBaseCurrency, resolvedFxRates)
+      : null;
+
+  // 매입금액 — in whichever currency was actually paid.
+  const buyAmountInPurchaseCurrency =
     explicitBuyAmount ??
     (Number.isFinite(buyPrice) && buyPrice > 0 && Number.isFinite(shares) && shares > 0
       ? buyPrice * shares
       : null);
-  const marketValue =
+  // 평가금액 — always in the security's own native/quote currency.
+  const marketValueInNativeCurrency =
     explicitMarketValue ??
     (Number.isFinite(currentPrice) && currentPrice > 0 && Number.isFinite(shares) && shares > 0
       ? currentPrice * shares
-      : null) ??
-    (Number.isFinite(buyAmount) && buyAmount > 0 && Number.isFinite(returnRate)
-      ? buyAmount * (1 + returnRate / 100)
+      : null);
+
+  const buyAmount = convertTo(buyAmountInPurchaseCurrency, purchaseCurrency);
+  const marketValue =
+    convertTo(marketValueInNativeCurrency, nativeCurrency) ??
+    // Only reachable when there's no live price *and* no explicit market value at all (e.g. a
+    // CSV row that only ever had a 수익률 column) — derives an approximate KRW market value from
+    // the buy amount and the stored rate rather than leaving it at null.
+    (Number.isFinite(buyAmount) && buyAmount > 0 && Number.isFinite(storedReturnRate)
+      ? buyAmount * (1 + storedReturnRate / 100)
       : null);
   const profitAmount =
-    explicitProfitAmount ??
+    (Number.isFinite(explicitProfitAmount) ? convertTo(explicitProfitAmount, nativeCurrency) : null) ??
     (Number.isFinite(marketValue) && Number.isFinite(buyAmount) ? marketValue - buyAmount : null);
+
+  // A same-currency purchase (bought and quoted in the same currency — the common case: a US
+  // stock bought and priced in USD, a KR stock bought and priced in KRW) has a return% that's
+  // completely exchange-rate-independent, since the currency unit cancels out of the ratio —
+  // compute it directly in that native currency rather than routing it through a KRW conversion
+  // that would otherwise fold today's FX rate into a number that has nothing to do with it.
+  // A cross-currency purchase (a real 원-denominated cost basis for a USD-quoted stock, or vice
+  // versa) has no shared native unit to compare in at all — its % necessarily reflects both the
+  // security's own move *and* USD/KRW's move since purchase, which is the financially correct
+  // way to report a real return in that situation, not an approximation to avoid.
+  const sameCurrencyPurchase = purchaseCurrency === nativeCurrency;
+  const nativeProfitAmount =
+    sameCurrencyPurchase &&
+    Number.isFinite(marketValueInNativeCurrency) &&
+    Number.isFinite(buyAmountInPurchaseCurrency)
+      ? marketValueInNativeCurrency - buyAmountInPurchaseCurrency
+      : null;
+  // Computed from actual amounts whenever possible — a stored/typed 수익률 string is only ever
+  // the last resort, for rows where no buy/current price pair exists to compute one from at all
+  // (e.g. a daily-snapshot CSV row that only ever carried a percentage).
   const computedReturnRate =
-    Number.isFinite(returnRate)
-      ? returnRate
+    sameCurrencyPurchase && Number.isFinite(nativeProfitAmount) && buyAmountInPurchaseCurrency > 0
+      ? (nativeProfitAmount / buyAmountInPurchaseCurrency) * 100
       : Number.isFinite(profitAmount) && Number.isFinite(buyAmount) && buyAmount > 0
         ? (profitAmount / buyAmount) * 100
-        : null;
-
-  // buyAmount/marketValue/profitAmount above are in whatever currency this holding's own
-  // buyPrice/currentPrice/explicit fields were denominated in (nativeCurrency) — a foreign
-  // holding's numbers are still in USD at this point. Everything that gets summed *across*
-  // positions (totals, weights, group-by-currency-blind buckets) has to be converted to one
-  // common baseCurrency first, or a $1,600 USD position silently adds to a ₩700,000 KRW position
-  // as if both were the same unit. The native (unconverted) figures are kept alongside the
-  // converted ones so a holding-level UI can still show "USD 평가금액" as secondary detail.
-  const nativeCurrency = inferHoldingCurrency({ ...item, currency: item?.currency, marketCurrency: item?.marketCurrency });
-  const resolvedBaseCurrency = baseCurrency || 'KRW';
-  const resolvedFxRates = fxRates || buildFxRates();
-  const convert = (value) =>
-    Number.isFinite(value)
-      ? convertCurrencyAmount(value, nativeCurrency, resolvedBaseCurrency, resolvedFxRates)
-      : null;
+        : storedReturnRate;
 
   return {
     id: item?.id ?? item?.code ?? item?.label ?? `position-${index + 1}`,
@@ -389,12 +450,15 @@ function resolvePosition(item, index, { fxRates, baseCurrency } = {}) {
     item,
     currency: resolvedBaseCurrency,
     nativeCurrency,
-    nativeBuyAmount: buyAmount,
-    nativeMarketValue: marketValue,
-    nativeProfitAmount: profitAmount,
-    buyAmount: convert(buyAmount),
-    marketValue: convert(marketValue),
-    profitAmount: convert(profitAmount),
+    purchaseCurrency,
+    // Only populated for a same-currency purchase — see sameCurrencyPurchase's own comment for
+    // why a cross-currency one has no FX-independent "native buy/profit" to show.
+    nativeBuyAmount: sameCurrencyPurchase ? buyAmountInPurchaseCurrency : null,
+    nativeMarketValue: marketValueInNativeCurrency,
+    nativeProfitAmount,
+    buyAmount,
+    marketValue,
+    profitAmount,
     returnRate: computedReturnRate,
     explicitWeight: readWeight(item),
     assetClass: readGroupLabel(item, 'assetClass', FIELD_CANDIDATES.assetClass),
@@ -676,6 +740,7 @@ export function createPortfolioAnalyticsSummary(items = [], timelineItems = [], 
       profitAmount: position.profitAmount,
       currency: position.currency,
       nativeCurrency: position.nativeCurrency,
+      purchaseCurrency: position.purchaseCurrency,
       nativeBuyAmount: position.nativeBuyAmount,
       nativeMarketValue: position.nativeMarketValue,
       nativeProfitAmount: position.nativeProfitAmount,
