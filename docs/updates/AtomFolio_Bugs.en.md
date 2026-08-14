@@ -104,6 +104,18 @@ Not app-code bugs, but worth recording to avoid repeating them.
   the file was deleted immediately; the process later switched to hiding unrelated apps via
   `System Events` first, then capturing only a specific region with `screencapture -R`. Menu bar
   app screenshots eventually moved to being captured by the user directly.
+- **Production (`atomfolio.vercel.app`) hadn't redeployed in 80 days (found 2026-08-14)**: the
+  Vercel project was never connected to the GitHub repo via Git integration, so pushing to `main`
+  never triggered an auto-deploy — the last production deployment was stuck on May 26, meaning
+  every commit from July 11 through August 13 (the WebGL rewrite, the menu bar app, Clerk auth, the
+  KIS quote provider, the command palette — effectively most of this changelog) was live in the
+  repo but never live on the actual site. Fixed by manually deploying the current `main` with
+  `npx vercel --prod` and re-pointing `atomfolio.vercel.app` at the new deployment with
+  `vercel alias set`. To prevent a repeat, whether to connect Vercel's Git integration
+  (`vercel git connect`) still needs to be discussed with the user — not connected yet. Also
+  surfaced along the way: `/api/health` reports `portfolioStore.driver: "memory"`,
+  `databaseConfigured: false`, meaning production is running on in-memory storage rather than
+  Postgres (Neon) — a separate, still-open issue.
 
 ## See also
 

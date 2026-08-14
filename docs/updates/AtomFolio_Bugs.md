@@ -98,6 +98,15 @@
   카카오톡/다른 프로젝트 창까지 같이 찍는 사고가 여러 번 있었음. 매번 즉시 삭제하고, 이후
   `System Events`로 관련 없는 앱을 잠깐 숨긴 뒤 특정 영역만 `screencapture -R`으로 캡처하는
   방식으로 전환. 최종적으로는 메뉴바 앱 스크린샷은 사용자가 직접 촬영하는 것으로 정리됨.
+- **프로덕션 사이트(`atomfolio.vercel.app`)가 80일간 재배포 안 됨 (2026-08-14 발견)**: Vercel
+  프로젝트가 GitHub 저장소와 Git 연동이 안 되어 있어서, `main`에 푸시해도 자동 배포가 걸리지
+  않음 — 마지막 프로덕션 배포가 5월 26일에서 멈춰 있었고, 그 사이의 7월 11일~8월 13일 커밋
+  (WebGL 전환, 메뉴바 앱, Clerk 인증, KIS 시세, 명령 팔레트 등 사실상 이 changelog의 대부분)이
+  실제 사이트에는 하나도 반영되지 않은 상태였음. `npx vercel --prod`로 최신 `main`을 수동
+  배포하고, `vercel alias set`으로 `atomfolio.vercel.app`을 새 배포에 재연결해 해결. 재발
+  방지를 위해 Vercel Git 연동(`vercel git connect`) 여부를 사용자와 논의 필요 — 아직 연결 안 됨.
+  참고로 `/api/health` 확인 결과 `portfolioStore.driver: "memory"`, `databaseConfigured: false`로
+  나와, 프로덕션이 Postgres(Neon) 없이 메모리 저장소로 돌고 있는 것도 함께 확인됨(별도 이슈).
 
 ## 참고
 
