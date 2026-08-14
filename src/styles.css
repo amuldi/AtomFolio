@@ -8015,61 +8015,6 @@ body::after {
   }
 }
 
-/* Stacked directly below .command-palette-hint in the same top-right corner — always-visible
-   login state (guest vs. signed-in) so a user never has to open settings just to find out where
-   their data lives. Clicking opens the settings panel, which already hosts the full account UI. */
-.auth-status-chip {
-  position: fixed;
-  top: 2.7rem;
-  right: 1.1rem;
-  z-index: var(--z-view-toggle);
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.34rem 0.7rem;
-  border: 1px solid rgba(var(--frame-hairline), 0.12);
-  border-radius: 999px;
-  background: rgba(var(--frame-surface), 0.7);
-  backdrop-filter: blur(8px);
-  color: rgba(var(--frame-ink-secondary), 0.68);
-  font-family: var(--ui-font);
-  font-size: 0.72rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 140ms ease, color 140ms ease;
-}
-
-.auth-status-chip:hover {
-  background: rgba(var(--frame-ink-a), 0.08);
-  color: rgba(var(--frame-ink-b), 0.9);
-}
-
-.auth-status-chip__dot {
-  width: 0.44rem;
-  height: 0.44rem;
-  border-radius: 50%;
-  background: rgba(var(--frame-ink-secondary), 0.4);
-  flex-shrink: 0;
-}
-
-.auth-status-chip.is-signed-in .auth-status-chip__dot {
-  background: #3ddc84;
-}
-
-.auth-status-chip.is-guest .auth-status-chip__dot {
-  background: #e0a83d;
-}
-
-@media (max-width: 640px) {
-  .auth-status-chip {
-    padding: 0.34rem 0.5rem;
-  }
-
-  .auth-status-chip__label {
-    display: none;
-  }
-}
-
 .view-mode-overlay {
   position: fixed;
   inset: 0;

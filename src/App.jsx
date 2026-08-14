@@ -277,10 +277,6 @@ const UI_TEXT = {
     authDeleteAccountUnavailable: '문의처가 아직 설정되지 않았습니다.',
     authDeleteAccountEmailSubject: 'AtomFolio 계정 및 데이터 삭제 요청',
     authDeleteAccountEmailBody: '아래 계정/워크스페이스의 데이터 삭제를 요청합니다.',
-    authStatusChipGuest: '게스트 모드',
-    authStatusChipSignedIn: '로그인됨',
-    authStatusChipAria: '로그인 상태 확인 및 계정 설정 열기',
-    authGuestModeHint: '데이터가 이 브라우저에만 저장돼요. 로그인하면 계정에 안전하게 보관됩니다.',
     uploadAria: '투자 데이터 업로드',
     uploadHint: '투자 데이터를 업로드 해주세요',
     uploadDragHint: 'CSV 파일을 여기에 끌어다 놓으세요',
@@ -423,10 +419,6 @@ const UI_TEXT = {
     authDeleteAccountUnavailable: 'No contact channel is configured yet.',
     authDeleteAccountEmailSubject: 'AtomFolio account & data deletion request',
     authDeleteAccountEmailBody: 'Requesting deletion of data for the account/workspace below.',
-    authStatusChipGuest: 'Guest mode',
-    authStatusChipSignedIn: 'Signed in',
-    authStatusChipAria: 'Check sign-in status and open account settings',
-    authGuestModeHint: 'Your data is only stored in this browser. Sign in to keep it safe in your account.',
     uploadAria: 'Upload investment data',
     uploadHint: 'Please upload your investment data',
     uploadDragHint: 'Drop CSV files here',
@@ -8294,29 +8286,6 @@ export default function App() {
           ⌘K
         </span>
       </button>
-
-      {/* Always-visible login state — previously this was only discoverable by opening settings.
-          Financial data tied to "just a browser" vs. an actual account is exactly the kind of
-          state a user shouldn't have to go hunting for. Clicking it opens the same settings panel
-          (which already hosts the full AuthPanel/workspace UI) rather than duplicating a second
-          login form here. */}
-      {CLERK_PUBLISHABLE_KEY ? (
-        <button
-          type="button"
-          className={`auth-status-chip${workspaceAuthenticated ? ' is-signed-in' : ' is-guest'}`}
-          aria-label={text.authStatusChipAria}
-          title={workspaceAuthenticated ? workspaceUserLabel : text.authGuestModeHint}
-          onClick={() => {
-            noteInteraction();
-            handleDrawerToolSelect('settings');
-          }}
-        >
-          <span className="auth-status-chip__dot" aria-hidden="true" />
-          <span className="auth-status-chip__label">
-            {workspaceAuthenticated ? text.authStatusChipSignedIn : text.authStatusChipGuest}
-          </span>
-        </button>
-      ) : null}
 
       <CommandPalette
         open={commandPaletteOpen}

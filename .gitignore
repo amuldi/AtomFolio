@@ -19,3 +19,10 @@ IMG_0906.HEIC.png
 docs/internal/
 docs/proposal/AtomFolio+_Proposal.pdf
 .vercel
+
+# Local AI-agent tooling (Claude Code settings, auto-installed skill references from
+# `vercel integration add`) — not part of the app, machine-local only.
+.claude/settings.local.json
+.claude/skills/
+.agents/
+skills-lock.json
