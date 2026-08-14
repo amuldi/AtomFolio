@@ -2663,6 +2663,98 @@ body::after {
   white-space: nowrap;
 }
 
+/* Click-to-copy workspace ID. Looks and behaves like a real interactive control (pointer cursor,
+   hover state, an icon that reads as "copyable") rather than plain text a user has to
+   triple-click/select-and-copy themselves. */
+.settings-workspace__copy {
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+  gap: 0.34rem;
+  max-width: 100%;
+  padding: 0.14rem 0.4rem;
+  border: 1px solid rgba(var(--frame-hairline), 0.12);
+  border-radius: 7px;
+  background: rgba(var(--frame-ink-a), 0.04);
+  color: rgba(var(--frame-ink-a), 0.82);
+  font-family: var(--ui-font);
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.settings-workspace__copy:hover {
+  border-color: rgba(var(--frame-ink-a), 0.28);
+  background: rgba(var(--frame-ink-a), 0.09);
+}
+
+.settings-workspace__copy:focus-visible {
+  outline: 2px solid rgba(var(--frame-ink-a), 0.4);
+  outline-offset: 2px;
+}
+
+.settings-workspace__copy-value {
+  overflow: hidden;
+  font-size: 0.68rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-workspace__copy-icon {
+  flex: 0 0 auto;
+  width: 0.78rem;
+  height: 0.78rem;
+  color: rgba(var(--frame-ink-a), 0.48);
+}
+
+.settings-workspace__copy:hover .settings-workspace__copy-icon {
+  color: rgba(var(--frame-ink-a), 0.7);
+}
+
+.settings-workspace__copy.is-copied .settings-workspace__copy-icon {
+  color: var(--profit-color-strong);
+}
+
+.settings-workspace__copy.is-failed .settings-workspace__copy-icon {
+  color: var(--loss-color-strong);
+}
+
+/* "복사됨" / "Copied" feedback — a small pill that pops in above the control instead of a
+   page-level toast, so it reads as feedback about *this* value specifically. role="status" +
+   aria-live means it's announced even though it's positioned off to the side visually. */
+.settings-workspace__copy-feedback {
+  position: absolute;
+  bottom: calc(100% + 0.3rem);
+  left: 0;
+  padding: 0.16rem 0.48rem;
+  border-radius: 999px;
+  background: rgba(var(--frame-void), 0.92);
+  color: rgba(var(--frame-white), 0.95);
+  font-size: 0.6rem;
+  font-weight: 680;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(2px);
+  pointer-events: none;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.settings-workspace__copy.is-copied .settings-workspace__copy-feedback,
+.settings-workspace__copy.is-failed .settings-workspace__copy-feedback {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.settings-workspace__copy.is-copied .settings-workspace__copy-feedback {
+  background: var(--profit-bg);
+  color: var(--profit-color-strong);
+}
+
+.settings-workspace__copy.is-failed .settings-workspace__copy-feedback {
+  background: var(--loss-bg);
+  color: var(--loss-color-strong);
+}
+
 .settings-action {
   appearance: none;
   width: 100%;
@@ -3704,6 +3796,31 @@ body::after {
   white-space: nowrap;
 }
 
+.tool-drawer__manual-field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  overflow: visible;
+}
+
+/* Currency unit badge next to the 매수가 label — makes explicit which currency the number below
+   is meant to be typed in (USD for a foreign holding, 원 otherwise), instead of a bare unlabeled
+   number field a user could fill in with either currency's scale by mistake. */
+.tool-drawer__manual-field-currency {
+  flex: 0 0 auto;
+  padding: 0.08rem 0.36rem;
+  border-radius: 999px;
+  background: rgba(var(--frame-ink-a), 0.08);
+  color: rgba(var(--frame-ink-c), 0.7);
+  font-family: var(--ui-font);
+  font-size: 0.58rem;
+  font-weight: 720;
+  font-style: normal;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
 .tool-drawer__manual-field input,
 .tool-drawer__manual-field select {
   min-width: 0;
@@ -4559,9 +4676,9 @@ body::after {
 
 .tool-drawer__holding-main {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.54rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.3rem;
   min-width: 0;
   padding: 0.56rem 0.62rem;
   border: none;
@@ -4570,10 +4687,75 @@ body::after {
   text-align: left;
 }
 
-.tool-drawer__holding-main span {
+.tool-drawer__holding-main-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.54rem;
+  min-width: 0;
+}
+
+.tool-drawer__holding-main-name {
   display: grid;
   gap: 0.08rem;
   min-width: 0;
+}
+
+/* 평가금액/평가손익 row — added so a holding's value and gain/loss are visible directly in the
+   list instead of only inside the edit panel (previously this row showed nothing beyond
+   return %). Muted/smaller than the name row above it since it's supporting detail, not the
+   primary identifier. */
+.tool-drawer__holding-main-row--metrics {
+  padding-top: 0.22rem;
+  border-top: 1px solid rgba(var(--frame-hairline), 0.06);
+}
+
+.tool-drawer__holding-main-metric {
+  display: flex;
+  align-items: baseline;
+  gap: 0.32rem;
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(var(--frame-ink-secondary), 0.6);
+  font-family: var(--ui-font);
+  font-size: 0.64rem;
+  font-weight: 660;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Secondary native-currency amount shown alongside a foreign holding's KRW-converted value, e.g.
+   "₩6,325,000 ($4,635.00)" — the KRW figure is what everything else in the app totals up, the USD
+   figure is what actually printed on the brokerage statement.
+   Selector is compounded with its parent (rather than a bare `.tool-drawer__holding-main-native`)
+   so it outweighs the older `.tool-drawer__holding-main em` rule further down this file, which
+   would otherwise win the cascade on color/font-size for this element too (both target an `em`
+   under the same `.tool-drawer__holding-main` ancestor). */
+.tool-drawer__holding-main-metric .tool-drawer__holding-main-native {
+  color: rgba(var(--frame-ink-secondary), 0.4);
+  font-size: 0.6rem;
+  font-style: normal;
+  font-weight: 560;
+}
+
+/* Same specificity note as .tool-drawer__holding-main-native above — compounded with its own
+   parent row so it outweighs `.tool-drawer__holding-main strong` further down. */
+.tool-drawer__holding-main-row .tool-drawer__holding-main-profit {
+  flex: 0 0 auto;
+  color: rgba(var(--frame-ink-b), 0.78);
+  font-family: var(--ui-font);
+  font-size: 0.66rem;
+  font-weight: 740;
+  letter-spacing: 0;
+}
+
+.tool-drawer__holding-main-row .tool-drawer__holding-main-profit.is-positive {
+  color: var(--profit-color-strong);
+}
+
+.tool-drawer__holding-main-row .tool-drawer__holding-main-profit.is-negative {
+  color: var(--loss-color-strong);
 }
 
 .tool-drawer__holding-main strong,

@@ -8,7 +8,7 @@ import {
   shouldFallbackToLocalTimeline as shouldFallbackToLocalTimelineShared,
 } from './lib/portfolioIngestionCore.js';
 import { createPortfolioScorecard } from './lib/portfolioScoring.js';
-import { createPortfolioAnalyticsSummary } from './lib/portfolioAnalyticsSummary.js';
+import { createPortfolioAnalyticsSummary, resolveHoldingPosition } from './lib/portfolioAnalyticsSummary.js';
 import { enrichPortfolioItem, resolveExactSecurityReferenceCode } from './lib/securityKnowledge.js';
 import { useAtomTransition } from './utils/useAtomTransition.js';
 import {
@@ -54,6 +54,14 @@ import {
 } from './utils/scene.js';
 import { isPortfolioAtomItem, explainExcludedPortfolioAtomItem } from './utils/portfolioItems.js';
 import {
+  DEFAULT_USD_KRW_RATE,
+  buildFxRates,
+  convertCurrencyAmount,
+  formatCurrencyAmount,
+  inferHoldingCurrency,
+  normalizeCurrencyCode as normalizeCurrencyCodeShared,
+} from './utils/currency.js';
+import {
   AtomSketch as AtomSketchView,
   PortfolioPreviewAtom as PortfolioPreviewAtomView,
 } from './components/atom/index.jsx';
@@ -64,7 +72,6 @@ import DigitalTwinPanel from './components/panels/DigitalTwinPanel.jsx';
 import { AuthPanel } from './components/auth/AuthPanel.jsx';
 import { AtomDetailPanel } from './components/panels/AtomDetailPanel.jsx';
 import { CommandPalette } from './components/command-palette/CommandPalette.jsx';
-import { HoldingsManagementTable } from './components/management-table/HoldingsManagementTable.jsx';
 import { AtomCanvas } from './scene/index.js';
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? '';
@@ -93,11 +100,10 @@ const ASSET_CLASS_MODE_OPTIONS = ['auto', 'preferOriginal'];
 const ALLOCATION_WEIGHT_MODE_OPTIONS = ['auto', 'stock', 'assetClass', 'account'];
 const SCORE_WEIGHT_PRESET_OPTIONS = ['balanced', 'returnFocus', 'longTermReturnFocus', 'stabilityFocus'];
 const BASE_CURRENCY_OPTIONS = ['KRW', 'USD'];
-const DEFAULT_USD_KRW_RATE = 1365;
-const DEFAULT_DISPLAY_FX_RATES = {
-  USD: { KRW: DEFAULT_USD_KRW_RATE },
-  KRW: { USD: 1 / DEFAULT_USD_KRW_RATE },
-};
+// DEFAULT_USD_KRW_RATE now comes from utils/currency.js — the one shared constant every currency
+// conversion in the app (this file's own display formatting and
+// lib/portfolioAnalyticsSummary.js's totals math) is built on top of.
+const DEFAULT_DISPLAY_FX_RATES = buildFxRates(DEFAULT_USD_KRW_RATE);
 const DATE_BASIS_OPTIONS = ['kst', 'local'];
 const SETTING_TOGGLE_OPTIONS = ['on', 'off'];
 const STORAGE_KEYS = {
@@ -227,6 +233,9 @@ const UI_TEXT = {
     workspaceStatusGuest: '게스트',
     workspaceStatusSignedIn: '로그인됨',
     workspaceIdLabel: 'Workspace',
+    workspaceIdCopyHint: '클릭하여 복사',
+    workspaceIdCopied: '복사됨',
+    workspaceIdCopyFailed: '복사 실패 — 직접 선택해 복사해 주세요',
     workspaceUserLabel: '사용자',
     workspaceSyncLabel: '저장 동기화',
     workspaceSyncIdle: '대기',
@@ -353,6 +362,9 @@ const UI_TEXT = {
     workspaceStatusGuest: 'Guest',
     workspaceStatusSignedIn: 'Signed in',
     workspaceIdLabel: 'Workspace',
+    workspaceIdCopyHint: 'Click to copy',
+    workspaceIdCopied: 'Copied',
+    workspaceIdCopyFailed: 'Copy failed — select and copy manually',
     workspaceUserLabel: 'User',
     workspaceSyncLabel: 'Save Sync',
     workspaceSyncIdle: 'Idle',
@@ -2393,20 +2405,6 @@ function SketchNewsIcon() {
   );
 }
 
-// A plain magnifying glass, not another hand-drawn multi-path sketch like its rail siblings above
-// — "look something up" is a much simpler idea than "a stack of accounts" or "a burst of nodes",
-// and a universally-read glyph reads faster here than a bespoke shape would.
-function SketchLookupIcon() {
-  return (
-    <svg className="lookup-dock__icon" viewBox="0 0 48 48" aria-hidden="true">
-      <circle className="lookup-dock__soft" cx="20.5" cy="19.5" r="10.2" />
-      <circle className="lookup-dock__main" cx="20" cy="19" r="9.6" />
-      <path className="lookup-dock__soft" d="M27.4 27.4L36.8 36.8" />
-      <path className="lookup-dock__main" d="M27 27L36.2 36.2" />
-    </svg>
-  );
-}
-
 function summarizePortfolioEntryAccounts(entry, language) {
   const sourceItems = (entry?.timelineItems?.length ? entry.timelineItems : entry?.items) ?? [];
   const labels = [];
@@ -2619,10 +2617,22 @@ function resolveMarketDisplayName(data) {
   return String(data?.displayName ?? data?.name ?? data?.rawName ?? data?.symbol ?? '').trim();
 }
 
+// Thin wrappers kept under their original names (used all over this file) so every existing call
+// site stays untouched — the actual currency logic now lives in utils/currency.js, the one shared
+// standard both this file and lib/portfolioAnalyticsSummary.js build on, instead of each keeping
+// its own slightly-different copy.
 function normalizeCurrencyCode(value) {
-  const code = String(value ?? '').trim().toUpperCase();
+  return normalizeCurrencyCodeShared(value);
+}
 
-  return BASE_CURRENCY_OPTIONS.includes(code) ? code : '';
+// Resolves which currency the manual-entry "매수가" (buy price) field should be treated/labeled
+// as, so the input can show an explicit "USD"/"원" unit instead of leaving it ambiguous (the root
+// UX cause of the buy-price/live-price currency mismatch: a plain number field with no unit lets a
+// user type a KRW-scale number for a US stock without any signal that it should be USD). A resolved
+// live quote's own currency wins when available; otherwise falls back to the same ticker-shape
+// inference used for portfolio totals, so the label is already correct before a quote even loads.
+function resolveManualBuyPriceCurrency(ticker, marketData) {
+  return normalizeCurrencyCode(marketData?.currency) || inferHoldingCurrency({ ticker }) || 'KRW';
 }
 
 function inferCurrencyFromText(value) {
@@ -2646,12 +2656,7 @@ function normalizeUsdKrwRate(value) {
 }
 
 function buildDisplayFxRates(usdKrwRate = DEFAULT_USD_KRW_RATE) {
-  const rate = normalizeUsdKrwRate(usdKrwRate);
-
-  return {
-    USD: { KRW: rate },
-    KRW: { USD: 1 / rate },
-  };
+  return buildFxRates(normalizeUsdKrwRate(usdKrwRate));
 }
 
 function convertMarketValueForBase(value, sourceCurrency, baseCurrency, fxRates = DEFAULT_DISPLAY_FX_RATES) {
@@ -2673,7 +2678,7 @@ function convertMarketValueForBase(value, sourceCurrency, baseCurrency, fxRates 
     return { value: numeric, currency: source };
   }
 
-  return { value: numeric * rate, currency: target };
+  return { value: convertCurrencyAmount(numeric, source, target, fxRates), currency: target };
 }
 
 function formatMarketPriceForBase(value, sourceCurrency, baseCurrency, fxRates) {
@@ -3093,6 +3098,17 @@ function StockDetailCard({
     : '-';
   const buyPriceText = formatMoneyMetricForBase(buyPrice, sourceCurrency, baseCurrency, fxRates);
   const yesterdayChangeToneClass = getSignedValueToneClass(data?.changePercent);
+  // 평가금액/평가손익 — the two figures requirement 5 asks this card to always show. Uses the same
+  // resolveHoldingPosition the holdings list row and the 요약 totals are built from, so this card
+  // can never disagree with either of them about what a holding is worth.
+  const position = resolveHoldingPosition(item, { baseCurrency, fxRates });
+  const marketValueText = position.marketValue != null ? formatCurrencyAmount(position.marketValue, baseCurrency) : '-';
+  const profitAmountText =
+    position.profitAmount != null
+      ? `${position.profitAmount > 0 ? '+' : ''}${formatCurrencyAmount(position.profitAmount, baseCurrency)}`
+      : '-';
+  const profitToneClass = getSignedValueToneClass(position.profitAmount);
+  const isForeignHolding = position.nativeCurrency !== baseCurrency;
 
   return (
     <section className="tool-drawer__holding-detail">
@@ -3140,6 +3156,17 @@ function StockDetailCard({
         <div>
           <span>{language === 'en' ? 'Return' : '수익률'}</span>
           <strong className={returnRateToneClass}>{returnRate || '-'}</strong>
+        </div>
+        <div>
+          <span>
+            {language === 'en' ? 'Market value' : '평가금액'}
+            {isForeignHolding ? ` (${baseCurrency})` : ''}
+          </span>
+          <strong>{marketValueText}</strong>
+        </div>
+        <div>
+          <span>{language === 'en' ? 'Unrealized P/L' : '평가손익'}</span>
+          <strong className={profitToneClass}>{profitAmountText}</strong>
         </div>
       </div>
 
@@ -3563,21 +3590,6 @@ function ToolSideDrawer({
   const [manualMarketSuggestions, setManualMarketSuggestions] = useState([]);
   const [manualSuggestionStatus, setManualSuggestionStatus] = useState('idle');
   const [manualSuggestionLocked, setManualSuggestionLocked] = useState(false);
-  // Standalone stock lookup (Stage 4) — deliberately its own state, not a reuse of the manual*
-  // fields above. Those double as an in-progress "add to portfolio" draft (buy price, shares,
-  // asset class, the works); wiring lookup through the same state would mean typing a ticker here
-  // to just glance at its price could silently leave stray data sitting in that draft. Keeping
-  // them fully separate is what makes "never affects portfolio state" actually true rather than
-  // just true by convention.
-  const [lookupQuery, setLookupQuery] = useState('');
-  const [lookupSuggestions, setLookupSuggestions] = useState([]);
-  const [lookupSuggestionStatus, setLookupSuggestionStatus] = useState('idle');
-  const [lookupSuggestionLocked, setLookupSuggestionLocked] = useState(false);
-  const [lookupTicker, setLookupTicker] = useState('');
-  const [lookupMarketData, setLookupMarketData] = useState(null);
-  const [lookupMarketStatus, setLookupMarketStatus] = useState('idle');
-  const [lookupMarketError, setLookupMarketError] = useState('');
-  const lookupSuggestionRef = useRef(null);
   const [editingHolding, setEditingHolding] = useState(null);
   const [selectedHolding, setSelectedHolding] = useState(null);
   const manualSuggestionRef = useRef(null);
@@ -3620,14 +3632,6 @@ function ToolSideDrawer({
       icon: <SketchManualAccountIcon />,
       available: true,
       hidden: true,
-    },
-    {
-      // Its own rail icon, unlike 'manual' above — this one has no other entry point (no button
-      // inside another panel hands off to it), so it needs to be directly reachable.
-      key: 'lookup',
-      label: language === 'en' ? 'Stock Lookup' : '종목 조회',
-      icon: <SketchLookupIcon />,
-      available: true,
     },
     {
       key: 'overview',
@@ -3747,102 +3751,6 @@ function ToolSideDrawer({
       window.clearTimeout(timerId);
     };
   }, [manualStockName, manualSuggestionLocked, open, resolvedTool?.key]);
-
-  // Same suggestion-fetch shape as the manual-entry effect just above (same debounce, same
-  // Korean-name-length exception) — deliberately not shared as one parametrized effect, since the
-  // two are only accidentally identical today and diverging independently later (e.g. the manual
-  // one growing an asset-class filter) shouldn't require untangling a shared abstraction.
-  useEffect(() => {
-    const query = lookupQuery.trim();
-
-    if (
-      !open ||
-      resolvedTool?.key !== 'lookup' ||
-      lookupSuggestionLocked ||
-      (query.length < 2 && !/[가-힣]/.test(query))
-    ) {
-      setLookupSuggestions([]);
-      setLookupSuggestionStatus('idle');
-      return undefined;
-    }
-
-    const controller = new AbortController();
-    setLookupSuggestionStatus('loading');
-
-    const timerId = window.setTimeout(async () => {
-      try {
-        const suggestions = await fetchMarketSymbolSuggestions({
-          query,
-          limit: 8,
-          signal: controller.signal,
-        });
-
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        setLookupSuggestions(suggestions);
-        setLookupSuggestionStatus('ready');
-      } catch {
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        setLookupSuggestions([]);
-        setLookupSuggestionStatus('error');
-      }
-    }, 220);
-
-    return () => {
-      controller.abort();
-      window.clearTimeout(timerId);
-    };
-  }, [lookupQuery, lookupSuggestionLocked, open, resolvedTool?.key]);
-
-  // Fetches live price/chart data for whichever suggestion was selected — no draft-field
-  // side effects like the manual-entry version has (no buy price, no return rate, no asset class
-  // auto-fill): this is display-only, so there's nothing downstream of the fetch to update besides
-  // the fetch's own status/data/error, unlike applyMarketQuoteToDraft's job for the add-stock flow.
-  useEffect(() => {
-    const ticker = lookupTicker.trim();
-
-    if (!open || resolvedTool?.key !== 'lookup' || !ticker) {
-      setLookupMarketStatus('idle');
-      setLookupMarketError('');
-      setLookupMarketData(null);
-      return undefined;
-    }
-
-    const controller = new AbortController();
-    setLookupMarketStatus('loading');
-    setLookupMarketError('');
-    setLookupMarketData(null);
-
-    fetchLiveMarketData({ ticker, name: lookupQuery.trim(), signal: controller.signal })
-      .then((nextData) => {
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        setLookupMarketData(nextData);
-        setLookupMarketStatus('ready');
-      })
-      .catch((fetchError) => {
-        if (controller.signal.aborted || fetchError?.name === 'AbortError') {
-          return;
-        }
-
-        setLookupMarketData(null);
-        setLookupMarketStatus('error');
-        setLookupMarketError(
-          language === 'en' ? 'Could not load market data.' : '시세 정보를 가져오지 못했습니다.',
-        );
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, [language, lookupQuery, lookupTicker, open, resolvedTool?.key]);
 
   useEffect(() => {
     const ticker = manualTicker.trim();
@@ -4412,6 +4320,13 @@ function ToolSideDrawer({
           period: 'month',
           topN: 3,
           targetBucketWeights: DEFAULT_REBALANCE_TARGET_WEIGHTS,
+          // This comparison table is built before the user's live baseCurrency/usdKrwRate state
+          // exists in this component's render order, so it uses the same static default rate the
+          // rest of the app falls back to (DEFAULT_DISPLAY_FX_RATES) — still correctly converts a
+          // foreign holding into KRW before summing, just not live-rate-reactive like the main
+          // portfolioAnalyticsSummary memo below.
+          baseCurrency: 'KRW',
+          fxRates: DEFAULT_DISPLAY_FX_RATES,
         });
         const entryScorecard = createPortfolioScorecard(entryItems, language, {
           weightPreset: scoreWeightPreset,
@@ -4532,148 +4447,10 @@ function ToolSideDrawer({
     };
   }, [closeManualSuggestions, shouldShowManualSuggestions]);
 
-  const handleSelectLookupSuggestion = useCallback(
-    (suggestion) => {
-      if (!suggestion?.symbol) {
-        return;
-      }
-
-      onInteract?.();
-      setLookupSuggestionLocked(true);
-      setLookupQuery(suggestion.displayName || suggestion.name || suggestion.symbol);
-      setLookupTicker(suggestion.symbol);
-      setLookupSuggestions([]);
-      setLookupSuggestionStatus('idle');
-    },
-    [onInteract],
-  );
-  const handleLookupQueryChange = useCallback((event) => {
-    setLookupSuggestionLocked(false);
-    setLookupQuery(event.target.value);
-    // Clearing the field (or editing away from a locked-in selection) also clears the result —
-    // otherwise the last-fetched card would keep showing a price for a ticker the input no longer
-    // names, reading as if it were still live for whatever's currently typed.
-    setLookupTicker('');
-  }, []);
-  const shouldShowLookupSuggestions =
-    !lookupSuggestionLocked &&
-    (lookupQuery.trim().length >= 2 || /[가-힣]/.test(lookupQuery.trim())) &&
-    (lookupSuggestionStatus === 'loading' ||
-      lookupSuggestionStatus === 'ready' ||
-      lookupSuggestionStatus === 'error');
-  const closeLookupSuggestions = useCallback(() => {
-    setLookupSuggestionStatus('idle');
-  }, []);
-
-  useEffect(() => {
-    if (!shouldShowLookupSuggestions || typeof document === 'undefined') {
-      return undefined;
-    }
-
-    const handleDocumentPointerDown = (event) => {
-      if (lookupSuggestionRef.current?.contains(event.target)) {
-        return;
-      }
-
-      closeLookupSuggestions();
-    };
-    const handleDocumentKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        closeLookupSuggestions();
-      }
-    };
-
-    document.addEventListener('pointerdown', handleDocumentPointerDown, true);
-    document.addEventListener('keydown', handleDocumentKeyDown, true);
-
-    return () => {
-      document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
-      document.removeEventListener('keydown', handleDocumentKeyDown, true);
-    };
-  }, [closeLookupSuggestions, shouldShowLookupSuggestions]);
-
-  // Display-only — MarketLivePreview's own showApply=false hides the "apply to draft" button
-  // that the manual-entry flow uses it with, and nothing here ever calls onCreateManualAtom,
-  // onAppendManualHoldings, or any other portfolio-mutating callback. This panel reads live data
-  // and nothing more; there is no path from it back into a portfolio's actual holdings.
-  const renderLookupPanel = () => (
-    <section className="tool-drawer__lookup">
-      <div ref={lookupSuggestionRef} className="tool-drawer__manual-field tool-drawer__manual-field--suggest">
-        <span id="lookup-query-label">{language === 'en' ? 'Ticker or name' : '티커 또는 종목명'}</span>
-        <input
-          type="text"
-          value={lookupQuery}
-          onChange={handleLookupQueryChange}
-          placeholder={language === 'en' ? 'Apple, TIGER' : '예: 타이거, 애플'}
-          autoComplete="off"
-          aria-labelledby="lookup-query-label"
-          aria-autocomplete="list"
-          aria-expanded={shouldShowLookupSuggestions}
-        />
-        {shouldShowLookupSuggestions ? (
-          <div
-            className="tool-drawer__suggestions"
-            role="listbox"
-            aria-label={language === 'en' ? 'Stock suggestions' : '종목 검색 결과'}
-          >
-            {lookupSuggestions.length ? (
-              lookupSuggestions.map((suggestion) => (
-                <button
-                  key={suggestion.symbol}
-                  type="button"
-                  className="tool-drawer__suggestion"
-                  role="option"
-                  aria-selected={lookupTicker === suggestion.symbol}
-                  onClick={() => handleSelectLookupSuggestion(suggestion)}
-                >
-                  <span>
-                    <strong>{suggestion.displayName || suggestion.name || suggestion.symbol}</strong>
-                    <em>
-                      {[suggestion.exchangeName, suggestion.typeDisp].filter(Boolean).join(' · ') ||
-                        suggestion.source}
-                    </em>
-                  </span>
-                  <small>{suggestion.symbol}</small>
-                </button>
-              ))
-            ) : (
-              <p className="tool-drawer__suggestion-empty">
-                {lookupSuggestionStatus === 'loading'
-                  ? language === 'en'
-                    ? 'Searching...'
-                    : '검색 중...'
-                  : lookupSuggestionStatus === 'error'
-                    ? language === 'en'
-                      ? 'Could not load suggestions.'
-                      : '검색 결과를 가져오지 못했습니다.'
-                    : language === 'en'
-                      ? 'No matches.'
-                      : '검색 결과가 없습니다.'}
-              </p>
-            )}
-          </div>
-        ) : null}
-      </div>
-
-      {lookupTicker ? (
-        <MarketLivePreview
-          data={lookupMarketData}
-          status={lookupMarketStatus}
-          error={lookupMarketError}
-          language={language}
-          baseCurrency={baseCurrency}
-          fxRates={fxRates}
-          showApply={false}
-        />
-      ) : (
-        <p className="tool-drawer__empty">
-          {language === 'en'
-            ? 'Search a ticker or name to see its live price — this never touches any portfolio.'
-            : '티커나 종목명을 검색하면 실시간 시세를 볼 수 있어요 — 포트폴리오에는 영향을 주지 않습니다.'}
-        </p>
-      )}
-    </section>
-  );
+  // The standalone "종목 조회" (stock lookup) tool/panel that used to live here was removed —
+  // it was a second, separate search entry point alongside ⌘K's command palette (which also
+  // searches by ticker/name and can add a holding directly), and having two ways to search for a
+  // stock was exactly the kind of duplicate entry point this cleanup consolidated down to one.
 
   const applyMarketQuoteToDraft = useCallback(() => {
     if (!manualMarketData) {
@@ -4780,13 +4557,28 @@ function ToolSideDrawer({
           />
         </label>
         <label className="tool-drawer__manual-field">
-          <span>{language === 'en' ? 'Buy Price' : '매수가'}</span>
+          {/* Explicit unit, not a bare number field — the manual buy-price input used to give no
+              signal at all about which currency to type in, so a foreign stock's price could
+              silently be entered as a KRW-scale number and corrupt every downstream 수익률/
+              평가손익 calculation that compares it against the (USD) live price. */}
+          <span className="tool-drawer__manual-field-label-row">
+            <span>{language === 'en' ? 'Buy Price' : '매수가'}</span>
+            <em className="tool-drawer__manual-field-currency">
+              {resolveManualBuyPriceCurrency(manualTicker, manualMarketData) === 'USD'
+                ? language === 'en'
+                  ? 'USD'
+                  : 'USD 달러'
+                : language === 'en'
+                  ? 'KRW'
+                  : '원'}
+            </em>
+          </span>
           <input
             type="text"
             inputMode="decimal"
             value={manualBuyPrice}
             onChange={handleManualBuyPriceChange}
-            placeholder="0"
+            placeholder={resolveManualBuyPriceCurrency(manualTicker, manualMarketData) === 'USD' ? '0.00' : '0'}
           />
         </label>
         <label className="tool-drawer__manual-field">
@@ -5203,6 +4995,23 @@ function ToolSideDrawer({
                         : itemId
                           ? selectedHolding.itemId === itemId
                           : selectedHolding.itemIndex === itemIndex);
+                    // Same resolveHoldingPosition the totals in the 요약 panel are built from —
+                    // this is where 평가금액/평가손익 actually get computed for the holdings list,
+                    // not left as "-" the way this row used to render before it showed anything
+                    // beyond the return percentage.
+                    const position = resolveHoldingPosition(item, { baseCurrency, fxRates });
+                    const isForeignHolding = position.nativeCurrency !== baseCurrency;
+                    const profitToneClass = getSignedValueToneClass(
+                      position.profitAmount,
+                      'is-positive',
+                      'is-negative',
+                    );
+                    const marketValueText =
+                      position.marketValue != null ? formatCurrencyAmount(position.marketValue, baseCurrency) : '-';
+                    const profitText =
+                      position.profitAmount != null
+                        ? `${position.profitAmount > 0 ? '+' : ''}${formatCurrencyAmount(position.profitAmount, baseCurrency)}`
+                        : '-';
 
                     return (
                       <article
@@ -5236,11 +5045,28 @@ function ToolSideDrawer({
                             });
                           }}
                         >
-                          <span>
-                            <strong>{compactLabel(resolveHoldingName(item), 18)}</strong>
-                            <em>{formatHoldingListMeta(item, language)}</em>
+                          <span className="tool-drawer__holding-main-row">
+                            <span className="tool-drawer__holding-main-name">
+                              <strong>{compactLabel(resolveHoldingName(item), 18)}</strong>
+                              <em>{formatHoldingListMeta(item, language)}</em>
+                            </span>
+                            <small>{String(item.detail ?? item.return ?? '').trim() || '-'}</small>
                           </span>
-                          <small>{String(item.detail ?? item.return ?? '').trim() || '-'}</small>
+                          <span className="tool-drawer__holding-main-row tool-drawer__holding-main-row--metrics">
+                            <span className="tool-drawer__holding-main-metric">
+                              {marketValueText}
+                              {isForeignHolding && position.nativeMarketValue != null ? (
+                                <em className="tool-drawer__holding-main-native">
+                                  {formatCurrencyAmount(position.nativeMarketValue, position.nativeCurrency)}
+                                </em>
+                              ) : null}
+                            </span>
+                            <strong
+                              className={`tool-drawer__holding-main-profit${profitToneClass ? ` ${profitToneClass}` : ''}`}
+                            >
+                              {profitText}
+                            </strong>
+                          </span>
                         </button>
                         <button
                           type="button"
@@ -5284,10 +5110,6 @@ function ToolSideDrawer({
 
     if (resolvedTool.key === 'manual') {
       return <div className="tool-drawer__manual-panel">{renderManualEntryPanel()}</div>;
-    }
-
-    if (resolvedTool.key === 'lookup') {
-      return renderLookupPanel();
     }
 
     if (resolvedTool.key === 'overview') {
@@ -5694,7 +5516,6 @@ export default function App() {
   // its whole manual-form state up here.
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [pendingManualTicker, setPendingManualTicker] = useState(null);
-  const [viewMode, setViewMode] = useState('explore'); // 'explore' (atom scene) | 'manage' (table)
   const [, setShowGroupDock] = useState(() => restoredPortfolioState.entries.length > 0);
   const [, setShowScoreDock] = useState(() => restoredPortfolioState.entries.length > 0);
   const [, setGroupDockSpawn] = useState(null);
@@ -5770,6 +5591,11 @@ export default function App() {
     readStoredOption(STORAGE_KEYS.scoreWeightPreset, SCORE_WEIGHT_PRESET_OPTIONS, 'balanced'),
   );
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState(() => getPortfolioWorkspaceId());
+  // 'idle' | 'copied' | 'failed' — drives the settings panel's click-to-copy feedback on the
+  // workspace ID. A ref alongside the state so the reset timeout can always clear whatever timer
+  // it itself started, even across a rapid double-click that fires handleCopyWorkspaceId twice.
+  const [workspaceIdCopyStatus, setWorkspaceIdCopyStatus] = useState('idle');
+  const workspaceIdCopyResetTimerRef = useRef(null);
   const [workspaceSession, setWorkspaceSession] = useState(null);
   const [workspaceClaimStatus, setWorkspaceClaimStatus] = useState('idle');
   const [workspaceClaimError, setWorkspaceClaimError] = useState('');
@@ -7840,6 +7666,52 @@ export default function App() {
       conflict: text.workspaceSyncConflict,
       'local-failed': text.workspaceSyncLocalFailed,
     }[portfolioSyncStatus] ?? text.workspaceSyncIdle;
+  // Click-to-copy for the workspace ID (requirement: no separate "copy" button to hunt for — the
+  // ID itself is the click target). navigator.clipboard is the primary path; execCommand('copy')
+  // via a throwaway textarea is the fallback for contexts where the Clipboard API is unavailable
+  // (e.g. non-HTTPS, some embedded webviews) rather than silently doing nothing.
+  //
+  // navigator.clipboard.writeText's promise can hang indefinitely rather than reject — observed in
+  // an automated/unfocused-document browser context, where it neither resolved nor threw, which
+  // without a race would leave this whole handler (and the button's feedback) stuck forever with
+  // no error and no fallback ever attempted. Racing it against a short timeout guarantees the
+  // execCommand fallback still runs even when the Clipboard API silently never settles.
+  const handleCopyWorkspaceId = useCallback(async () => {
+    noteInteraction();
+    const value = currentWorkspaceId;
+    let copied = false;
+
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await Promise.race([
+          navigator.clipboard.writeText(value),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('clipboard-write-timeout')), 800)),
+        ]);
+        copied = true;
+      }
+    } catch {
+      copied = false;
+    }
+
+    if (!copied && typeof document !== 'undefined') {
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = value;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        copied = document.execCommand('copy');
+        document.body.removeChild(textarea);
+      } catch {
+        copied = false;
+      }
+    }
+
+    clearTimeout(workspaceIdCopyResetTimerRef.current);
+    setWorkspaceIdCopyStatus(copied ? 'copied' : 'failed');
+    workspaceIdCopyResetTimerRef.current = setTimeout(() => setWorkspaceIdCopyStatus('idle'), 1800);
+  }, [currentWorkspaceId, noteInteraction]);
   const renderSettingsPanel = () => (
     <div className="tool-drawer__settings">
       {settingsSections.map((section) => (
@@ -7871,7 +7743,41 @@ export default function App() {
           </div>
           <div className="settings-workspace__row">
             <dt>{text.workspaceIdLabel}</dt>
-            <dd title={currentWorkspaceId}>{currentWorkspaceId}</dd>
+            <dd>
+              <button
+                type="button"
+                className={`settings-workspace__copy${workspaceIdCopyStatus !== 'idle' ? ` is-${workspaceIdCopyStatus}` : ''}`}
+                onClick={handleCopyWorkspaceId}
+                title={workspaceIdCopyStatus === 'idle' ? text.workspaceIdCopyHint : undefined}
+              >
+                <span className="settings-workspace__copy-value">{currentWorkspaceId}</span>
+                {workspaceIdCopyStatus === 'copied' ? (
+                  <svg
+                    className="settings-workspace__copy-icon"
+                    viewBox="0 0 20 20"
+                    aria-hidden="true"
+                  >
+                    <path d="M4 10.5L8 14.5L16 5.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                ) : (
+                  <svg
+                    className="settings-workspace__copy-icon"
+                    viewBox="0 0 20 20"
+                    aria-hidden="true"
+                  >
+                    <rect x="7" y="7" width="10" height="10" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                    <path d="M4 13V4.6C4 4.27 4.27 4 4.6 4H13" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  </svg>
+                )}
+                <span className="settings-workspace__copy-feedback" role="status" aria-live="polite">
+                  {workspaceIdCopyStatus === 'copied'
+                    ? text.workspaceIdCopied
+                    : workspaceIdCopyStatus === 'failed'
+                      ? text.workspaceIdCopyFailed
+                      : ''}
+                </span>
+              </button>
+            </dd>
           </div>
           <div className="settings-workspace__row">
             <dt>{text.workspaceSyncLabel}</dt>
@@ -7923,8 +7829,13 @@ export default function App() {
       period: 'month',
       topN: 5,
       targetBucketWeights: DEFAULT_REBALANCE_TARGET_WEIGHTS,
+      // Without this, a foreign (USD) holding's buyAmount/marketValue would be summed into the
+      // 총 평가금액/총 매입금액/총 평가손익 totals as raw numbers — the exact bug this fixes: see
+      // resolvePosition's own comment in portfolioAnalyticsSummary.js.
+      baseCurrency,
+      fxRates: displayFxRates,
     });
-  }, [hasPortfolio, deferredPortfolioItems, deferredPortfolioTimelineItems]);
+  }, [hasPortfolio, deferredPortfolioItems, deferredPortfolioTimelineItems, baseCurrency, displayFxRates]);
   const portfolioHeatmap = useMemo(
     () =>
       createPortfolioHeatmap(deferredPortfolioTimelineItems, {
@@ -8153,38 +8064,15 @@ export default function App() {
         <div className="space-depth__halo" />
       </div>
 
-      <div className="view-mode-toggle" role="tablist" aria-label={language === 'en' ? 'View mode' : '보기 모드'}>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={viewMode === 'explore'}
-          className={`view-mode-toggle__option${viewMode === 'explore' ? ' is-active' : ''}`}
-          onClick={() => {
-            noteInteraction();
-            setViewMode('explore');
-          }}
-        >
-          {language === 'en' ? 'Explore' : '탐색'}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={viewMode === 'manage'}
-          className={`view-mode-toggle__option${viewMode === 'manage' ? ' is-active' : ''}`}
-          onClick={() => {
-            noteInteraction();
-            setViewMode('manage');
-          }}
-        >
-          {language === 'en' ? 'Manage' : '관리'}
-        </button>
-      </div>
-
-      {/* Cmd+K/Ctrl+K (the global listener above) had zero visible affordance anywhere in the app
-          before this — genuinely undiscoverable unless a user already had the habit from another
-          app. This is deliberately small and out of the way (top-right corner, same treatment as
-          .view-mode-toggle at top-center) rather than a modal/tour: a persistent low-key reminder,
-          not a one-time popup that can be missed or dismissed and then forgotten. */}
+      {/* The old 탐색/관리 (Explore/Manage) mode toggle was removed here — it duplicated the
+          single "how do I look at/change my holdings" job the holdings list + 수정 button and ⌘K
+          already cover, and having three different entry points for that one job was exactly the
+          "여러 개 버튼이 있어 헷갈리는" complaint this cleanup was for. Cmd+K/Ctrl+K (the global
+          listener above) had zero visible affordance anywhere in the app before this hint —
+          genuinely undiscoverable unless a user already had the habit from another app. This is
+          deliberately small and out of the way (top-right corner) rather than a modal/tour: a
+          persistent low-key reminder, not a one-time popup that can be missed or dismissed and
+          then forgotten. */}
       <button
         type="button"
         className="command-palette-hint"
@@ -8206,29 +8094,12 @@ export default function App() {
         portfolioEntries={portfolioEntries}
         language={language}
         onGoToHolding={({ entryId, item, itemIndex }) => {
-          setViewMode('explore');
           handleFocusPortfolioHolding({ entryId, item, itemIndex });
         }}
         onDeleteHolding={handleRemovePortfolioHolding}
         onMoveHolding={handleMoveHolding}
         onAddNew={openManualToolWithTicker}
       />
-
-      {viewMode === 'manage' ? (
-        // An overlay over the still-mounted atom scene, not a route swap that tears the scene
-        // down — cheaper to toggle back and forth, and the scene's own rAF/effect state (camera
-        // drift, selection, in-flight transitions) never has to be torn down and rebuilt just
-        // because the user glanced at the table for a second.
-        <div className="view-mode-overlay">
-          <HoldingsManagementTable
-            activePortfolio={activePortfolio}
-            language={language}
-            onUpdateHolding={handleUpdatePortfolioHolding}
-            onDeleteHolding={handleRemovePortfolioHolding}
-            onAppendHolding={handleAppendManualHoldings}
-          />
-        </div>
-      ) : null}
 
       <div className="floating-ui-layer">
         {showToolDrawer ? (

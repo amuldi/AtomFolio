@@ -1,3 +1,5 @@
+import { buildFxRates, convertCurrencyAmount, inferHoldingCurrency } from '../utils/currency.js';
+
 function normalizeText(value) {
   return String(value ?? '')
     .trim()
@@ -299,7 +301,15 @@ function classifyRebalanceBucket(item) {
   return 'other';
 }
 
-function resolvePosition(item, index) {
+// Exported (not just used internally for the aggregate summary) so a single-holding UI — the
+// portfolio holdings list row, the holding-detail card — can compute the exact same
+// buyAmount/marketValue/profitAmount/returnRate/currency figures the totals are built from,
+// instead of a second, potentially-drifting implementation of the same math living in App.jsx.
+export function resolveHoldingPosition(item, options) {
+  return resolvePosition(item, 0, options);
+}
+
+function resolvePosition(item, index, { fxRates, baseCurrency } = {}) {
   const shares = parseNumber(findFieldValue(item?.fields, FIELD_CANDIDATES.shares));
   const buyPrice = parseNumber(findFieldValue(item?.fields, FIELD_CANDIDATES.buyPrice));
   const currentPrice = parseNumber(findFieldValue(item?.fields, FIELD_CANDIDATES.currentPrice));
@@ -345,14 +355,34 @@ function resolvePosition(item, index) {
         ? (profitAmount / buyAmount) * 100
         : null;
 
+  // buyAmount/marketValue/profitAmount above are in whatever currency this holding's own
+  // buyPrice/currentPrice/explicit fields were denominated in (nativeCurrency) — a foreign
+  // holding's numbers are still in USD at this point. Everything that gets summed *across*
+  // positions (totals, weights, group-by-currency-blind buckets) has to be converted to one
+  // common baseCurrency first, or a $1,600 USD position silently adds to a ₩700,000 KRW position
+  // as if both were the same unit. The native (unconverted) figures are kept alongside the
+  // converted ones so a holding-level UI can still show "USD 평가금액" as secondary detail.
+  const nativeCurrency = inferHoldingCurrency({ ...item, currency: item?.currency, marketCurrency: item?.marketCurrency });
+  const resolvedBaseCurrency = baseCurrency || 'KRW';
+  const resolvedFxRates = fxRates || buildFxRates();
+  const convert = (value) =>
+    Number.isFinite(value)
+      ? convertCurrencyAmount(value, nativeCurrency, resolvedBaseCurrency, resolvedFxRates)
+      : null;
+
   return {
     id: item?.id ?? item?.code ?? item?.label ?? `position-${index + 1}`,
     label: readLabel(item, index),
     code: String(item?.code ?? '').trim(),
     item,
-    buyAmount,
-    marketValue,
-    profitAmount,
+    currency: resolvedBaseCurrency,
+    nativeCurrency,
+    nativeBuyAmount: buyAmount,
+    nativeMarketValue: marketValue,
+    nativeProfitAmount: profitAmount,
+    buyAmount: convert(buyAmount),
+    marketValue: convert(marketValue),
+    profitAmount: convert(profitAmount),
     returnRate: computedReturnRate,
     explicitWeight: readWeight(item),
     assetClass: readGroupLabel(item, 'assetClass', FIELD_CANDIDATES.assetClass),
@@ -475,13 +505,17 @@ function createRebalanceGaps(currentGroups, targetWeights = {}) {
     .sort((left, right) => Math.abs(right.gapWeight) - Math.abs(left.gapWeight));
 }
 
-function extractTimelinePoint(item) {
+function extractTimelinePoint(item, currencyOptions) {
   const date = parseDateValue(findFieldValue(item?.fields, FIELD_CANDIDATES.date));
   if (!date) {
     return null;
   }
 
-  const position = resolvePosition(item, 0);
+  // Same reasoning as createPortfolioAnalyticsSummary's own positions: a timeline can interleave
+  // rows from several different holdings (see portfolio_test1.csv-style daily-value exports), so
+  // each point needs converting to one common currency before profitFlow sums them by period —
+  // otherwise a single foreign-holding day in the series would spike/crater that period's total.
+  const position = resolvePosition(item, 0, currencyOptions);
   const returnRate = position.returnRate;
   const profitAmount = position.profitAmount;
 
@@ -498,9 +532,9 @@ function extractTimelinePoint(item) {
   };
 }
 
-function createProfitFlow(timelineItems, period = 'month') {
+function createProfitFlow(timelineItems, period = 'month', currencyOptions) {
   const points = (Array.isArray(timelineItems) ? timelineItems : [])
-    .map(extractTimelinePoint)
+    .map((item) => extractTimelinePoint(item, currencyOptions))
     .filter(Boolean);
   const groups = new Map();
 
@@ -580,7 +614,11 @@ export function createPortfolioAnalyticsSummary(items = [], timelineItems = [], 
   const sourceItems = Array.isArray(items) ? items : [];
   const period = options.period ?? 'month';
   const topN = Math.max(1, Math.round(parseNumber(options.topN) ?? 5));
-  const positions = assignPositionWeights(sourceItems.map(resolvePosition));
+  const baseCurrency = options.baseCurrency || 'KRW';
+  const fxRates = options.fxRates || buildFxRates(options.usdKrwRate);
+  const positions = assignPositionWeights(
+    sourceItems.map((item, index) => resolvePosition(item, index, { fxRates, baseCurrency })),
+  );
   const totalMarketValue = positions.reduce((sum, position) => sum + (position.marketValue ?? 0), 0);
   const totalBuyAmount = positions.reduce((sum, position) => sum + (position.buyAmount ?? 0), 0);
   const totalProfitAmount =
@@ -613,6 +651,9 @@ export function createPortfolioAnalyticsSummary(items = [], timelineItems = [], 
             ? weightedReturnRate / returnWeight
             : null,
       valueSource: positions[0]?.weightSource ?? 'none',
+      // Every total above is converted to this one currency before summing (see resolvePosition) —
+      // callers no longer need to guess whether totalMarketValue etc. is "mixed units".
+      baseCurrency,
     },
     positions: positions.map((position) => ({
       id: position.id,
@@ -621,6 +662,11 @@ export function createPortfolioAnalyticsSummary(items = [], timelineItems = [], 
       buyAmount: position.buyAmount,
       marketValue: position.marketValue,
       profitAmount: position.profitAmount,
+      currency: position.currency,
+      nativeCurrency: position.nativeCurrency,
+      nativeBuyAmount: position.nativeBuyAmount,
+      nativeMarketValue: position.nativeMarketValue,
+      nativeProfitAmount: position.nativeProfitAmount,
       returnRate: position.returnRate,
       weight: position.weight,
       weightPercent: position.weight * 100,
@@ -629,7 +675,10 @@ export function createPortfolioAnalyticsSummary(items = [], timelineItems = [], 
       sector: position.sector,
       bucket: position.bucket,
     })),
-    profitFlow: createProfitFlow(timelineItems?.length ? timelineItems : sourceItems, period),
+    profitFlow: createProfitFlow(timelineItems?.length ? timelineItems : sourceItems, period, {
+      fxRates,
+      baseCurrency,
+    }),
     concentration: createConcentration(positions, topN),
     assetClassWeights,
     regionWeights,
