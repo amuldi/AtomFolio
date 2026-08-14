@@ -38,11 +38,25 @@ export function AuthPanel({ text, onAuthenticated, workspaceId }) {
   useEffect(() => {
     if (authLoaded && isSignedIn) {
       setClerkTokenGetter(getToken);
+      // Covers the case handleSignIn/handleVerify's own onAuthenticated() call doesn't: a page
+      // load where Clerk restores an already-signed-in session from its persisted cookie. Without
+      // this, the parent's workspace-session check (App.jsx's loadWorkspaceSession) only ever runs
+      // once on mount, in a race against Clerk's async init — on a fresh reload it usually loses
+      // that race and fetches with no Authorization header yet, then never retries, permanently
+      // showing "게스트" in settings for an actually-signed-in user until they manually click
+      // "게스트 데이터 이전". onAuthenticated's handlers are idempotent (claiming an
+      // already-claimed or non-guest workspace is a no-op), so firing this on every mount where
+      // Clerk resolves to signed-in — not just right after a fresh sign-in submission — is safe.
+      onAuthenticated?.();
     } else {
       setClerkTokenGetter(null);
     }
 
     return () => setClerkTokenGetter(null);
+    // onAuthenticated is intentionally excluded from the dependency array: it's a fresh
+    // useCallback identity on every App.jsx render, and including it would re-fire this effect
+    // (and re-POST the guest claim) far more often than the auth state it's meant to track
+    // actually changes.
   }, [authLoaded, isSignedIn, getToken]);
 
   const resetTransientFields = () => {

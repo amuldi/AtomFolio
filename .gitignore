@@ -26,3 +26,4 @@ docs/proposal/AtomFolio+_Proposal.pdf
 .claude/skills/
 .agents/
 skills-lock.json
+.env*
