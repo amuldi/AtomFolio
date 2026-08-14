@@ -8,9 +8,30 @@
 > The dated entries below go all the way back to this project's **actual first commit
 > (2026-04-27, `Add AtomFolio dashboard project`)**, built from `git log` — not treating "today"
 > as the starting point. The April/May and early-July entries are summarized from commit messages;
-> the August entries (especially August 13) are the detailed, live-verified write-ups from the
+> the August entries (especially August 13–14) are the detailed, live-verified write-ups from the
 > sessions that actually did the work. Bugs found along the way are tracked separately in
 > [`AtomFolio_Bugs.en.md`](AtomFolio_Bugs.en.md).
+
+## 2026-08-14 — The atom widget stays on the Space it was opened on; the popover opens anywhere
+
+Reverted the menu bar widget's "follows you across every Desktop (Space)/fullscreen app" behavior,
+per direct feedback. The August 10 entry's fix for "the widget disappears during Spaces/fullscreen
+transitions" (`setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })`) ended up making the
+widget chase the user across every Space — which, used in practice, turned out not to be the
+wanted behavior.
+
+- **Atom widget**: now only shows on whichever Space it was on when "Show atom widget" was turned
+  on, and no longer follows you to a different desktop or into a fullscreen app. Removed the
+  `atomWidget.setVisibleOnAllWorkspaces(...)` call, reverting to Electron's default (a window only
+  renders on the Space it was created on).
+- **Popover** (the tray-click panel): the opposite direction — since the tray icon itself is
+  reachable from any Space, the popover now needs to **open correctly no matter which
+  desktop/fullscreen app it's opened from**. Added
+  `popover.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })`. The existing
+  `positionPopoverNearTray` logic (which already repositions the panel against the tray icon's
+  current location on every open) needed no further changes to make this work.
+
+Verified: `node --check desktop/src/main.js` passes, lint clean, all 78 `node --test` tests pass.
 
 ## 2026-08-13 — Menu bar widget interaction polish (drag, click-through, category, sleep)
 

@@ -183,6 +183,12 @@ function createPopover() {
   });
 
   popover.setOpacity(clampOpacity(config.popoverOpacity));
+  // Unlike the atom widget (which now deliberately stays on whichever single Space it was shown
+  // on, see createAtomWidget's own comment), the popover is opened on demand from the tray icon —
+  // clicking that icon is available from every Space/fullscreen app, so the panel it opens has to
+  // actually be able to render wherever the click happened, not just the Space it was first
+  // created on.
+  popover.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   popover.loadFile(path.join(__dirname, 'renderer', 'popover.html'));
   popover.on('blur', () => {
     if (popover && !popover.isDestroyed()) {
@@ -353,12 +359,11 @@ function createAtomWidget() {
   });
 
   atomWidget.setOpacity(clampOpacity(config.widgetOpacity));
-  // Without this, the window only actually renders on whichever Space it happened to be created
-  // on — alwaysOnTop keeps it in front of other windows there, but switching to a different
-  // desktop or into a fullscreen app makes it disappear entirely until the user switches back,
-  // even though isVisible()/atomWidgetVisible both still say "shown". An ambient overlay that's
-  // supposed to always be on screen has to actually follow every Space, fullscreen apps included.
-  atomWidget.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // Deliberately *not* calling setVisibleOnAllWorkspaces here — the widget should only ever be
+  // visible on whichever single Space/Desktop it was showing on when "원자 위젯 표시" was turned
+  // on (Electron's default for a BrowserWindow), not chase the user across every Space the way an
+  // earlier version of this file made it do. The popover (opened from the tray icon, which is
+  // reachable from any Space) is the one that still needs to follow — see createPopover.
   atomWidget.loadFile(path.join(__dirname, 'renderer', 'atom-widget.html'));
 
   // One shared debounce for both events, saving position + size together — not two independent
