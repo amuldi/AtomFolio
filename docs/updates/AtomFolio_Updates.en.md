@@ -12,6 +12,47 @@
 > sessions that actually did the work. Bugs found along the way are tracked separately in
 > [`AtomFolio_Bugs.en.md`](AtomFolio_Bugs.en.md).
 
+## 2026-08-14 — Fixed foreign-holding currency math; cleaned up the portfolio screen
+
+Chasing down "foreign stock buy price/valuation math looks wrong," the real cause wasn't where the
+exchange rate was applied — it was that **no exchange rate was being applied at all**. A foreign
+holding's buy price/current price come back in USD, but
+`src/lib/portfolioAnalyticsSummary.js` summed each portfolio's totals (total market value, total
+buy amount, total profit) without ever checking currency — a $1,600 position was added to a
+₩700,000 position as if both were the same unit. This was subtle enough that the existing test
+fixture (an SCHD holding: buyAmount '1600', marketValue '1560', no currency field) had the buggy
+behavior baked into its "expected" snapshot without anyone noticing.
+
+### What changed
+
+- **New `src/utils/currency.js`** — the single standard for USD/KRW handling. Resolves a holding's
+  currency in priority order: (1) confirmed by a live quote, (2) inferred from ticker shape
+  (letters-only -> USD, 5–6 digit domestic code -> KRW), (3) defaults to KRW.
+- **`resolvePosition` (the portfolio-totals math) now resolves each holding's currency and converts
+  it to the base currency before summing.** The original (USD) native amount is kept alongside the
+  converted one, so a foreign holding can show the KRW-converted amount as primary and the USD
+  amount as secondary detail.
+- **Added a USD/원 currency badge to the buy-price input** — it previously gave zero indication of
+  which currency to type in.
+- **The holdings list and the holding-detail card now show market value/profit/return %, in
+  color** (previously showed nothing beyond return % — just a "-") — profit red, loss blue, the
+  site's existing convention.
+- **Removed the Explore/Manage view-mode toggle and the spreadsheet management table** — a
+  redundant second way to view/edit holdings now that the list itself shows value and P/L inline.
+  Editing a holding now has exactly one path: the 수정 (Edit) button.
+- **Removed the standalone "Stock Lookup" toolbar entry** — ⌘K's command palette already searches
+  by ticker/name and can add a holding directly, so search is now consolidated to that one entry
+  point (its existing always-visible "⌘K" badge hint stayed as-is).
+- **The workspace ID in Settings is now click-to-copy** — immediate "Copied"/"Copy failed" feedback
+  with an icon change. Tries `navigator.clipboard` first, races it against an 800ms timeout, and
+  falls back to `execCommand('copy')` — added after directly discovering that `writeText` can hang
+  indefinitely with no response when clipboard permission is blocked in an automated test browser.
+
+Verified: `npm run build`, `npx eslint .` (whole repo), `node --test` (92 tests, 91 pass + 1
+pre-existing skip) all clean. Manually exercised in a local `npm run dev` session against a real
+test portfolio mixing Korean ETFs, individual domestic stocks, and individual US stocks — totals no
+longer add raw USD numbers into a KRW sum.
+
 ## 2026-08-14 — The atom widget stays on the Space it was opened on; the popover opens anywhere
 
 Reverted the menu bar widget's "follows you across every Desktop (Space)/fullscreen app" behavior,

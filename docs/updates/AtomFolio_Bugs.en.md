@@ -20,6 +20,14 @@
 
 ---
 
+## 2026-08-14
+
+| Symptom | Root cause | Fix | Status | Commit |
+| --- | --- | --- | --- | --- |
+| Total market value/buy amount/profit were wrong for a portfolio mixing domestic and foreign holdings | `portfolioAnalyticsSummary.js`'s `resolvePosition` summed buyAmount/marketValue with no currency awareness at all — a USD position's raw number was added to a KRW position's as if they were the same unit | Each holding's currency is now resolved (live quote -> ticker-shape inference -> KRW default) and converted to the base currency before summing (new `src/utils/currency.js`) | ✅ Fixed | `5f20c80` |
+| The buy-price input had no currency unit shown at all, so it was unclear whether to type a foreign holding's buy price in USD or KRW | No unit indicator existed in the UI | Added a currency badge (USD/원) next to the label, reflecting the resolved security's currency | ✅ Fixed | `5f20c80` |
+| Clicking the workspace-ID copy button did nothing in the automated test browser | `navigator.clipboard.writeText()` neither resolved nor rejected when clipboard permission was blocked in that environment — reproduced directly (45s timeout) | Raced the call against an 800ms timeout via `Promise.race`, falling back to `execCommand('copy')` when it doesn't respond in time | ✅ Fixed | `5f20c80` |
+
 ## 2026-08-13
 
 | Symptom | Root cause | Fix | Status | Commit |
