@@ -20,6 +20,12 @@
 
 ---
 
+## 2026-08-16
+
+| Symptom | Root cause | Fix | Status | Commit |
+| --- | --- | --- | --- | --- |
+| (user-reported, with screenshot) The "auto-link asset class when adding a stock" feature shipped the day before didn't actually work — still had to pick it by hand | The auto-fill guard was `!current.trim() \|\| current === '주식'` (only overwrite when blank or the default), which can't tell "the user deliberately chose this" apart from "this is just left over from a previous lookup" — search a REIT first (자산군 fills to 리츠), then without resetting the form type a bond ETF's ticker in; the new result (채권) exists but the guard sees the current value isn't '주식' and fails, so the field stays stuck on 리츠. Reproduced directly | Replaced the string check with `manualAssetClassTouchedRef`, tracking only whether the user has actually picked an asset class for the current query — resets when the stock name/ticker input changes, only locks when the user touches the dropdown directly or opens an existing holding to edit. Picking a suggestion / clicking "Apply quote" also reset it first, since those are just as much a "commit to this security" action | ✅ Fixed | (this session) |
+
 ## 2026-08-15
 
 | Symptom | Root cause | Fix | Status | Commit |

@@ -12,6 +12,35 @@
 > sessions that actually did the work. Bugs found along the way are tracked separately in
 > [`AtomFolio_Bugs.en.md`](AtomFolio_Bugs.en.md).
 
+## 2026-08-16 — Fixed a real case where the new asset-class auto-fill silently didn't fire (user-reported)
+
+Right after the entry below shipped asset-class inference, the user reported (with a screenshot)
+"I still have to do it myself?" — reproduced it, and there was a real gap. The auto-fill guard was
+`!current.trim() || current === '주식'` (only overwrite when the current value is blank or the
+'주식'/Stock default), which can't tell "the user deliberately chose this" apart from "this is just
+left over from looking up a different security a moment ago." Concretely: search a REIT first (자산군
+auto-fills to 리츠), then — without resetting the form — type a bond ETF's ticker (TLT) straight
+into the ticker field. The new lookup's result (채권/Bond) is right there, but the guard sees the
+current value is 리츠 (not '주식'), fails the condition, and the field stays stuck on 리츠. This is
+almost certainly the exact pattern the user hit.
+
+Replaced the `current === '주식'` string check with `manualAssetClassTouchedRef`, which tracks only
+whether the user has actually picked an asset class themselves *for the current query* — not what
+the field currently equals. It resets to `false` whenever the stock name/ticker input changes (a
+fresh query re-opens auto-classification) and only locks to `true` when the user touches the 자산군
+dropdown directly. Picking a suggestion or clicking "현재가 적용"/Apply quote are just as much a
+"commit to this security" action, so they also reset it to `false` first — the resulting value from
+that point on is trusted unconditionally. Opening an existing holding to edit it now locks the ref to
+`true` from the start instead, so its already-saved asset class can't be silently swapped out just
+because editing happens to re-trigger a live quote lookup.
+
+Re-verified the exact repro against a local dev server: select "Realty Income" (자산군 → REITs),
+then type "TLT" straight into the ticker field without resetting anything — previously stuck on
+REITs, now correctly flips to Bond.
+
+**Verified**: `npm run lint` clean, `npm test` 126 total — 125 pass, 1 skip (pre-existing), 0 fail,
+`npm run build` clean. Re-verified the repro scenario live against a local dev server + browser.
+
 ## 2026-08-15 — Add-stock form now infers asset class from the security's own market info
 
 The "Add stock" (manual entry) form's 자산군/Asset dropdown (Stock/Dividend/Gold·Commodity ETF/

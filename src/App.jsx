@@ -3689,6 +3689,17 @@ function ToolSideDrawer({
   const [manualSuggestionLocked, setManualSuggestionLocked] = useState(false);
   const [editingHolding, setEditingHolding] = useState(null);
   const [selectedHolding, setSelectedHolding] = useState(null);
+  // Whether the user has explicitly picked a 자산군 themselves for the *current* stock name/ticker
+  // query — separate from what manualAssetClass currently equals, because equality alone can't
+  // tell "the user chose 리츠 on purpose" apart from "리츠 is just left over from the previous
+  // ticker the user looked up before this one" (a real bug: typing a new ticker after a REIT was
+  // still showing 리츠 from an earlier lookup silently kept 리츠 instead of re-inferring, since the
+  // old guard only ever auto-filled when the current value was blank or the '주식' default).
+  // Reset to false by handleManualStockNameChange/the ticker input's own onChange (typing a new
+  // query reopens auto-classification) and by clearManualStockFields (a fresh add starts clean);
+  // set to true only by the 자산군 <select>'s own onChange, so it stays out of every other effect's
+  // dependency array while still being read synchronously by all three auto-fill sites below.
+  const manualAssetClassTouchedRef = useRef(false);
   const manualSuggestionRef = useRef(null);
   const manualDraftRef = useRef({
     stockName: '',
@@ -3918,10 +3929,8 @@ function ToolSideDrawer({
         if (nextReturnRate) {
           setManualReturnRate(nextReturnRate);
         }
-        if (nextData.assetClass) {
-          setManualAssetClass((current) =>
-            !current.trim() || current === '주식' ? nextData.assetClass : current,
-          );
+        if (nextData.assetClass && !manualAssetClassTouchedRef.current) {
+          setManualAssetClass(nextData.assetClass);
         }
       } catch {
         if (controller.signal.aborted) {
@@ -4233,6 +4242,7 @@ function ToolSideDrawer({
     setManualReturnRate('');
     setManualAssetClass('주식');
     setManualSuggestionLocked(false);
+    manualAssetClassTouchedRef.current = false;
   }, []);
   const handleCreateManualAtom = useCallback(() => {
     if (!hasAtomName || portfolioEntries.length >= MAX_PORTFOLIOS) {
@@ -4397,6 +4407,13 @@ function ToolSideDrawer({
           resolveHoldingMetric(item, ['수익률', 'return']),
       );
       setManualAssetClass(String(item?.assetClass ?? '').trim() || '주식');
+      // Editing an existing holding shouldn't have its already-saved 자산군 silently swapped out
+      // just because opening the editor re-triggers a live-quote lookup for its ticker — that
+      // auto-fill is for *new* additions with nothing set yet, not a background "correction" of
+      // whatever a CSV import or a previous manual choice already recorded. If the value really is
+      // missing/blank, the fallback above already picked '주식'; treating that as "touched" too is
+      // fine since re-typing the ticker (which does reset this) is what reopens auto-classification.
+      manualAssetClassTouchedRef.current = true;
       onSelectTool?.('manual');
     },
     [onInteract, onSelectTool],
@@ -4525,6 +4542,10 @@ function ToolSideDrawer({
       setManualSuggestionLocked(true);
       setManualStockName(suggestion.displayName || suggestion.name || suggestion.symbol);
       setManualTicker(suggestion.symbol);
+      // Picking a specific suggestion is a deliberate "this is the security I mean" action, same
+      // as typing a fresh query — it should win over the touched-guard the same way, not be
+      // silently blocked by whatever 자산군 happened to be left over from a previous lookup.
+      manualAssetClassTouchedRef.current = false;
       if (suggestion.assetClass) {
         setManualAssetClass(suggestion.assetClass);
       }
@@ -4535,6 +4556,9 @@ function ToolSideDrawer({
   );
   const handleManualStockNameChange = useCallback((event) => {
     setManualSuggestionLocked(false);
+    // Typing a new query reopens auto-classification for whatever this resolves to — see
+    // manualAssetClassTouchedRef's own comment.
+    manualAssetClassTouchedRef.current = false;
     setManualStockName(event.target.value);
   }, []);
   // Switching the toggle has to convert whatever's already typed, not just relabel it — leaving a
@@ -4636,6 +4660,9 @@ function ToolSideDrawer({
     if (!manualTicker.trim()) {
       setManualTicker(manualMarketData.symbol || '');
     }
+    // Explicitly clicking "현재가 적용" is the same kind of deliberate sync-everything action as
+    // picking a suggestion — see handleSelectMarketSuggestion's own comment on the touched-guard.
+    manualAssetClassTouchedRef.current = false;
     if (manualMarketData.assetClass) {
       setManualAssetClass(manualMarketData.assetClass);
     }
@@ -4722,7 +4749,13 @@ function ToolSideDrawer({
           <input
             type="text"
             value={manualTicker}
-            onChange={(event) => setManualTicker(event.target.value)}
+            onChange={(event) => {
+              // Same reasoning as handleManualStockNameChange — typing a new ticker directly
+              // (bypassing the suggestion dropdown entirely) is just as much a "new query" as
+              // typing a new name, and needs the same reopening of auto-classification.
+              manualAssetClassTouchedRef.current = false;
+              setManualTicker(event.target.value);
+            }}
             placeholder={language === 'en' ? 'AAPL' : 'AAPL 또는 005930'}
           />
         </label>
@@ -4811,7 +4844,12 @@ function ToolSideDrawer({
           <span>{language === 'en' ? 'Asset' : '자산군'}</span>
           <select
             value={manualAssetClass}
-            onChange={(event) => setManualAssetClass(event.target.value)}
+            onChange={(event) => {
+              // The one place this ever gets set to true — an explicit manual pick here is what
+              // the auto-fill sites above must never silently overwrite again for this query.
+              manualAssetClassTouchedRef.current = true;
+              setManualAssetClass(event.target.value);
+            }}
           >
             <option value="주식">{language === 'en' ? 'Stock' : '주식'}</option>
             <option value="배당">{language === 'en' ? 'Dividend' : '배당'}</option>
