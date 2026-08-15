@@ -12,9 +12,17 @@
       <div id="app-root" class="app-root">
         <div id="header-root"></div>
         <div id="picker-root"></div>
-        <div id="quick-add-root"></div>
         <div class="pager" id="pager">
           <div class="pager__track" id="pager-track">
+            <div class="pager__page" data-page="summary">
+              <!-- Rebuilt on every state push (poll tick, portfolio switch) — pure numbers, no
+                   input to lose. -->
+              <div id="summary-stats-root"></div>
+              <!-- Mounted once at bootstrap and never torn down, same reasoning as
+                   news-search-root/settings-root elsewhere in this file: a poll tick landing
+                   mid-keystroke must not blow away what's typed or where focus is. -->
+              <div id="quick-add-root"></div>
+            </div>
             <div class="pager__page" data-page="news">
               <div id="news-search-root"></div>
               <div id="news-root"></div>
@@ -25,8 +33,9 @@
           </div>
         </div>
         <div class="pager-dots" id="pager-dots">
-          <button class="pager-dot" type="button" data-page-index="0" aria-label="종목 뉴스"></button>
-          <button class="pager-dot" type="button" data-page-index="1" aria-label="설정"></button>
+          <button class="pager-dot" type="button" data-page-index="0" aria-label="요약"></button>
+          <button class="pager-dot" type="button" data-page-index="1" aria-label="종목 뉴스"></button>
+          <button class="pager-dot" type="button" data-page-index="2" aria-label="설정"></button>
         </div>
       </div>
     </div>

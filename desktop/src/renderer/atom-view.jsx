@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import { AtomSketch } from '../../../src/components/atom/index.jsx';
 import { generateAtomLayout, createAtomState, projectPoint, trackballVector } from '../../../src/utils/scene.js';
 import { clamp } from '../../../src/utils/math.js';
-import { normalizeDisplayKey } from '../../../src/utils/format.js';
+import { formatKoreanWonShort, normalizeDisplayKey } from '../../../src/utils/format.js';
 import { useAtomTransition } from '../../../src/utils/useAtomTransition.js';
 import {
   BOND_LENGTH,
@@ -52,15 +52,25 @@ const ATOM_WIDGET_DOCK_ANIMATE_MS = 300;
 const DOCKED_DRAG_MOVE_THRESHOLD_SQ = 36;
 
 
+// 억/만 축약 (src/utils/format.js's formatKoreanWonShort, shared with the web app's own
+// DigitalTwinPanel and the popover's summary page) — was a raw Intl.NumberFormat currency string
+// (₩12,345,000), which at the widget's default width wraps mid-digit exactly the way the web
+// dashboard's own cards used to before that got fixed; same compact style everywhere money
+// appears now, not just here. Plain magnitude, no sign — see formatSignedCurrency below for
+// deltas (profit/change amounts), which do need one.
 function formatCurrency(value) {
   if (!Number.isFinite(value)) {
     return '—';
   }
-  return new Intl.NumberFormat('ko-KR', {
-    style: 'currency',
-    currency: 'KRW',
-    maximumFractionDigits: 0,
-  }).format(value);
+  return `₩${formatKoreanWonShort(value)}`;
+}
+
+function formatSignedCurrency(value) {
+  if (!Number.isFinite(value)) {
+    return '—';
+  }
+  const sign = value > 0 ? '+' : value < 0 ? '-' : '';
+  return `${sign}₩${formatKoreanWonShort(Math.abs(value))}`;
 }
 
 function formatPercent(value) {
@@ -145,7 +155,7 @@ function buildSelectedInfo(holding, item) {
       label: holding.label || holding.code || '종목',
       valueText: formatCurrency(holding.marketValue),
       changeText: Number.isFinite(holding.returnRate)
-        ? `${formatCurrency(holding.profitAmount)} · ${formatPercent(holding.returnRate)}`
+        ? `${formatSignedCurrency(holding.profitAmount)} · ${formatPercent(holding.returnRate)}`
         : null,
       changeTone: toneClass(holding.returnRate),
       weightText: Number.isFinite(holding.weightPercent) ? `비중 ${holding.weightPercent.toFixed(1)}%` : null,
@@ -158,7 +168,7 @@ function buildSelectedInfo(holding, item) {
       label: item.label || item.stockName || item.name || item.ticker || '종목',
       valueText: item.marketPrice || (Number.isFinite(item.latestPrice) ? formatCurrency(item.latestPrice) : '—'),
       changeText: Number.isFinite(item.marketChangePercent)
-        ? `${formatCurrency(item.marketChange)} · ${formatPercent(item.marketChangePercent)}`
+        ? `${formatSignedCurrency(item.marketChange)} · ${formatPercent(item.marketChangePercent)}`
         : null,
       changeTone: toneClass(item.marketChangePercent),
       weightText: Number.isFinite(weightPercent) ? `비중 ${weightPercent.toFixed(1)}%` : null,

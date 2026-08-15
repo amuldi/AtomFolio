@@ -258,6 +258,184 @@ body {
   transform: scale(0.9);
 }
 
+/* A small accent glow before the wordmark — the one place this file borrows the atom widget's own
+   visual language (atom-widget.css/atom-sketch.css's node glow), kept to a single quiet dot
+   rather than an actual atom illustration; this is a menu-bar panel, not the visualization
+   itself. Static, not animated — a persistently pulsing dot in a small fixed panel that's open
+   for seconds at a time would read as nervous, not alive. */
+.header__brand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.header__brand::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ink-dim);
+  box-shadow: 0 0 6px 1px rgba(var(--surface), 0.35);
+}
+
+/* ---------- Summary page (mini portfolio dashboard) ---------- */
+
+.pager__page[data-page='summary'] {
+  overflow-y: auto;
+}
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 6px;
+  /* Mirrors #news-root's own is-loading fade (see popover.js's showPortfolioSwitchLoading) — the
+     numbers here are exactly as portfolio-scoped as the news list, so a switch dims both
+     together, not just one half of the panel. */
+  transition: opacity 180ms ease;
+}
+
+#summary-stats-root.is-loading {
+  opacity: 0.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .summary {
+    transition: none;
+  }
+}
+
+/* The one number this whole page exists to answer "what is it right now" for — biggest text
+   anywhere in the popover, tabular-nums so it doesn't visually jitter as digits change on a poll
+   tick, and never wraps (a 340px panel has no room to spare for an 8-digit figure to break
+   mid-number, hence formatWonShort's 억/만 축약 in the first place). */
+.summary__hero {
+  padding: 4px 16px 14px;
+}
+
+.summary__value {
+  font-size: 26px;
+  font-weight: 680;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.summary__delta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 620;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-dim);
+}
+
+.summary__delta.is-profit {
+  color: var(--profit);
+}
+
+.summary__delta.is-loss {
+  color: var(--loss);
+}
+
+/* Same rgba(var(--surface), 0.06) neutral wash .settings-group uses for its own tinted block —
+   the insight banner's accent color is what actually signals "pay attention", not the background,
+   so this stays the plain house tint rather than introducing a third background tone (on top of
+   --chrome-bg and the profit/loss-bg pair) for what's still just informational text. */
+.summary__insight {
+  margin: 0 16px 12px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--loss);
+  border-radius: 6px 8px 8px 6px;
+  background: var(--loss-bg);
+  color: var(--ink-dim);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.summary__holdings {
+  display: flex;
+  flex-direction: column;
+  padding: 0 16px;
+  gap: 1px;
+}
+
+.summary-holding {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.summary-holding__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 580;
+  color: var(--ink);
+}
+
+.summary-holding__weight {
+  flex: 0 0 auto;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-holding__return {
+  flex: 0 0 auto;
+  width: 52px;
+  text-align: right;
+  font-size: 11.5px;
+  font-weight: 620;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-holding__return.is-profit {
+  color: var(--profit);
+}
+
+.summary-holding__return.is-loss {
+  color: var(--loss);
+}
+
+.summary__quicknav {
+  display: flex;
+  gap: 6px;
+  padding: 12px 16px 4px;
+}
+
+.summary__nav-button {
+  flex: 1 1 0;
+  padding: 8px 0;
+  border-radius: 8px;
+  border: 1px solid var(--hairline);
+  background: rgba(var(--surface), 0.03);
+  color: var(--ink-dim);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 580;
+  cursor: pointer;
+  transition: background-color 140ms var(--ease), color 140ms var(--ease), border-color 140ms var(--ease);
+}
+
+.summary__nav-button:hover {
+  background: rgba(var(--surface), 0.07);
+  color: var(--ink);
+  border-color: rgba(var(--surface), 0.24);
+}
+
+.summary__nav-button:active {
+  transform: scale(0.98);
+}
+
 /* ---------- Settings page ---------- */
 
 .settings-panel {
@@ -326,13 +504,63 @@ body {
   padding: 0;
 }
 
-/* Marks the toggle/slider boundary inside .settings-group without a second nested card — just a
-   1px hairline, same token .settings-panel__header already uses for its own scroll-affordance
-   seam. .settings-group's own flex gap (22px) already spaces it from the rows on either side, so
-   this only needs to be the line itself. */
-.settings-subgroup-divider {
-  height: 1px;
-  background: var(--hairline);
+/* ---------- 고급 (advanced settings), collapsed by default ---------- */
+
+/* Native <details>/<summary> — starts closed, no JS open/close state to manage (see
+   renderSettingsPanel's own comment on why). Same outer rhythm as .settings-group's siblings
+   above/below it in .settings-panel__body's flex column; the group *inside* it only exists once
+   expanded. */
+.settings-advanced {
+  margin: 0 -12px;
+}
+
+.settings-advanced__summary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 10.5px;
+  font-weight: 640;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  cursor: pointer;
+  list-style: none;
+  transition: background-color 140ms var(--ease), color 140ms var(--ease);
+}
+
+/* Firefox/older WebKit still render a default marker even with list-style:none on the summary
+   itself — this is the belt-and-suspenders removal, plus Chromium's own ::-webkit-details-marker. */
+.settings-advanced__summary::marker,
+.settings-advanced__summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-advanced__summary:hover {
+  background: rgba(var(--surface), 0.04);
+  color: var(--ink-dim);
+}
+
+/* A plain CSS chevron (border-drawn, like .portfolio-picker__trigger's own SVG one but simpler
+   here — no per-theme data-URI swap needed since currentColor already tracks --ink-faint/dim
+   above) — rotates open via the parent [open] state, no JS needed for that either. */
+.settings-advanced__summary::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-right: 1.3px solid currentColor;
+  border-bottom: 1.3px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 160ms var(--ease);
+}
+
+.settings-advanced[open] .settings-advanced__summary::before {
+  transform: rotate(45deg);
+}
+
+.settings-advanced__group {
+  margin-top: 6px;
 }
 
 .settings-row__top {
@@ -634,7 +862,21 @@ body {
 
 .quick-add {
   flex: 0 0 auto;
-  padding: 0 16px 10px;
+  margin-top: 14px;
+  padding: 12px 16px 4px;
+  border-top: 1px solid var(--hairline);
+}
+
+/* Which portfolio a submit is about to change — the trust gap a bare ticker+qty+button row left
+   open with more than one portfolio connected (see createQuickAddForm's own comment). Hidden
+   entirely rather than left blank when there's nothing selected yet, rather than reserving dead
+   space for a label with nothing to say. */
+.quick-add__target {
+  margin-bottom: 7px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
 }
 
 .quick-add__row {
@@ -711,10 +953,19 @@ body {
   cursor: default;
 }
 
-.quick-add__error {
+.quick-add__status {
   margin-top: 6px;
+  min-height: 14px;
   font-size: 11px;
+  color: var(--ink-faint);
+}
+
+.quick-add__status.is-error {
   color: var(--loss);
+}
+
+.quick-add__status.is-success {
+  color: var(--profit);
 }
 
 /* ---------- News ---------- */

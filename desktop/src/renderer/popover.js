@@ -6,6 +6,7 @@ const connectRoot = document.getElementById('connect-root');
 const appRoot = document.getElementById('app-root');
 const headerRoot = document.getElementById('header-root');
 const pickerRoot = document.getElementById('picker-root');
+const summaryStatsRoot = document.getElementById('summary-stats-root');
 const newsSearchRoot = document.getElementById('news-search-root');
 const newsRoot = document.getElementById('news-root');
 const settingsRoot = document.getElementById('settings-root');
@@ -13,6 +14,14 @@ const quickAddRoot = document.getElementById('quick-add-root');
 const pagerEl = document.getElementById('pager');
 const pagerTrackEl = document.getElementById('pager-track');
 const pagerDotsEl = document.getElementById('pager-dots');
+
+// Mirrors main.js's own POPOVER_PAGE_SUMMARY/NEWS/SETTINGS (which index the same pager from the
+// main-process side, via the atomfolio:focus-page IPC message) — kept in sync by hand since the
+// two files don't share a module, but both only ever have to agree with popover.html's own
+// pager__page order.
+const PAGE_SUMMARY = 0;
+const PAGE_NEWS = 1;
+const PAGE_SETTINGS = 2;
 
 // Settings content is fetched once and cached — it's local IPC (not portfolio data), so it's fine
 // to load eagerly alongside the rest of the page rather than waiting for the settings page to
@@ -35,6 +44,55 @@ function formatTime(value) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(value));
+}
+
+// Same 억/만 축약 convention the web app's own DigitalTwinPanel/AtomFolio dashboard uses
+// (src/components/panels/DigitalTwinPanel.jsx's formatKoreanWonShort) — copied rather than
+// imported since this file is deliberately plain, unbundled DOM/JS (see the top-of-file comment),
+// so it can't reach into src/ the way the bundled atom-view.jsx does. A 340px-wide popover has
+// even less room than a card in the full dashboard for an 8-digit number to wrap or truncate, so
+// staying in the same "605.6만" style (not a raw ₩12,345,000) matters even more here.
+function formatWonShort(value) {
+  const numeric = Math.max(0, Number(value ?? 0));
+
+  if (numeric >= 100000000) {
+    const amount = numeric / 100000000;
+    const fixed = amount >= 10 ? amount.toFixed(0) : amount.toFixed(1).replace(/\.0$/, '');
+    return `${fixed}억`;
+  }
+
+  if (numeric >= 10000) {
+    const amount = numeric / 10000;
+    const fixed = amount >= 100 ? Math.round(amount).toLocaleString('ko-KR') : amount.toFixed(1).replace(/\.0$/, '');
+    return `${fixed}만`;
+  }
+
+  return Math.round(numeric).toLocaleString('ko-KR');
+}
+
+function formatWon(value) {
+  return `₩${formatWonShort(value)}`;
+}
+
+function formatSignedWon(value) {
+  const numeric = Number(value ?? 0);
+  const sign = numeric > 0 ? '+' : numeric < 0 ? '−' : '';
+  return `${sign}₩${formatWonShort(Math.abs(numeric))}`;
+}
+
+function formatSignedPercent(value, digits = 1) {
+  if (!Number.isFinite(value)) {
+    return '—';
+  }
+  const sign = value > 0 ? '+' : value < 0 ? '−' : '';
+  return `${sign}${Math.abs(value).toFixed(digits)}%`;
+}
+
+// Same semantic as web's/atom-view.jsx's own toneClass — 'is-profit'/'is-loss' classes key off
+// popover.css's --profit/--loss tokens, one shared red/blue convention across the whole app.
+function toneClass(value) {
+  const numeric = Number(value);
+  return numeric > 0 ? 'is-profit' : numeric < 0 ? 'is-loss' : '';
 }
 
 function el(tag, className, children) {
@@ -344,11 +402,12 @@ function createPager({ container, track, dots }) {
 
 const pager = createPager({ container: pagerEl, track: pagerTrackEl, dots: pagerDotsEl });
 
-// Every time the popover is actually shown, land back on the news page — a stale "you left it on
-// settings last time" isn't worth remembering for a menu-bar glance.
+// Every time the popover is actually shown, land back on the summary page — a stale "you left it
+// on settings last time" isn't worth remembering for a menu-bar glance, and "what's my portfolio
+// doing right now" (PAGE_SUMMARY) is the one thing this app should lead with on every open.
 function resetToFirstPageIfVisible() {
   if (document.visibilityState === 'visible') {
-    pager.goToPage(0, { instant: true });
+    pager.goToPage(PAGE_SUMMARY, { instant: true });
   }
 }
 document.addEventListener('visibilitychange', resetToFirstPageIfVisible);
@@ -410,6 +469,83 @@ function renderConnect(state) {
   return container;
 }
 
+// ---------- Summary page (mini portfolio dashboard, page 0) ----------
+
+function renderSummaryHolding(holding) {
+  const returnValue = Number.isFinite(holding.returnRate) ? holding.returnRate : null;
+  return el('div', 'summary-holding', [
+    el('span', 'summary-holding__label', [holding.label || holding.code || '종목']),
+    el('span', 'summary-holding__weight', [
+      Number.isFinite(holding.weightPercent) ? `${holding.weightPercent.toFixed(1)}%` : '—',
+    ]),
+    el('span', `summary-holding__return ${toneClass(returnValue)}`.trim(), [
+      returnValue != null ? formatSignedPercent(returnValue) : '—',
+    ]),
+  ]);
+}
+
+// The mini dashboard itself — total value, today's P/L, an active insight if there is one, and
+// the top few holdings by weight. Deliberately just these: the point of a menu-bar popover is "an
+// answer in one glance", not a second copy of the web dashboard's full analytics. Portfolio name
+// (the picker, fixed chrome above this) and last-updated time (.header__updated, also fixed
+// chrome) both already show elsewhere on every page — repeating either here would just be the
+// same fact twice on a 340px-wide panel.
+function renderSummaryPage(state) {
+  const page = el('div', 'summary', []);
+  const totals = state.totals;
+
+  if (!totals || !Number.isFinite(totals.totalMarketValue)) {
+    page.append(el('div', 'empty-state', ['표시할 포트폴리오 데이터가 없습니다.']));
+    return page;
+  }
+
+  const tone = toneClass(totals.totalProfitAmount);
+
+  page.append(
+    el('div', 'summary__hero', [
+      el('div', 'summary__value', [formatWon(totals.totalMarketValue)]),
+      el('div', `summary__delta ${tone}`.trim(), [
+        el('span', 'summary__delta-amount', [formatSignedWon(totals.totalProfitAmount)]),
+        el('span', 'summary__delta-rate', [formatSignedPercent(totals.totalReturnRate)]),
+      ]),
+    ]),
+  );
+
+  // Whatever's currently true (stop-loss/take-profit/allocation drift) — same value the atom
+  // widget's own leader-line label shows for the matching node, not a separate computation.
+  // Always the --loss/warning accent regardless of which condition fired (same convention
+  // .error-banner elsewhere in this file already uses for "something needs your attention") —
+  // not tied to whether the underlying position is currently up or down.
+  if (state.activeInsight?.message) {
+    page.append(el('div', 'summary__insight', [state.activeInsight.message]));
+  }
+
+  page.append(el('div', 'section-label', ['보유 상위']));
+  const topHoldings = Array.isArray(state.holdings) ? state.holdings.slice(0, 5) : [];
+  if (!topHoldings.length) {
+    page.append(el('div', 'empty-state', ['보유 종목이 없습니다.']));
+  } else {
+    page.append(el('div', 'summary__holdings', topHoldings.map(renderSummaryHolding)));
+  }
+
+  const newsButton = el('button', 'summary__nav-button', ['뉴스']);
+  newsButton.type = 'button';
+  newsButton.addEventListener('click', () => pager.goToPage(PAGE_NEWS));
+
+  const settingsButton = el('button', 'summary__nav-button', ['설정']);
+  settingsButton.type = 'button';
+  settingsButton.addEventListener('click', () => pager.goToPage(PAGE_SETTINGS));
+
+  page.append(el('div', 'summary__quicknav', [newsButton, settingsButton]));
+
+  return page;
+}
+
+function updateSummaryPage(state) {
+  setChildren(summaryStatsRoot, renderSummaryPage(state));
+  summaryStatsRoot.classList.remove('is-loading');
+}
+
 function renderHeader(state) {
   return el('div', 'header', [
     el('span', 'header__brand', ['AtomFolio']),
@@ -421,7 +557,7 @@ function renderHeader(state) {
         button.setAttribute('aria-label', '설정');
         // A shortcut, not a toggle — settings is a normal page now, so this just jumps there;
         // swiping or tapping another dot navigates away just like any other page.
-        button.addEventListener('click', () => pager.goToPage(1));
+        button.addEventListener('click', () => pager.goToPage(PAGE_SETTINGS));
         return button;
       })(),
       (() => {
@@ -535,7 +671,7 @@ function createPortfolioPicker() {
     if (id === selectedId) {
       return;
     }
-    showNewsLoading();
+    showPortfolioSwitchLoading();
     void window.atomfolio.selectPortfolio(id);
   }
 
@@ -607,6 +743,7 @@ function createPortfolioPicker() {
 }
 
 const portfolioPicker = createPortfolioPicker();
+const quickAddForm = createQuickAddForm();
 
 // Shared by both the holdings-scoped list below and the search-results branch (search results
 // carry the same title/link/source/publishedAt shape, just without an isNew flag — that badge is
@@ -752,7 +889,16 @@ function createNewsSearchBar() {
 // Created once at bootstrap, same reasoning as createNewsSearchBar above (survives poll-tick
 // rebuilds so mid-typing state isn't lost). Reads latestState.selectedPortfolioId at submit time
 // rather than being passed one, since there's nothing to re-render it on a portfolio switch.
+// { element, update(state) } — same shape as createPortfolioPicker, for the same reason: mounted
+// once at bootstrap (so mid-typing input state survives a poll tick, see the module-level comment
+// on latestState), but the *target* label below still needs to track whichever portfolio is
+// actually selected right now, which only render() calling update() on every state push can do.
 function createQuickAddForm() {
+  // "적요 포트폴리오에 추가됩니다" — named explicitly rather than leaving the destination implicit,
+  // per the trust concern this addresses: a bare ticker+qty+button row gives no visual confirmation
+  // of *which* portfolio is about to change, easy to get wrong with more than one connected.
+  const targetLabel = el('div', 'quick-add__target', []);
+
   const tickerInput = el('input', 'quick-add__input quick-add__input--ticker', []);
   tickerInput.type = 'text';
   tickerInput.placeholder = '티커';
@@ -768,20 +914,27 @@ function createQuickAddForm() {
   const button = el('button', 'quick-add__button', ['추가']);
   button.type = 'button';
 
-  const errorLine = el('div', 'quick-add__error', []);
+  const statusLine = el('div', 'quick-add__status', []);
+  let statusClearTimer = null;
+
+  function setStatus(text, tone) {
+    clearTimeout(statusClearTimer);
+    statusLine.textContent = text;
+    statusLine.className = `quick-add__status${tone ? ` is-${tone}` : ''}`;
+  }
 
   async function submit() {
     const ticker = tickerInput.value.trim();
     const quantity = Number(qtyInput.value);
 
     if (!ticker || !Number.isFinite(quantity) || quantity <= 0) {
-      errorLine.textContent = '티커와 수량을 입력하세요.';
+      setStatus('티커와 수량을 입력하세요.', 'error');
       return;
     }
 
     const portfolioId = latestState?.selectedPortfolioId;
     if (!portfolioId) {
-      errorLine.textContent = '연결된 포트폴리오가 없습니다.';
+      setStatus('연결된 포트폴리오가 없습니다.', 'error');
       return;
     }
 
@@ -789,7 +942,7 @@ function createQuickAddForm() {
     qtyInput.disabled = true;
     button.disabled = true;
     button.textContent = '추가하는 중…';
-    errorLine.textContent = '';
+    setStatus('', null);
 
     const result = await window.atomfolio.addHolding({ portfolioId, ticker, quantity });
 
@@ -799,11 +952,15 @@ function createQuickAddForm() {
     button.textContent = '추가';
 
     if (result?.ok) {
+      // Brief, then auto-clears — a persistent "success" line would just become one more thing to
+      // read the next time the form is looked at, well after it stopped being news.
+      setStatus(`✓ ${ticker.toUpperCase()} 추가됨`, 'success');
+      statusClearTimer = setTimeout(() => setStatus('', null), 2600);
       tickerInput.value = '';
       qtyInput.value = '';
       tickerInput.focus();
     } else {
-      errorLine.textContent = '종목 추가에 실패했습니다.';
+      setStatus('종목 추가에 실패했습니다.', 'error');
     }
   }
 
@@ -816,23 +973,35 @@ function createQuickAddForm() {
     });
   }
 
-  return el('div', 'quick-add', [
+  function update(state) {
+    const portfolio = (state?.portfolios ?? []).find((entry) => entry.id === state?.selectedPortfolioId);
+    targetLabel.textContent = portfolio ? `${portfolio.name}에 추가` : '';
+    targetLabel.hidden = !portfolio;
+  }
+
+  const element = el('div', 'quick-add', [
+    targetLabel,
     el('div', 'quick-add__row', [tickerInput, qtyInput, button]),
-    errorLine,
+    statusLine,
   ]);
+
+  return { element, update };
 }
 
-function showNewsLoading() {
+// Dims both the summary numbers and the news list the instant a portfolio switch is requested —
+// both are scoped to whichever portfolio is selected, so both go stale together, not just news.
+function showPortfolioSwitchLoading() {
   if (prefersReducedMotion()) {
     return;
   }
   newsRoot.classList.add('is-loading');
+  summaryStatsRoot.classList.add('is-loading');
 }
 
 function updateNewsPage(state) {
   setChildren(newsRoot, renderNewsPage(state));
-  // A no-op unless showNewsLoading() dimmed it for an in-flight portfolio switch — removing the
-  // class now lets the CSS opacity transition carry the new content back in.
+  // A no-op unless showPortfolioSwitchLoading() dimmed it for an in-flight portfolio switch —
+  // removing the class now lets the CSS opacity transition carry the new content back in.
   newsRoot.classList.remove('is-loading');
 }
 
@@ -927,14 +1096,16 @@ function updateSetting(partial) {
 }
 
 function renderSettingsPanel(settings) {
-  // Two groups, not one flat list of 9 controls — "앱 설정" (how the app itself behaves/looks)
-  // vs. "투자 설정" (thresholds about the portfolio's numbers). Each is its own tinted
-  // .settings-group block (see popover.css) — a label alone read as too weak a separator, but the
-  // background wash is deliberately faint and borderless so it doesn't read as a nested card
-  // (design system's "no card-in-card" rule) the way an outlined box would. Same internal
-  // padding/gap scale on both groups — popover.css doesn't give either one a special case.
-  const appSettingsGroup = el('div', 'settings-group', [
-    el('div', 'section-label', ['앱 설정']),
+  // Three groups instead of the previous two (앱 설정/투자 설정) — 기본 (day-to-day
+  // appearance/behavior), 알림 (every threshold that can trigger a notification, insight
+  // included — grouped by *purpose* now, not by whether it happened to be a toggle or a slider),
+  // 고급 (things you set once and rarely revisit). Each still its own tinted .settings-group
+  // block (see popover.css) for the same "no card-in-card" reasoning as before; 고급 is the one
+  // new wrinkle — wrapped in a <details> so it starts collapsed and visually de-emphasized,
+  // rather than presenting all three groups with equal weight the way a flat settings console
+  // would.
+  const basicGroup = el('div', 'settings-group', [
+    el('div', 'section-label', ['기본']),
     renderSegmented({
       label: '테마',
       options: [
@@ -944,70 +1115,6 @@ function renderSettingsPanel(settings) {
       ],
       value: settings.appearance,
       onChange: (next) => updateSetting({ appearance: next }),
-    }),
-    // Which item field the atom widget's same-category connecting lines (atom-view.jsx) group by
-    // when a stock is clicked — see store.mjs's own atomCategoryDimension comment for why 분야
-    // (sector) is the default rather than, say, 자산군.
-    renderSegmented({
-      label: '카테고리 필터',
-      options: [
-        { value: 'assetClass', label: '자산군' },
-        { value: 'region', label: '지역' },
-        { value: 'sector', label: '분야' },
-        { value: 'style', label: '스타일' },
-        { value: 'risk', label: '위험' },
-      ],
-      value: settings.atomCategoryDimension,
-      onChange: (next) => updateSetting({ atomCategoryDimension: next }),
-    }),
-    // Below the theme picker, grouped by control type rather than the previous
-    // toggle/slider/slider/slider/slider/toggle interleaving — on/off toggles first, then every
-    // slider, so scanning the panel doesn't require re-parsing what kind of control each row is
-    // as you go. The hairline between the two is deliberately just that (see
-    // .settings-subgroup-divider in popover.css) — .settings-group is already its own tinted
-    // section, so a second nested card here would be one grouping frame too many.
-    renderToggle({
-      label: '인사이트 알림',
-      checked: settings.notificationsEnabled,
-      onChange: (next) => updateSetting({ notificationsEnabled: next }),
-    }),
-    renderToggle({
-      label: '로그인 시 자동 실행',
-      checked: settings.launchAtLogin,
-      onChange: (next) => updateSetting({ launchAtLogin: next }),
-    }),
-    // 잠자기 lives in the tray icon's right-click menu instead (main.js's tray.on('right-click')),
-    // next to 원자 위젯 표시 — not here. Both are "is the widget on at all" style toggles, one
-    // step removed from the news/thresholds this settings panel is otherwise about.
-    el('div', 'settings-subgroup-divider'),
-    renderSlider({
-      label: '새로고침 주기',
-      format: (v) => `${v}초`,
-      min: 15,
-      max: 300,
-      step: 15,
-      value: settings.pollIntervalSec,
-      onCommit: (v) => updateSetting({ pollIntervalSec: v }),
-    }),
-    // Floored at 0.4 (matches main.js's own MIN_WINDOW_OPACITY re-clamp) — much lower than that
-    // and the window's own text stops being legible, which defeats the point of a settings UI.
-    renderSlider({
-      label: '팝업 불투명도',
-      format: (v) => `${Math.round(v * 100)}%`,
-      min: 0.4,
-      max: 1,
-      step: 0.05,
-      value: settings.popoverOpacity,
-      onCommit: (v) => updateSetting({ popoverOpacity: v }),
-    }),
-    renderSlider({
-      label: '원자 위젯 불투명도',
-      format: (v) => `${Math.round(v * 100)}%`,
-      min: 0.4,
-      max: 1,
-      step: 0.05,
-      value: settings.widgetOpacity,
-      onCommit: (v) => updateSetting({ widgetOpacity: v }),
     }),
     // Widget can also be resized by dragging its own edges directly — this is the settings-panel
     // equivalent for when that's not convenient. Bounds come from main.js (ATOM_WIDGET_MIN_WIDTH/
@@ -1021,10 +1128,36 @@ function renderSettingsPanel(settings) {
       value: settings.atomWidgetSize.width,
       onCommit: (v) => updateSetting({ atomWidgetSize: { width: v } }),
     }),
+    // Floored at 0.4 (matches main.js's own MIN_WINDOW_OPACITY re-clamp) — much lower than that
+    // and the widget's own text stops being legible, which defeats the point of a settings UI.
+    renderSlider({
+      label: '원자 위젯 불투명도',
+      format: (v) => `${Math.round(v * 100)}%`,
+      min: 0.4,
+      max: 1,
+      step: 0.05,
+      value: settings.widgetOpacity,
+      onCommit: (v) => updateSetting({ widgetOpacity: v }),
+    }),
+    renderToggle({
+      label: '로그인 시 자동 실행',
+      checked: settings.launchAtLogin,
+      onChange: (next) => updateSetting({ launchAtLogin: next }),
+    }),
   ]);
 
-  const investSettingsGroup = el('div', 'settings-group', [
-    el('div', 'section-label', ['투자 설정']),
+  // Every control that can fire a notification, one flat list — an on/off switch for whether
+  // insight notifications happen at all, immediately followed by the thresholds that decide
+  // *which* ones fire. Previously split across two different groups (notificationsEnabled lived
+  // with appearance/theme, the three thresholds lived in their own "투자 설정" group) despite all
+  // four being the same kind of decision: "when should this app interrupt me".
+  const alertsGroup = el('div', 'settings-group', [
+    el('div', 'section-label', ['알림']),
+    renderToggle({
+      label: '인사이트 알림',
+      checked: settings.notificationsEnabled,
+      onChange: (next) => updateSetting({ notificationsEnabled: next }),
+    }),
     renderSlider({
       label: '손절 알림',
       format: (v) => `${v}%`,
@@ -1054,7 +1187,51 @@ function renderSettingsPanel(settings) {
     }),
   ]);
 
-  const body = el('div', 'settings-panel__body', [appSettingsGroup, investSettingsGroup]);
+  // Refresh cadence, which item field the atom widget groups by, and the popup window's own
+  // opacity — each a "set once, rarely touch again" control, exactly the kind of thing a small
+  // menu-bar settings screen shouldn't lead with. <details> (not a JS-driven toggle) starts
+  // collapsed for free, needs no open/close state of its own to manage, and degrades gracefully
+  // (still fully usable, just not collapsible) in any context that doesn't support it.
+  const advancedDetails = el('details', 'settings-advanced', [
+    el('summary', 'settings-advanced__summary', ['고급']),
+    el('div', 'settings-group settings-advanced__group', [
+      renderSlider({
+        label: '새로고침 주기',
+        format: (v) => `${v}초`,
+        min: 15,
+        max: 300,
+        step: 15,
+        value: settings.pollIntervalSec,
+        onCommit: (v) => updateSetting({ pollIntervalSec: v }),
+      }),
+      // Which item field the atom widget's same-category connecting lines (atom-view.jsx) group
+      // by when a stock is clicked — see store.mjs's own atomCategoryDimension comment for why
+      // 분야 (sector) is the default rather than, say, 자산군.
+      renderSegmented({
+        label: '카테고리 필터',
+        options: [
+          { value: 'assetClass', label: '자산군' },
+          { value: 'region', label: '지역' },
+          { value: 'sector', label: '분야' },
+          { value: 'style', label: '스타일' },
+          { value: 'risk', label: '위험' },
+        ],
+        value: settings.atomCategoryDimension,
+        onChange: (next) => updateSetting({ atomCategoryDimension: next }),
+      }),
+      renderSlider({
+        label: '팝업 불투명도',
+        format: (v) => `${Math.round(v * 100)}%`,
+        min: 0.4,
+        max: 1,
+        step: 0.05,
+        value: settings.popoverOpacity,
+        onCommit: (v) => updateSetting({ popoverOpacity: v }),
+      }),
+    ]),
+  ]);
+
+  const body = el('div', 'settings-panel__body', [basicGroup, alertsGroup, advancedDetails]);
 
   return el('div', 'settings-panel', [
     el('div', 'settings-panel__header', [el('span', 'settings-panel__title', ['설정'])]),
@@ -1090,6 +1267,8 @@ function render(state) {
   appRoot.classList.remove('is-hidden');
   setChildren(headerRoot, renderHeader(state));
   portfolioPicker.update(state);
+  quickAddForm.update(state);
+  updateSummaryPage(state);
   updateNewsPage(state);
 }
 
@@ -1148,10 +1327,11 @@ async function bootstrap() {
   window.atomfolio.onTheme(applyTheme);
 
   // All three mounted once, outside render()'s rebuild cycle — see their own comments for why.
-  // Mounted before the first render() call below so that call's portfolioPicker.update() has
-  // somewhere real to write into, rather than a detached node render() happens to reattach after.
+  // Mounted before the first render() call below so that call's portfolioPicker.update()/
+  // quickAddForm.update() have somewhere real to write into, rather than a detached node render()
+  // happens to reattach after.
   pickerRoot.append(portfolioPicker.element);
-  quickAddRoot.append(createQuickAddForm());
+  quickAddRoot.append(quickAddForm.element);
   newsSearchRoot.append(createNewsSearchBar());
 
   const initialState = await window.atomfolio.getState();
@@ -1160,12 +1340,12 @@ async function bootstrap() {
 
   window.atomfolio.onState((state) => applyIncomingState(state));
   window.atomfolio.onFocusArticle((articleId) => {
-    pager.goToPage(0);
+    pager.goToPage(PAGE_NEWS);
     const cardEl = document.querySelector(`[data-article-id="${CSS.escape(articleId ?? '')}"]`);
     cardEl?.scrollIntoView({ block: 'center' });
   });
-  // Widget context-menu's "뉴스 열기"/"설정 열기" — same show-and-jump shape as onFocusArticle
-  // above, just without an article to scroll to.
+  // Widget context-menu's "요약 보기"/"뉴스 열기"/"설정 열기" — same show-and-jump shape as
+  // onFocusArticle above, just without an article to scroll to.
   window.atomfolio.onFocusPage((pageIndex) => {
     pager.goToPage(pageIndex);
   });

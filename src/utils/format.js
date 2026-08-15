@@ -13,6 +13,29 @@ export function compactLabel(value, max = 18) {
   return `${text.slice(0, max - 1)}…`;
 }
 
+// 억/만 축약 — a raw 8-digit KRW figure (₩12,345,000) reliably wraps or overflows in any of the
+// narrow spaces this app shows money in (a digital-twin result card, the desktop atom widget's
+// readout, the menu-bar popover's summary page); this stays short enough not to. Clamped to >= 0
+// — callers that need a sign (a profit/loss delta, say) format that themselves and pass this only
+// the magnitude, same as formatSignedInvestmentMoney below already does.
+export function formatKoreanWonShort(value) {
+  const numeric = Math.max(0, Number(value ?? 0));
+
+  if (numeric >= 100000000) {
+    const amount = numeric / 100000000;
+    const fixed = amount >= 10 ? amount.toFixed(0) : amount.toFixed(1).replace(/\.0$/, '');
+    return `${fixed}억`;
+  }
+
+  if (numeric >= 10000) {
+    const amount = numeric / 10000;
+    const fixed = amount >= 100 ? Math.round(amount).toLocaleString('ko-KR') : amount.toFixed(1).replace(/\.0$/, '');
+    return `${fixed}만`;
+  }
+
+  return Math.round(numeric).toLocaleString('ko-KR');
+}
+
 export function formatHeatmapValue(value, mode) {
   if (!Number.isFinite(value)) {
     return '';

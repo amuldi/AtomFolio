@@ -7,6 +7,7 @@ import {
   runStressTest,
   simulateRebalance,
 } from '../../lib/digitalTwin.js';
+import { formatKoreanWonShort } from '../../utils/format.js';
 
 const STRESS_PRESETS = [
   ['tech_crash', '기술주 급락'],
@@ -75,26 +76,6 @@ function toneClassForValue(value) {
   return '';
 }
 
-// 억/만원 단위 축약 — 카드 폭에 맞지 않는 8자리 원 단위 숫자(예: ₩29,004,178)가 다음 줄로
-// 밀려나는 걸 막기 위한 표시 전용 포맷. "원" 접미사는 붙이지 않는다 — 이미 ₩ 기호나 "매월 …씩"
-// 같은 문맥이 통화임을 알려주는 자리에서는 "605.6만원"보다 "605.6만"이 더 짧고 자연스럽다.
-function formatKoreanWonShort(value) {
-  const numeric = Math.max(0, Number(value ?? 0));
-
-  if (numeric >= 100000000) {
-    const amount = numeric / 100000000;
-    const fixed = amount >= 10 ? amount.toFixed(0) : amount.toFixed(1).replace(/\.0$/, '');
-    return `${fixed}억`;
-  }
-
-  if (numeric >= 10000) {
-    const amount = numeric / 10000;
-    const fixed = amount >= 100 ? Math.round(amount).toLocaleString('ko-KR') : amount.toFixed(1).replace(/\.0$/, '');
-    return `${fixed}만`;
-  }
-
-  return Math.round(numeric).toLocaleString('ko-KR');
-}
 
 function formatMoney(value, source) {
   const prefix = source === 'weight' || source === 'equal' ? '' : '₩';

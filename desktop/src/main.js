@@ -72,9 +72,11 @@ const ATOM_WIDGET_DOCKED_WIDTH = 84;
 const ATOM_WIDGET_DOCKED_HEIGHT = 108;
 // Pages inside the popover's horizontal pager (see popover.js's createPager) — kept in one place
 // since both the header's own ⚙ shortcut and the context-menu shortcuts below need to agree on
-// the indices.
-const POPOVER_PAGE_NEWS = 0;
-const POPOVER_PAGE_SETTINGS = 1;
+// the indices. Summary (the portfolio mini-dashboard) is page 0 — the popover opens there, not on
+// news, so "what's my portfolio doing right now" is the first thing a click ever shows.
+const POPOVER_PAGE_SUMMARY = 0;
+const POPOVER_PAGE_NEWS = 1;
+const POPOVER_PAGE_SETTINGS = 2;
 // A window this transparent would make its own text unreadable — the slider in settings is
 // clamped to this floor too, but the backend re-clamps in case config.json was hand-edited.
 const MIN_WINDOW_OPACITY = 0.4;
@@ -671,6 +673,7 @@ function createAtomWidget() {
       return;
     }
     const template = [
+      { label: '요약 보기', click: () => showPopoverFocusedOnPage(POPOVER_PAGE_SUMMARY) },
       { label: '뉴스 열기', click: () => showPopoverFocusedOnPage(POPOVER_PAGE_NEWS) },
       { label: '설정 열기', click: () => showPopoverFocusedOnPage(POPOVER_PAGE_SETTINGS) },
     ];
@@ -933,8 +936,9 @@ function showPopoverFocusedOn(articleId) {
 }
 
 // Same reveal choreography as showPopoverFocusedOn above, minus the article-specific scroll —
-// used by the widget's context-menu "뉴스 열기"/"설정 열기" shortcuts to land directly on a page
-// instead of always opening onto news (the pager's own default on every popover show).
+// used by the widget's context-menu "요약 보기"/"뉴스 열기"/"설정 열기" shortcuts to land directly
+// on a page instead of always opening onto summary (the pager's own default on every popover show,
+// see popover.js's resetToFirstPageIfVisible).
 function showPopoverFocusedOnPage(pageIndex) {
   if (!popover) {
     return;
