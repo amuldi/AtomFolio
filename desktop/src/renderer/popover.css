@@ -287,7 +287,10 @@ body {
 .summary {
   display: flex;
   flex-direction: column;
-  padding-bottom: 6px;
+  /* Was 6px while .summary__quicknav's own top padding closed out the page below it — that row
+     is gone now (뉴스/설정 buttons removed), so this is the only bottom breathing room
+     .summary__holdings' last row gets. */
+  padding-bottom: 16px;
   /* Mirrors #news-root's own is-loading fade (see popover.js's showPortfolioSwitchLoading) — the
      numbers here are exactly as portfolio-scoped as the news list, so a switch dims both
      together, not just one half of the panel. */
@@ -406,35 +409,9 @@ body {
   color: var(--loss);
 }
 
-.summary__quicknav {
-  display: flex;
-  gap: 6px;
-  padding: 12px 16px 4px;
-}
-
-.summary__nav-button {
-  flex: 1 1 0;
-  padding: 8px 0;
-  border-radius: 8px;
-  border: 1px solid var(--hairline);
-  background: rgba(var(--surface), 0.03);
-  color: var(--ink-dim);
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 580;
-  cursor: pointer;
-  transition: background-color 140ms var(--ease), color 140ms var(--ease), border-color 140ms var(--ease);
-}
-
-.summary__nav-button:hover {
-  background: rgba(var(--surface), 0.07);
-  color: var(--ink);
-  border-color: rgba(var(--surface), 0.24);
-}
-
-.summary__nav-button:active {
-  transform: scale(0.98);
-}
+/* No .summary__quicknav/.summary__nav-button rules here any more (뉴스/설정 shortcut buttons
+   removed from the summary page per direct feedback) — .summary's own padding-bottom (see its own
+   rule above) is what now closes out the page below .summary__holdings. */
 
 /* ---------- Settings page ---------- */
 

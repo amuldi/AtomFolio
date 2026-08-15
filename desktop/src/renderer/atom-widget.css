@@ -64,15 +64,26 @@ body {
 
 /* Overrides atom-sketch.css's popover-oriented version (fixed aspect-ratio, near-black star-field
    card, rounded corners) — no card here at all, the atom floats straight over the desktop.
-   -webkit-app-region: no-drag by default — grabbing the atom (center, bond-lines, or an
-   individual stock node) rotates/selects it, same as the real website's trackball, not the
-   window-hijacking behavior this used to have. Holding ⌘ instead moves the window — but via
-   main.js polling the global cursor position over IPC (atomfolio.startWidgetDrag/endWidgetDrag),
-   not via -webkit-app-region: drag on this element. A native-app-region version was tried first and
-   confirmed broken in real use: that property only takes effect for a mousedown that starts
-   *after* the browser process already has the point cached as a draggable region from a prior
-   layout pass — toggling the class reactively from a pointerdown/pointermove handler is
-   structurally too late to affect that same pointerdown. */
+   -webkit-app-region: drag *statically*, from first paint, same as .atom-section's own margin
+   above — grabbing empty stage space (nothing painted, or the gaps between nodes) while ⌘ is held
+   moves the window via a real native OS drag; .node-hit/.center-hit below are carved back out to
+   no-drag so grabbing the atom itself (center, bond-lines, or an individual stock node) still
+   rotates/selects it instead, same as the real website's trackball. This used to be no-drag by
+   default here, with main.js polling the global cursor position over IPC
+   (atomfolio.startWidgetDrag/endWidgetDrag) to move the window instead of using this property at
+   all — a *reactively toggled* -webkit-app-region: drag was tried even earlier than that and
+   confirmed broken: the property only takes effect for a mousedown that starts *after* the
+   browser process already has the point cached as a draggable region from a prior layout pass, so
+   toggling the class from a pointerdown/pointermove handler was structurally too late to affect
+   that same pointerdown. A rule that's simply always true from page load (this one) doesn't have
+   that problem — nothing is toggled, so there's nothing for a mousedown to be "too late" for. The
+   payoff for going back to a real native drag: it's the only kind of drag macOS's own Mission
+   Control recognizes for its "hold at the screen edge to switch Spaces" behavior, carrying the
+   window along — a simulated drag (repeated setPosition() calls) never registered as a real
+   window-drag session to the window server, so that OS-level behavior never had a chance to fire
+   for it. ⌘ itself is still enforced entirely in JS (atom-view.jsx's click-through hit-test) —
+   this property has no idea what ⌘ is; it only matters whether the *window* is currently
+   receiving mouse events at all over a given point, which that hit-test is what actually gates. */
 .atom-visual-stage {
   position: relative;
   flex: 1 1 auto;
@@ -83,7 +94,7 @@ body {
   overflow: visible;
   touch-action: none;
   user-select: none;
-  -webkit-app-region: no-drag;
+  -webkit-app-region: drag;
   cursor: default;
   /* Permanently reserves room for .atom-readout at the bottom, instead of the readout overlaying
      on top of wherever the atom's own lines/nodes happen to be. .sketch-svg is width:100%/
@@ -97,6 +108,16 @@ body {
      ~10% scale(1.1) overflow (see .sketch-svg's comment).
   */
   padding-bottom: 52px;
+}
+
+/* Carved back out of .atom-visual-stage's own static drag region above — a plain (non-⌘) drag
+   starting on a node or the center has to rotate the atom via atom-view.jsx's own pointer
+   handlers, never get intercepted as a native window-drag first. atom-sketch.css (shared with the
+   web app, where -webkit-app-region is simply inert/ignored) is what actually defines these
+   classes; this file only adds the Electron-specific property on top of them. */
+.node-hit,
+.center-hit {
+  -webkit-app-region: no-drag;
 }
 
 /* .is-move-mode itself is still just a hover-reactive cursor cue (toggled by atom-view.jsx reading
@@ -291,177 +312,4 @@ body {
 .atom-hint {
   background: rgba(20, 18, 16, 0.6);
   backdrop-filter: blur(6px);
-}
-
-/* ---------------------------------------------------------------------------------------------
-   Edge Dock — pushing the widget hard against a screen edge collapses it into a small, quiet tab
-   flush against that edge (main.js's dockAtomWidgetTo/undockAtomWidgetAt own the actual window
-   geometry; data-widget-mode here is atom-view.jsx's own mirror of state.atomWidgetMode, same
-   mechanism as data-theme). Three pieces below: the docked tab's own compact layout, the
-   drag-in-progress preview feedback, and the dock/undock spring transition. */
-
-/* The docked tab itself — flush on the edge side, gently rounded everywhere else, so it visually
-   reads as *attached* to the screen edge rather than a small window that happens to be nearby.
-   .atom-section's normal 24px drag-margin padding (meant for a much bigger floating window) would
-   eat almost the entire docked tab, so it's replaced with a small fixed inset instead; dragging
-   the tab is handled entirely by .atom-dock-hit's own pointer handling (see atom-view.jsx), not
-   the native app-region drag .atom-section otherwise relies on, so that's turned off here too. */
-html[data-widget-mode='docked-left'] .atom-section,
-html[data-widget-mode='docked-right'] .atom-section {
-  padding: 9px;
-  -webkit-app-region: no-drag;
-  cursor: pointer;
-}
-
-html[data-widget-mode='docked-left'] .atom-visual-stage,
-html[data-widget-mode='docked-right'] .atom-visual-stage {
-  padding-bottom: 0;
-  overflow: hidden;
-  border-radius: 18px;
-}
-
-html[data-widget-mode='docked-left'] .atom-visual-stage {
-  border-top-left-radius: 5px;
-  border-bottom-left-radius: 5px;
-}
-
-html[data-widget-mode='docked-right'] .atom-visual-stage {
-  border-top-right-radius: 5px;
-  border-bottom-right-radius: 5px;
-}
-
-/* The readout/hint are unmounted entirely while docked (see atom-view.jsx) — nothing here needs
-   to hide them by CSS — but the AtomSketch visual itself stays mounted (just static, see its own
-   idle-rotation gate) and needs pointer-events turned off so .atom-dock-hit below is the only
-   thing that can ever receive a click/drag while docked, regardless of which SVG element happens
-   to be underneath the cursor at a given moment. */
-html[data-widget-mode='docked-left'] .atom-materialize-wrapper,
-html[data-widget-mode='docked-right'] .atom-materialize-wrapper {
-  pointer-events: none;
-}
-
-.atom-dock-hit {
-  position: absolute;
-  inset: 0;
-  cursor: pointer;
-  -webkit-app-region: no-drag;
-}
-
-/* The rail: a thin glowing seam right at the screen edge, so the docked tab reads as plugged into
-   the edge rather than just a small window resting near it. */
-html[data-widget-mode='docked-left'] .atom-visual-stage::before,
-html[data-widget-mode='docked-right'] .atom-visual-stage::before {
-  content: '';
-  position: absolute;
-  top: 14%;
-  bottom: 14%;
-  width: 2px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.45);
-  box-shadow: 0 0 10px 1px rgba(255, 255, 255, 0.3);
-  pointer-events: none;
-}
-
-html[data-widget-mode='docked-left'] .atom-visual-stage::before {
-  left: 0;
-}
-
-html[data-widget-mode='docked-right'] .atom-visual-stage::before {
-  right: 0;
-}
-
-/* Drag-in-progress preview — shown once a floating drag (or a drag pulling the tab back out of an
-   existing dock) crosses into the wider preview zone, well before release actually commits to
-   anything (see main.js's ATOM_WIDGET_DOCK_PREVIEW_THRESHOLD/ATOM_WIDGET_DOCK_TRIGGER_THRESHOLD —
-   this class covers the wider of the two, so the visual cue appears with room to spare before the
-   tighter zone that would actually dock on release). A soft compress-toward-the-edge plus a
-   pulsing seam just outside the window's own bounds, reading as "let go here to dock" without
-   looking like an already-committed state change. */
-.atom-visual-stage.is-edge-preview-left,
-.atom-visual-stage.is-edge-preview-right {
-  transition: transform 120ms ease;
-}
-
-.atom-visual-stage.is-edge-preview-left {
-  transform: scale(0.92) translateX(-4%);
-}
-
-.atom-visual-stage.is-edge-preview-right {
-  transform: scale(0.92) translateX(4%);
-}
-
-.atom-visual-stage.is-edge-preview-left::after,
-.atom-visual-stage.is-edge-preview-right::after {
-  content: '';
-  position: absolute;
-  top: 8%;
-  bottom: 8%;
-  width: 3px;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.5);
-  box-shadow: 0 0 16px 2px rgba(255, 255, 255, 0.38);
-  opacity: 0;
-  animation: atom-dock-preview-pulse 900ms ease-in-out infinite;
-  pointer-events: none;
-}
-
-.atom-visual-stage.is-edge-preview-left::after {
-  left: -6px;
-}
-
-.atom-visual-stage.is-edge-preview-right::after {
-  right: -6px;
-}
-
-@keyframes atom-dock-preview-pulse {
-  0%,
-  100% {
-    opacity: 0.22;
-  }
-  50% {
-    opacity: 0.8;
-  }
-}
-
-/* Dock/undock transition — a short elastic overshoot ("또잉") layered on top of main.js's own
-   native setBounds(..., true) window-move animation, so the content inside doesn't read as a
-   flat, mechanical resize while the window itself glides to its new rect. Keyed off
-   .is-dock-transition (applied for ATOM_WIDGET_DOCK_ANIMATE_MS, see atom-view.jsx), not off
-   dock/undock state directly, so it plays exactly once per transition rather than for as long as
-   the widget happens to stay docked. A CSS animation on transform overrides the element's own
-   inline --materialize-driven transform for its duration, which is what lets this compose with
-   the dissolve/materialize scale already in effect instead of fighting it. */
-.atom-materialize-wrapper.is-dock-transition {
-  animation: atom-dock-spring 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-@keyframes atom-dock-spring {
-  0% {
-    transform: scale(var(--materialize, 1));
-  }
-  45% {
-    transform: scale(calc(var(--materialize, 1) * 0.8));
-  }
-  75% {
-    transform: scale(calc(var(--materialize, 1) * 1.08));
-  }
-  100% {
-    transform: scale(var(--materialize, 1));
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .atom-visual-stage.is-edge-preview-left,
-  .atom-visual-stage.is-edge-preview-right {
-    transition: none;
-    transform: none;
-  }
-  .atom-visual-stage.is-edge-preview-left::after,
-  .atom-visual-stage.is-edge-preview-right::after {
-    animation: none;
-    opacity: 0.55;
-  }
-  .atom-materialize-wrapper.is-dock-transition {
-    animation: none;
-  }
 }

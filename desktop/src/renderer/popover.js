@@ -528,15 +528,9 @@ function renderSummaryPage(state) {
     page.append(el('div', 'summary__holdings', topHoldings.map(renderSummaryHolding)));
   }
 
-  const newsButton = el('button', 'summary__nav-button', ['뉴스']);
-  newsButton.type = 'button';
-  newsButton.addEventListener('click', () => pager.goToPage(PAGE_NEWS));
-
-  const settingsButton = el('button', 'summary__nav-button', ['설정']);
-  settingsButton.type = 'button';
-  settingsButton.addEventListener('click', () => pager.goToPage(PAGE_SETTINGS));
-
-  page.append(el('div', 'summary__quicknav', [newsButton, settingsButton]));
+  // No 뉴스/설정 shortcut buttons here (removed per direct feedback) — the pager dots/swipe,
+  // the header's own ⚙ button, and the widget's right-click menu ("뉴스 열기"/"설정 열기") all
+  // still reach those pages; this summary page stays just the portfolio numbers.
 
   return page;
 }

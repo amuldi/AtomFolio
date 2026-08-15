@@ -41,16 +41,6 @@ const IDLE_ROTATION_RESPONSE = 10;
 const ATOM_LABEL_REFERENCE_STAGE_PX = 192;
 const ATOM_LABEL_MAX_SCALE = 3;
 
-// Edge Dock — how long the dock/undock spring-overshoot class (atom-widget.css's
-// .is-dock-transition) stays applied, matching its own keyframe duration. Kept here (not read
-// off the CSS) since main.js's own setBounds(..., true) native animation runs on a roughly
-// similar timescale and the two are meant to read as one motion, not two independently-timed ones.
-const ATOM_WIDGET_DOCK_ANIMATE_MS = 300;
-// Edge Dock — same squared-distance threshold atom-node dragging already uses elsewhere in this
-// file (see handleNodePointerDown's own drag vs. click distinction) to tell a real drag from
-// pointer jitter during what's actually just a click.
-const DOCKED_DRAG_MOVE_THRESHOLD_SQ = 36;
-
 
 // 억/만 축약 (src/utils/format.js's formatKoreanWonShort, shared with the web app's own
 // DigitalTwinPanel and the popover's summary page) — was a raw Intl.NumberFormat currency string
@@ -218,7 +208,7 @@ function AtomReadout({ info }) {
   );
 }
 
-function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categoryDimension, sleeping, dockMode }) {
+function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categoryDimension, sleeping }) {
   const stageRef = useRef(null);
   const svgRef = useRef(null);
   const [selectedAtomId, setSelectedAtomId] = useState(null);
@@ -312,40 +302,6 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
     });
   }, [materializeAtom]);
 
-  // Edge Dock — mirrors state.atomWidgetMode onto <html> the same way AtomViewRoot's own theme
-  // effect mirrors data-theme, so atom-widget.css can style the compact docked layout purely off
-  // a CSS attribute selector instead of every rule needing a JS-computed class.
-  useEffect(() => {
-    document.documentElement.dataset.widgetMode = dockMode;
-  }, [dockMode]);
-
-  // Edge Dock — drag-preview feedback (see main.js's updateAtomWidgetDockTracking). Only ever
-  // active while a ⌘-drag or a docked-tab drag is actually in flight; main.js already only sends
-  // a message here on an actual zone change, not every poll tick.
-  const [edgePreviewSide, setEdgePreviewSide] = useState(null);
-  useEffect(() => {
-    return window.atomfolio?.onWidgetEdgePreview?.(({ side }) => {
-      setEdgePreviewSide(side ?? null);
-    });
-  }, []);
-
-  // Edge Dock — the brief spring/overshoot class applied alongside main.js's own native
-  // setBounds(..., true) window-move animation (see dockAtomWidgetTo/undockAtomWidgetAt). Cleared
-  // on a timer rather than an animationend listener so it self-heals even if the class somehow
-  // never actually started animating (e.g. prefers-reduced-motion, where the keyframe is a no-op).
-  const [dockTransitionPhase, setDockTransitionPhase] = useState(null);
-  const dockTransitionTimerRef = useRef(null);
-  useEffect(() => {
-    const unsubscribe = window.atomfolio?.onWidgetDockTransition?.(({ phase }) => {
-      setDockTransitionPhase(phase);
-      clearTimeout(dockTransitionTimerRef.current);
-      dockTransitionTimerRef.current = setTimeout(() => setDockTransitionPhase(null), ATOM_WIDGET_DOCK_ANIMATE_MS);
-    });
-    return () => {
-      unsubscribe?.();
-      clearTimeout(dockTransitionTimerRef.current);
-    };
-  }, []);
 
   const baseAtoms = useMemo(
     () => {
@@ -423,135 +379,24 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
     };
   }, []);
 
-  // The actual ⌘-move drag: started from handleStagePointerDown below (background/center/node —
-  // whatever's under the cursor, as long as ⌘ is held). The renderer itself doesn't track cursor
-  // deltas any more — main.js's startAtomWidgetDrag polls screen.getCursorScreenPoint() instead,
-  // specifically because a renderer only ever receives pointer events while the cursor is over its
-  // own window: a fast drag could outrun the (still catching up) window edge, the cursor would
-  // leave the window, and pointermove would simply stop arriving mid-gesture — main-process cursor
-  // polling has no such boundary. This ref (and the window-level listeners below) exist purely to
-  // know *when* to tell main.js to start/stop that polling — matching pointerId, and watching for
-  // ⌘ being released mid-drag — not to compute any movement themselves.
-  const widgetDragRef = useRef({ active: false, pointerId: null });
-
-  const handleStagePointerDown = useCallback((event) => {
-    if (!event.metaKey) {
-      return;
-    }
-    event.preventDefault();
-    widgetDragRef.current = { active: true, pointerId: event.pointerId };
-    window.atomfolio?.startWidgetDrag?.();
-    try {
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-    } catch {
-      // Same rationale as handleNodePointerDown below — capture is a nice-to-have, not required.
-    }
-  }, []);
-
-  useEffect(() => {
-    // Shared by handleMove (⌘ released mid-drag, mouse button still down) and handleUp (button
-    // released) — either one ends the drag the same way, so main.js's snap-to-edge handler (see
-    // its atomfolio:widget-drag-end handler) fires exactly once per drag regardless of which one
-    // triggered it.
-    const endDrag = () => {
-      widgetDragRef.current.active = false;
-      window.atomfolio?.endWidgetDrag?.();
-    };
-    const handleMove = (event) => {
-      const drag = widgetDragRef.current;
-      if (!drag.active || event.pointerId !== drag.pointerId) {
-        return;
-      }
-      // ⌘ gates this drag (handleStagePointerDown above never starts one without it already held),
-      // but releasing ⌘ mid-drag doesn't itself fire a pointer event — the *next* pointermove is
-      // the first chance to notice metaKey has gone false, at which point the drag ends here
-      // instead of waiting for pointerup. The mouse button can still be held at this point; ending
-      // the drag (active = false) means this same handler's own `!drag.active` check above no-ops
-      // every further pointermove until a fresh ⌘+drag starts a new one. Nothing else to do here —
-      // main.js's polling loop is what actually moves the window.
-      if (!event.metaKey) {
-        endDrag();
-      }
-    };
-    const handleUp = (event) => {
-      const drag = widgetDragRef.current;
-      if (!drag.active || event.pointerId !== drag.pointerId) {
-        return;
-      }
-      endDrag();
-    };
-    window.addEventListener('pointermove', handleMove);
-    window.addEventListener('pointerup', handleUp);
-    window.addEventListener('pointercancel', handleUp);
-    return () => {
-      window.removeEventListener('pointermove', handleMove);
-      window.removeEventListener('pointerup', handleUp);
-      window.removeEventListener('pointercancel', handleUp);
-    };
-  }, []);
-
-  // Edge Dock — docked-tab interaction: pointerdown here is *always* a potential undock, no ⌘
-  // needed (unlike the floating-mode drag above), since a docked tab has nothing else competing
-  // for a plain click/drag — no per-node rotate/select to protect. Whether it turns into a drag
-  // (pull it back out) or stays a click (undock in place) is decided the same way
-  // handleNodePointerDown/handleUp already decide drag-vs-click for atom nodes: a real movement
-  // has to clear a small squared-distance threshold before it counts as a drag at all.
-  const dockDragRef = useRef({ active: false, moved: false, pointerId: null, startX: 0, startY: 0 });
-
-  const handleDockedPointerDown = useCallback((event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    dockDragRef.current = {
-      active: true,
-      moved: false,
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-    };
-    try {
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-    } catch {
-      // Same rationale as handleNodePointerDown below — capture is a nice-to-have, not required.
-    }
-  }, []);
-
-  useEffect(() => {
-    const handleMove = (event) => {
-      const drag = dockDragRef.current;
-      if (!drag.active || event.pointerId !== drag.pointerId || drag.moved) {
-        return;
-      }
-      const dx = event.clientX - drag.startX;
-      const dy = event.clientY - drag.startY;
-      if (dx * dx + dy * dy > DOCKED_DRAG_MOVE_THRESHOLD_SQ) {
-        drag.moved = true;
-        // Only now does main.js's cursor-poll drag actually start — a click that never moves this
-        // far never touches it at all, so a plain click has nothing to visually "settle" from.
-        window.atomfolio?.startWidgetDrag?.();
-      }
-    };
-    const handleUp = (event) => {
-      const drag = dockDragRef.current;
-      if (!drag.active || event.pointerId !== drag.pointerId) {
-        return;
-      }
-      dockDragRef.current.active = false;
-      if (drag.moved) {
-        // main.js's own drag-end handler decides dock/undock/snap from where this landed.
-        window.atomfolio?.endWidgetDrag?.();
-      } else {
-        window.atomfolio?.undockWidget?.();
-      }
-    };
-    window.addEventListener('pointermove', handleMove);
-    window.addEventListener('pointerup', handleUp);
-    window.addEventListener('pointercancel', handleUp);
-    return () => {
-      window.removeEventListener('pointermove', handleMove);
-      window.removeEventListener('pointerup', handleUp);
-      window.removeEventListener('pointercancel', handleUp);
-    };
-  }, []);
+  // The ⌘-move drag needs no JS of its own any more — atom-widget.css gives .atom-visual-stage a
+  // *static* -webkit-app-region: drag (carving out .node-hit/.center-hit as no-drag, so clicking
+  // an actual node/center still rotates/selects instead of moving the window), and the click-
+  // through hit-test below is what gates *whether* the window is even receiving mouse events over
+  // that empty space at all — only while ⌘ is held (unchanged from before). Once the window is
+  // receiving events there, a real native OS window-drag can begin the instant the user presses
+  // and drags, entirely inside Chromium/the window server — no pointerdown handler, no IPC, no
+  // cursor polling. This replaces an earlier version that streamed synthetic drag positions to
+  // main.js instead: that worked for plain repositioning, but a *simulated* drag (repeated
+  // setPosition() calls from a timer) never registers as a real window-drag session with the
+  // window server, so it couldn't get anything else a genuine native drag gets for free — in
+  // particular, macOS's own Mission Control behavior of switching to a neighboring Space when a
+  // window is held at the screen edge mid-drag, carrying the window along. A *static* app-region
+  // (present from first paint, never toggled by a class) is also what actually makes native
+  // dragging work at all here — an earlier attempt that toggled the CSS reactively in response to
+  // ⌘ found real native drag doesn't arm that way (a mousedown only picks up an app-region the
+  // browser process had already cached from a prior layout pass, not one added by the same
+  // gesture's own pointerdown handler).
 
   // Click-through for the widget's own empty space. This is a transparent, frameless
   // BrowserWindow — by default Electron gives it a normal opaque hit-box covering its whole
@@ -589,29 +434,18 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
     });
 
     const evaluate = (event) => {
-      // A docked tab is small and entirely "the button" — the whole thing (via .atom-dock-hit,
-      // see its own comment) is meant to catch clicks/drags, so there's no meaningful click-
-      // through region to compute here at all while docked, unlike the floating widget's much
-      // larger, mostly-empty stage.
-      if (dockMode !== 'floating') {
-        if (lastIgnoreRef.current !== false) {
-          lastIgnoreRef.current = false;
-          window.atomfolio?.setWidgetClickThrough?.(false);
-        }
-        return;
-      }
       const target = document.elementFromPoint(event.clientX, event.clientY);
       const overHitTarget = Boolean(target?.closest?.('.node-hit, .center-hit'));
       const overStage = Boolean(target && stage.contains(target));
-      // A drag already in progress must never flip to click-through mid-gesture — forward: true
-      // (see main.js's atomfolio:widget-set-click-through handler) only forwards move events, not
-      // the eventual pointerup/pointercancel this component needs to hear in order to end the
-      // drag cleanly. Checked directly off the same refs handleUp/handleMove above already use,
-      // not some derived boolean state, so this can never drift out of sync with the actual drag.
-      const dragInProgress = Boolean(dragRef.current.atomId) || widgetDragRef.current.active;
-      // Matches handleStagePointerDown's own condition for starting a window-move drag (⌘ held,
-      // anywhere on the stage) — hovering that same combination has to stay non-click-through too,
-      // or the drag could never start in the first place.
+      // A node-drag already in progress must never flip to click-through mid-gesture — forward:
+      // true (see main.js's atomfolio:widget-set-click-through handler) only forwards move
+      // events, not the eventual pointerup/pointercancel handleUp below needs in order to end the
+      // drag cleanly. Checked directly off the same ref handleUp/handleMove already use, not some
+      // derived boolean state, so this can never drift out of sync with the actual drag.
+      // ⌘ held over the stage also has to stay non-click-through — that's the one condition under
+      // which the empty stage becomes a native drag target (see atom-widget.css's static
+      // -webkit-app-region: drag on .atom-visual-stage) rather than pass-through to the desktop.
+      const dragInProgress = Boolean(dragRef.current.atomId);
       const interactive = overHitTarget || dragInProgress || (overStage && event.metaKey);
       const shouldIgnore = !interactive;
 
@@ -626,7 +460,7 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
       window.removeEventListener('pointermove', evaluate);
       unsubscribeOpening?.();
     };
-  }, [dockMode]);
+  }, []);
 
   // Imperative (not React state) on purpose — this fires continuously while the user drags-resizes
   // the window, and a CSS custom property write is far cheaper than a re-render on every tick.
@@ -651,13 +485,6 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
     observer.observe(stage);
     return () => observer.disconnect();
   }, []);
-
-  // Read by the RAF loop below via a ref (not a dependency-array restart) so toggling dock mode
-  // never interrupts the loop itself — only what it does on each tick changes.
-  const dockModeRef = useRef(dockMode);
-  useEffect(() => {
-    dockModeRef.current = dockMode;
-  }, [dockMode]);
 
   useEffect(() => {
     let frameId = 0;
@@ -687,12 +514,7 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
         }
       }
 
-      // Edge Dock: idle spin stops while docked — a small edge tab is meant to sit quiet and cheap
-      // (see dockAtomWidgetTo's own "CPU를 과하게 쓰지 마라" requirement), not keep animating at
-      // full ambient speed the way the much more visible floating widget does. The rAF loop itself
-      // keeps running regardless (advanceAtomTransition/frameTime below still need it), just this
-      // one contribution to rotationRef.current.target is skipped.
-      if (!isDragging && !prefersReducedMotionRef.current && dockModeRef.current === 'floating') {
+      if (!isDragging && !prefersReducedMotionRef.current) {
         // Negative angle: with projectPoint's screen-x mapping directly onto 3D x (no camera-side
         // flip — see src/utils/scene.js), a positive setFromAxisAngle(yAxis, +θ) rotation drifts
         // the near-facing atoms toward screen-*right*. Negating it is what actually makes the
@@ -751,14 +573,18 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
   const handleNodePointerDown = useCallback(
     (atomId, event) => {
       // ⌘ held means this is a window-move gesture, not a rotation — bail out without touching
-      // dragRef/stopPropagation/preventDefault. Not calling stopPropagation is what lets the event
-      // keep bubbling up to .atom-visual-stage's own onPointerDown (handleStagePointerDown above),
-      // which is what actually starts the move drag — so a ⌘-drag started on a node or the center
-      // moves the window exactly the same as one started on empty stage background. Starting
-      // rotation tracking here anyway would also risk it never getting a matching pointerup once
-      // the window-move drag takes over the gesture, leaving dragRef.current.atomId stuck non-null
-      // — which would silently disable idle auto-rotate for good, since the render loop treats a
-      // non-null atomId as "still dragging".
+      // dragRef. .node-hit/.center-hit are statically -webkit-app-region: no-drag (see
+      // atom-widget.css), specifically so a *plain* drag on a node always rotates rather than
+      // risking the OS interpreting it as a window-move — the one tradeoff that comes with a
+      // static (not reactively toggled, see this file's own note on why) app-region: a ⌘-drag
+      // that starts with the pointer exactly on a node's own hit-circle won't move the window
+      // either (nothing here starts one, and the native drag region doesn't cover that exact
+      // pixel) — only ⌘-dragging from the empty stage around the nodes does. In practice the
+      // stage is mostly empty space around a handful of small nodes, so this rarely matters.
+      // Starting rotation tracking here anyway would also risk it never getting a matching
+      // pointerup if something else ends up handling the gesture, leaving dragRef.current.atomId
+      // stuck non-null — which would silently disable idle auto-rotate for good, since the render
+      // loop treats a non-null atomId as "still dragging".
       if (event.metaKey) {
         return;
       }
@@ -801,12 +627,12 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
 
   // AtomSketch's own .center-hit unconditionally stopPropagation()s on pointerdown (it has to —
   // that's what makes a plain click-to-deselect work without also rotating the atom underneath
-  // it), which normally never gives .atom-visual-stage's own onPointerDown a chance to see a
-  // center pointerdown at all. Returning exactly `false` here opts out of that for the ⌘ case
-  // only, letting the event bubble up to handleStagePointerDown — same outcome
-  // handleNodePointerDown above already gives individual nodes. Returning undefined (the ⌘-not-
-  // held path) keeps AtomSketch's existing capture/stopPropagation/onCenterClick behavior exactly
-  // as it always was.
+  // it). Returning exactly `false` here opts out of that for the ⌘ case only, so a stopped React
+  // synthetic event (which also stops the underlying native one) never gets in the way of the
+  // stage's static native drag region picking up the gesture — same reasoning as
+  // handleNodePointerDown's own ⌘ bail-out just above, including the same "exactly on the
+  // center's own hit-circle" edge case. Returning undefined (the ⌘-not-held path) keeps
+  // AtomSketch's existing capture/stopPropagation/onCenterClick behavior exactly as it always was.
   const handleCenterPointerDown = useCallback((event) => {
     if (event.metaKey) {
       return false;
@@ -997,32 +823,14 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
       ) ?? null
     : null;
   const selectedInfo = buildSelectedInfo(selectedHolding, selectedItem);
-  const isDocked = dockMode !== 'floating';
-
-  const stageClassName = [
-    'atom-visual-stage',
-    edgePreviewSide === 'left' ? 'is-edge-preview-left' : '',
-    edgePreviewSide === 'right' ? 'is-edge-preview-right' : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
-  const materializeClassName = ['atom-materialize-wrapper', dockTransitionPhase ? 'is-dock-transition' : '']
-    .filter(Boolean)
-    .join(' ');
 
   return (
     <div className="atom-section">
-      <div
-        className={stageClassName}
-        ref={stageRef}
-        onPointerDownCapture={dismissHint}
-        onPointerDown={isDocked ? undefined : handleStagePointerDown}
-      >
+      <div className="atom-visual-stage" ref={stageRef} onPointerDownCapture={dismissHint}>
         {/* Dissolve/materialize (useAtomTransition, shared with the web app) — whole-scene scale
             via a CSS custom property, not per-node repositioning. See atom-widget.css for the
-            class itself. is-dock-transition layers a brief spring/overshoot on top, alongside
-            main.js's own native window-bounds animation (see dockAtomWidgetTo/undockAtomWidgetAt). */}
-        <div className={materializeClassName} style={{ '--materialize': atomTransitionScale }}>
+            class itself. */}
+        <div className="atom-materialize-wrapper" style={{ '--materialize': atomTransitionScale }}>
           <AtomSketch
             svgRef={svgRef}
             atoms={atoms}
@@ -1043,22 +851,13 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
             }
           />
         </div>
-        {/* Edge Dock: while docked, this transparent overlay is the *only* thing that catches
-            pointer events on the stage (atom-widget.css sets the AtomSketch wrapper above to
-            pointer-events: none in that state) — a docked tab has no per-node selection, just
-            "click to undock" / "drag to pull out", so routing every pointer straight through one
-            handler is simpler and more robust than trying to make each node/center hit-area
-            cooperate with a completely different gesture set. */}
-        {isDocked ? (
-          <div className="atom-dock-hit" onPointerDown={handleDockedPointerDown} aria-hidden="true" />
-        ) : null}
-        {hintVisible && !isDocked ? (
+        {hintVisible ? (
           <div className="atom-hint" role="status">
             원자를 눌러 자세히 보기
           </div>
         ) : null}
       </div>
-      <AtomReadout info={isDocked ? null : selectedInfo} />
+      <AtomReadout info={selectedInfo} />
     </div>
   );
 }
@@ -1111,7 +910,6 @@ function AtomViewRoot() {
       selectedPortfolioId={state.selectedPortfolioId ?? null}
       categoryDimension={state.categoryDimension ?? 'sector'}
       sleeping={state.sleeping ?? false}
-      dockMode={state.atomWidgetMode ?? 'floating'}
     />
   );
 }

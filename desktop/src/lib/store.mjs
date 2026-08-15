@@ -64,17 +64,6 @@ const DEFAULTS = {
   // click-through-to-the-app-behind toggling, nothing. Off by default — the widget is interactive
   // unless the user explicitly asks for it not to be.
   atomWidgetSleeping: false,
-  // Edge Dock — 'floating' (the normal always-visible widget) or 'docked-left'/'docked-right' (a
-  // small tab pushed flush against a screen edge). See main.js's dockAtomWidgetTo/
-  // undockAtomWidgetAt for the full state machine. atomWidgetPosition/atomWidgetSize above keep
-  // meaning "last known *floating* geometry" even while docked — main.js deliberately skips
-  // writing to them whenever this isn't 'floating', so there's always a sane rect to grow back
-  // into on undock.
-  atomWidgetMode: 'floating',
-  // Which display (Electron's screen.Display#id) the widget was docked against — checked on
-  // restore; if that display isn't connected anymore (unplugged monitor, different desk),
-  // main.js falls back to floating instead of guessing where a now-nonexistent edge would be.
-  atomWidgetDockDisplayId: null,
 };
 
 const MAX_SEEN_IDS = 80;
