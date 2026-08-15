@@ -1,0 +1,8 @@
+# The web deployment (vercel.json: buildCommand "npm run build" -> dist/) never touches this
+# directory at all — it's a separate Electron app with its own package.json/node_modules and,
+# after a local `npm run build:mac`, a `release/` folder containing a full macOS .app bundle +
+# zip (can easily be 300MB+). None of that belongs in a web deployment upload; .gitignore already
+# keeps release/ and node_modules/ out of git, but Vercel's own upload scan needs telling
+# separately, and excluding the whole directory is simpler and safer than excluding just its
+# build outputs (nothing in desktop/ is a build input for the web app either way).
+desktop/

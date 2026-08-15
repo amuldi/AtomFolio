@@ -209,11 +209,15 @@ function defaultAtomWidgetPosition() {
 
 // Used every time the widget is shown (setAtomWidgetVisible(true)) — deliberately not the same
 // thing as defaultAtomWidgetPosition above, which only matters once, at the very first launch
-// before any saved position exists. Always the *primary* display's center, not whichever display
-// the widget last happened to be on — showing the widget is meant to be a predictable "it's right
-// here" action regardless of where a previous drag left it.
+// before any saved position exists. Centers on whichever display the cursor is currently on — the
+// display someone's actually working on right now — not wherever a previous drag left the widget,
+// and not always the system's designated "primary" display (which stays fixed regardless of which
+// screen is actually in use on a multi-monitor setup). This used to always use
+// screen.getPrimaryDisplay() on the reasoning that showing the widget should be a predictable
+// "it's right here" action; in practice that meant re-showing it after toggling it off could put
+// it on a screen the user isn't even looking at.
 function centeredAtomWidgetPosition(width, height) {
-  const workArea = screen.getPrimaryDisplay().workArea;
+  const workArea = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
   return {
     x: Math.round(workArea.x + (workArea.width - width) / 2),
     y: Math.round(workArea.y + (workArea.height - height) / 2),
@@ -465,7 +469,7 @@ function setAtomWidgetVisible(visible) {
   }
   if (visible) {
     cancelPendingWidgetHide?.();
-    // Always the primary display's center on show, regardless of wherever a previous drag left
+    // The cursor's current display's center on show, regardless of wherever a previous drag left
     // it — see centeredAtomWidgetPosition's own comment. This makes the saved atomWidgetPosition
     // (still written by saveAtomWidgetGeometry below on every 'move'/'resize', including live
     // during a drag) relevant only to createAtomWidget's *initial* window bounds at app launch,
