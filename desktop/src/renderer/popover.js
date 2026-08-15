@@ -883,7 +883,17 @@ function createNewsSearchBar() {
     input.focus();
   });
 
-  return el('div', 'news-search', [input, clearButton]);
+  return {
+    element: el('div', 'news-search', [input, clearButton]),
+    // Programmatic entry point for the widget context-menu's "{종목} 뉴스 보기" (see bootstrap's
+    // onFocusNewsSearch below) — sets the visible input value too, not just the underlying
+    // search state, so the bar shows *why* the news list changed instead of a query that only
+    // exists invisibly behind the scenes.
+    search(query) {
+      input.value = query;
+      runSearch(query);
+    },
+  };
 }
 
 // Created once at bootstrap, same reasoning as createNewsSearchBar above (survives poll-tick
@@ -1332,7 +1342,8 @@ async function bootstrap() {
   // happens to reattach after.
   pickerRoot.append(portfolioPicker.element);
   quickAddRoot.append(quickAddForm.element);
-  newsSearchRoot.append(createNewsSearchBar());
+  const newsSearchBar = createNewsSearchBar();
+  newsSearchRoot.append(newsSearchBar.element);
 
   const initialState = await window.atomfolio.getState();
   render(initialState);
@@ -1348,6 +1359,13 @@ async function bootstrap() {
   // onFocusArticle above, just without an article to scroll to.
   window.atomfolio.onFocusPage((pageIndex) => {
     pager.goToPage(pageIndex);
+  });
+  // Widget context-menu's "{종목} 뉴스 보기", sent when a stock is selected there — jumps to the
+  // news page same as onFocusPage, and also runs that stock's name through the search bar so the
+  // list actually narrows to it instead of just landing on the generic holdings feed.
+  window.atomfolio.onFocusNewsSearch((query) => {
+    pager.goToPage(PAGE_NEWS);
+    newsSearchBar.search(query);
   });
 }
 

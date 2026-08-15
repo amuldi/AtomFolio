@@ -103,6 +103,13 @@ let pollTimer = null;
  * separate from the persisted lastSeenArticleIds, which only exists to avoid re-notifying across
  * app restarts. This one drives the transient "NEW" badge. */
 const notifiedThisSessionIds = new Set();
+// { ticker, label } | null — whatever's currently clicked/selected in the atom widget, mirrored
+// from atom-view.jsx (see the atomfolio:widget-selection handler below) purely so the widget's
+// own context menu can offer "open *this stock's* news" instead of only the generic news page.
+// Not part of `state`/broadcastState — nothing else needs to react to it, and it changes on
+// every click, which would be a wasteful amount of extra IPC traffic to both windows for a value
+// only the context-menu-open moment ever actually reads.
+let widgetSelection = null;
 
 let state = {
   connected: false,
@@ -672,9 +679,19 @@ function createAtomWidget() {
     if (!atomWidget || atomWidget.isDestroyed()) {
       return;
     }
+    // "뉴스 열기" becomes "{종목} 뉴스 보기" and searches for that stock specifically whenever the
+    // widget currently has one selected — otherwise it's the same generic news-page shortcut as
+    // always. widgetSelection is read fresh here (not captured at menu-build time some other way)
+    // so a click on a different atom between two right-clicks is always reflected.
+    const newsMenuItem = widgetSelection
+      ? {
+          label: `${widgetSelection.label} 뉴스 보기`,
+          click: () => showPopoverFocusedOnNewsSearch(widgetSelection.label),
+        }
+      : { label: '뉴스 열기', click: () => showPopoverFocusedOnPage(POPOVER_PAGE_NEWS) };
     const template = [
       { label: '요약 보기', click: () => showPopoverFocusedOnPage(POPOVER_PAGE_SUMMARY) },
-      { label: '뉴스 열기', click: () => showPopoverFocusedOnPage(POPOVER_PAGE_NEWS) },
+      newsMenuItem,
       { label: '설정 열기', click: () => showPopoverFocusedOnPage(POPOVER_PAGE_SETTINGS) },
     ];
     // Only shown once there's something to switch between — mirrors renderPortfolioPicker's own
@@ -948,6 +965,21 @@ function showPopoverFocusedOnPage(pageIndex) {
   popover.show();
   popover.focus();
   popover.webContents.send('atomfolio:focus-page', pageIndex);
+}
+
+// Same shape again, this time landing on the news page with the search bar already running a
+// query — used by the widget context-menu's "뉴스 열기" when a stock is currently selected there
+// (see widgetSelection below), so "open news" from a selected atom means *that stock's* news, not
+// the generic holdings feed.
+function showPopoverFocusedOnNewsSearch(query) {
+  if (!popover) {
+    return;
+  }
+
+  positionPopoverNearTray();
+  popover.show();
+  popover.focus();
+  popover.webContents.send('atomfolio:focus-news-search', query);
 }
 
 function createTray() {
@@ -1357,6 +1389,18 @@ function registerIpcHandlers() {
     atomWidget.setIgnoreMouseEvents(sleeping ? true : Boolean(shouldIgnore), { forward: true });
   });
 
+  // Mirrors atom-view.jsx's selectedAtomId over to the main process — see widgetSelection's own
+  // comment for why this is a plain module variable, not part of state/broadcastState. Sent on
+  // every click/deselect (cheap: this is a user click, not a poll tick), including null when a
+  // portfolio switch invalidates whatever was selected (atom-view.jsx's own effect for that
+  // already clears selectedAtomId, which triggers this the same way a manual deselect would).
+  ipcMain.on('atomfolio:widget-selection', (_event, selection) => {
+    widgetSelection =
+      selection && typeof selection.label === 'string' && selection.label
+        ? { ticker: selection.ticker ?? null, label: selection.label }
+        : null;
+  });
+
   ipcMain.handle('atomfolio:connect', async (_event, rawValue) => {
     const cleanValue = String(rawValue ?? '').trim();
 
@@ -1418,6 +1462,7 @@ function registerIpcHandlers() {
   ipcMain.handle('atomfolio:disconnect', () => {
     saveConfig({ workspaceId: null, deviceToken: null, lastSeenArticleIds: [], selectedPortfolioId: null });
     notifiedThisSessionIds.clear();
+    widgetSelection = null;
 
     if (pollTimer) {
       clearInterval(pollTimer);

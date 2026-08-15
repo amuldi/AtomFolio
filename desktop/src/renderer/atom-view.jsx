@@ -922,6 +922,20 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
       ? normalizeDisplayKey(selectedBaseAtom[categoryDimension])
       : null;
 
+  // Mirrors the current selection to the main process — the one thing it's for is offering
+  // "open *this stock's* news" in the widget's own right-click menu (see main.js's
+  // widgetSelection) instead of only the generic news page. selectedBaseAtom is a plain render-
+  // time const (not a ref/memo), but baseAtoms.find() returns the same array element reference
+  // across re-renders that don't actually change selectedAtomId or baseAtoms itself, so this
+  // effect doesn't fire on every animation-driven re-render — only on an actual
+  // select/deselect/portfolio-switch.
+  useEffect(() => {
+    const label = selectedBaseAtom?.label || selectedBaseAtom?.stockName || null;
+    window.atomfolio?.setWidgetSelection?.(
+      label ? { ticker: selectedBaseAtom.ticker || selectedBaseAtom.stockCode || null, label } : null,
+    );
+  }, [selectedBaseAtom]);
+
   const atoms = useMemo(
     () =>
       baseAtoms.map((atom) => {

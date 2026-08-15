@@ -20,6 +20,11 @@ contextBridge.exposeInMainWorld('atomfolio', {
   // window, atom-view.jsx plays the transition and acks back. See main.js's
   // hideAtomWidgetAfterDissolve for the timeout fallback if this ack never arrives.
   widgetCloseAck: () => ipcRenderer.send('atomfolio:widget-close-ack'),
+  // Mirrors atom-view.jsx's own selected-atom state to the main process (fire-and-forget, one per
+  // click/deselect) — see main.js's widgetSelection for the one thing it's actually used for:
+  // offering "open *this stock's* news" in the widget's own context menu instead of only the
+  // generic news page. { ticker, label } or null.
+  setWidgetSelection: (selection) => ipcRenderer.send('atomfolio:widget-selection', selection),
   connect: (workspaceId) => ipcRenderer.invoke('atomfolio:connect', workspaceId),
   disconnect: () => ipcRenderer.invoke('atomfolio:disconnect'),
   selectPortfolio: (portfolioId) => ipcRenderer.invoke('atomfolio:select-portfolio', portfolioId),
@@ -44,6 +49,13 @@ contextBridge.exposeInMainWorld('atomfolio', {
     const listener = (_event, pageIndex) => callback(pageIndex);
     ipcRenderer.on('atomfolio:focus-page', listener);
     return () => ipcRenderer.removeListener('atomfolio:focus-page', listener);
+  },
+  // Widget context-menu's "{종목} 뉴스 보기" — same show-and-jump shape as onFocusPage, plus a
+  // query the news page's search bar should run. See main.js's showPopoverFocusedOnNewsSearch.
+  onFocusNewsSearch: (callback) => {
+    const listener = (_event, query) => callback(query);
+    ipcRenderer.on('atomfolio:focus-news-search', listener);
+    return () => ipcRenderer.removeListener('atomfolio:focus-news-search', listener);
   },
   onWidgetClosing: (callback) => {
     const listener = () => callback();
