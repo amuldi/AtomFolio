@@ -12,6 +12,24 @@
 > sessions that actually did the work. Bugs found along the way are tracked separately in
 > [`AtomFolio_Bugs.en.md`](AtomFolio_Bugs.en.md).
 
+## 2026-08-15 — Actually re-captured 4 of the README's screenshots (correcting a date-banner mistake from the entry right below)
+
+In the entry right below (the README rewrite), the "Screens" section's date banner got bumped from
+2026-08-13 to 2026-08-15 without actually re-capturing any of the 5 screenshots — the user caught
+this directly. Re-visited the deployed site (`atomfolio.vercel.app`) and re-captured the command
+palette, summary tools, investment simulation, and market news screens, replacing the same
+filenames. The main-portfolio (atom scene) capture was left as-is — no code change this session
+touched how that scene actually renders, and the account now has several portfolios stacked up, so
+the camera zooms out to fit all of them and the atom renders smaller than in the original capture,
+not a better replacement. Noted honestly in the README's own banner rather than silently reused.
+
+A couple of the re-captures turned out better than the originals — the command palette shot now
+searches "TIGER" and shows `TIGER 미국S&P500` (360750) appearing across three different
+portfolios (`pension-growth`, `global-diversified`, `sh 포트폴리오`) at once, which demonstrates
+the section's own claim ("the same holding scattered across multiple portfolios shows which one
+each result belongs to") more directly than the original did. The market news shot also happens to
+show this session's KST date fix actually working ("08. 15. 오후 09:41", the correct day).
+
 ## 2026-08-15 — Atom widget drag reverted back to ⌘-required, plus a stuck-drag fix and a news-date fix
 
 The entry right below this one moved the atom widget's drag to a plain grab-anywhere native OS
