@@ -325,43 +325,48 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
 
   // The atom widget is always on screen (unlike the old popover atom page, only open when
   // clicked), so an ambient full-speed spin runs indefinitely whether or not anyone's looking.
-  // Idle rotation drops to a slow crawl until window focus indicates someone's actually engaged
-  // with it, and returns to normal the moment it does.
+  // Idle rotation only drops to a slow crawl while the pointer is actually resting on the widget
+  // — that's the one moment motion should ease off (spinning under the cursor while someone's
+  // trying to read a holding's label is the opposite of helpful). Everywhere else — cursor
+  // elsewhere, or asleep — it stays fully alive as ambient motion.
   //
-  // This used to also count merely hovering the pointer over the widget as "engaged" (full speed
-  // the instant the cursor entered the stage, no click needed). With backgroundThrottling now
-  // fixed elsewhere so this rAF loop actually runs at full rate in the background, that hover
-  // trigger stopped being the barely-perceptible nudge it read as before and started reading as
-  // "the atom moves just because my cursor is near it" — motion with no action behind it. Focus
-  // (the window actually being interacted with, not just moused-over) is a deliberate enough
-  // signal to keep; hover isn't.
-  const engagementRef = useRef({ focused: typeof document !== 'undefined' && document.hasFocus() });
-  useEffect(() => {
-    const handleFocus = () => {
-      engagementRef.current.focused = true;
-    };
-    const handleBlur = () => {
-      engagementRef.current.focused = false;
-    };
-    window.addEventListener('focus', handleFocus);
-    window.addEventListener('blur', handleBlur);
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('blur', handleBlur);
-    };
-  }, []);
-
+  // This used to gate on window focus instead of hover. Focus is a poor signal for a small
+  // always-on-top overlay that's rarely the actual focused window even while someone's looking
+  // right at it, so in practice idle rotation almost always crawled at
+  // IDLE_ROTATE_DISENGAGED_MULTIPLIER outside of sleep mode — reading as barely-alive rather than
+  // ambient. Hover is the more honest "is anyone actually paying attention to this right now"
+  // signal for this kind of widget.
+  //
   // A ref (not read from the `sleeping` prop directly) because the rAF loop below is set up once,
   // in a mount-only effect — reading a prop's current value inside a closure that never re-runs
   // would freeze it at whatever `sleeping` was on first render. A sleeping widget is fully
   // click-through (main.js's atomfolio:widget-set-click-through), so it can never actually receive
-  // focus — without this override, engagementRef.current.focused would stay permanently false and
-  // the idle rotation would crawl at IDLE_ROTATE_DISENGAGED_MULTIPLIER forever instead of reading
-  // as the continuous ambient motion sleep mode is supposed to look like.
+  // pointer events — without this override, hoveredRef would stay permanently false anyway, but
+  // this makes the "sleep always counts as engaged" intent explicit rather than incidental.
   const sleepingRef = useRef(sleeping);
   useEffect(() => {
     sleepingRef.current = sleeping;
   }, [sleeping]);
+
+  const hoveredRef = useRef(false);
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) {
+      return undefined;
+    }
+    const setHovered = () => {
+      hoveredRef.current = true;
+    };
+    const clearHovered = () => {
+      hoveredRef.current = false;
+    };
+    stage.addEventListener('pointerenter', setHovered);
+    stage.addEventListener('pointerleave', clearHovered);
+    return () => {
+      stage.removeEventListener('pointerenter', setHovered);
+      stage.removeEventListener('pointerleave', clearHovered);
+    };
+  }, []);
 
   // ⌘ gates "move the window" vs "rotate the atom" — without it, grabbing anywhere on the stage
   // (including the center/bond-lines) behaves like the website's trackball; holding ⌘ moves the
@@ -585,7 +590,7 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
       }
 
       if (!isDragging && !prefersReducedMotionRef.current) {
-        const engaged = engagementRef.current.focused || sleepingRef.current;
+        const engaged = sleepingRef.current || !hoveredRef.current;
         const idleMultiplier = engaged ? 1 : IDLE_ROTATE_DISENGAGED_MULTIPLIER;
         autoRotateY.setFromAxisAngle(yAxis, delta * AUTO_ROTATE_SPEED * idleMultiplier);
         autoRotateX.setFromAxisAngle(xAxis, Math.sin(now * 0.00012) * delta * 0.0038 * idleMultiplier);
