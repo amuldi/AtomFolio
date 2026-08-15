@@ -15,6 +15,11 @@ contextBridge.exposeInMainWorld('atomfolio', {
   // offering "open *this stock's* news" in the widget's own context menu instead of only the
   // generic news page. { ticker, label } or null.
   setWidgetSelection: (selection) => ipcRenderer.send('atomfolio:widget-selection', selection),
+  // Synthetic window-drag for the widget — see main.js's beginAtomWidgetDrag/endAtomWidgetDrag for
+  // why this replaced -webkit-app-region: drag. Both fire-and-forget, same as the other widget
+  // gesture channels above.
+  beginWidgetDrag: () => ipcRenderer.send('atomfolio:widget-drag-start'),
+  endWidgetDrag: () => ipcRenderer.send('atomfolio:widget-drag-end'),
   connect: (workspaceId) => ipcRenderer.invoke('atomfolio:connect', workspaceId),
   disconnect: () => ipcRenderer.invoke('atomfolio:disconnect'),
   selectPortfolio: (portfolioId) => ipcRenderer.invoke('atomfolio:select-portfolio', portfolioId),

@@ -214,6 +214,13 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
   const [selectedAtomId, setSelectedAtomId] = useState(null);
   const [frameTime, setFrameTime] = useState(() => performance.now());
   const dragRef = useRef({ atomId: null, moved: false, startX: 0, startY: 0 });
+  // Whether a widget window-move drag is currently in flight — read by the click-through
+  // hit-test below (its own dragInProgress) so the window can never go click-through mid-drag,
+  // which is what let a drag get stuck running forever (see that effect's own comment). Declared
+  // up here (not next to handleWidgetDragStart/handleWidgetDragEnd further down, which actually
+  // set it) so there's no question of it being used before it's initialized — not React state,
+  // since nothing here needs to re-render off it, only read it synchronously from event handlers.
+  const widgetDragActiveRef = useRef(false);
   const rotationRef = useRef({
     current: new THREE.Quaternion(),
     target: new THREE.Quaternion(),
@@ -341,37 +348,26 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
   // rotation feel like it was barely alive most of the time, gated on a signal that had nothing to
   // do with whether anyone actually wanted it to stop.
 
-  // No modifier key gates "move the window" vs "rotate the atom" any more — grabbing an actual
-  // node/center rotates/selects it (handleNodePointerDown below, and AtomSketch's own
-  // .center-hit, both stop propagation and take over the gesture themselves); grabbing anywhere
-  // else on the stage moves
-  // the window, because that's the one thing left with nothing else claiming it. An earlier
-  // version required holding ⌘ to disambiguate the two, but that turned "drag the widget to a
-  // screen edge to have macOS carry it onto a neighboring Space" (Mission Control's own built-in
-  // behavior for a real native window drag — see atom-widget.css's own comment on why this needs
-  // to be a *native* drag at all) into a two-handed gesture that's easy to get wrong mid-drag; a
-  // plain single-handed grab-and-drag is both simpler and matches how every other floating/
+  // No modifier key gates "move the window" vs "rotate the atom" — grabbing an actual node/center
+  // rotates/selects it (handleNodePointerDown below, and AtomSketch's own .center-hit, both stop
+  // propagation and take over the gesture themselves); grabbing anywhere else on .atom-section
+  // (handleWidgetDragStart below) moves the window, because that's the one thing left with nothing
+  // else claiming it. A plain single-handed grab-and-drag, matching how every other floating/
   // always-on-top utility window on macOS already behaves.
   //
-  // The actual move drag needs no JS of its own — atom-widget.css gives .atom-visual-stage a
-  // *static* -webkit-app-region: drag (carving out .node-hit/.center-hit as no-drag, so clicking
-  // an actual node/center still rotates/selects instead of moving the window), and the click-
-  // through hit-test below is what gates *whether* the window is even receiving mouse events over
-  // that empty space at all — now unconditionally, any time the cursor is over the stage. Once
-  // the window is receiving events there, a real native OS window-drag can begin the instant the
-  // user presses
-  // and drags, entirely inside Chromium/the window server — no pointerdown handler, no IPC, no
-  // cursor polling. This replaces an earlier version that streamed synthetic drag positions to
-  // main.js instead: that worked for plain repositioning, but a *simulated* drag (repeated
-  // setPosition() calls from a timer) never registers as a real window-drag session with the
-  // window server, so it couldn't get anything else a genuine native drag gets for free — in
-  // particular, macOS's own Mission Control behavior of switching to a neighboring Space when a
-  // window is held at the screen edge mid-drag, carrying the window along. A *static* app-region
-  // (present from first paint, never toggled by a class) is also what actually makes native
-  // dragging work at all here — an earlier attempt that toggled the CSS reactively (per a
-  // modifier key, before that requirement was dropped) found real native drag doesn't arm that
-  // way: a mousedown only picks up an app-region the browser process had already cached from a
-  // prior layout pass, not one added by the same gesture's own pointerdown handler.
+  // The move drag itself is synthetic, not a native OS window-drag — handleWidgetDragStart just
+  // tells main.js a drag started (window.atomfolio.beginWidgetDrag), and main.js's
+  // beginAtomWidgetDrag/endAtomWidgetDrag own the actual gesture from there, polling the cursor via
+  // screen.getCursorScreenPoint() on a timer for as long as it's held (see main.js's own comment).
+  // This *used* to be a real native drag (atom-widget.css's -webkit-app-region: drag, no JS,
+  // no IPC, no cursor polling) specifically so macOS's own Mission Control would carry the widget
+  // onto a neighboring Space when it was held at the screen edge mid-drag — a real native drag is
+  // the only kind that behavior fires for at all; a synthetic one (repeated setPosition() calls,
+  // like this) never registers as a real window-drag session with the window server, so Mission
+  // Control never gets a session to hook into. That Space-carry turned out to be exactly the wrong
+  // default for an ambient widget meant to stay put on whichever Space it was shown on (see
+  // createAtomWidget's own comment in main.js) — so this went back to being synthetic, on purpose,
+  // to lose that one side effect while keeping everything else about the drag feeling identical.
 
   // Click-through for the widget's own empty space. This is a transparent, frameless
   // BrowserWindow — by default Electron gives it a normal opaque hit-box covering its whole
@@ -412,18 +408,23 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
       const target = document.elementFromPoint(event.clientX, event.clientY);
       const overHitTarget = Boolean(target?.closest?.('.node-hit, .center-hit'));
       const overStage = Boolean(target && stage.contains(target));
-      // A node-drag already in progress must never flip to click-through mid-gesture — forward:
-      // true (see main.js's atomfolio:widget-set-click-through handler) only forwards move
-      // events, not the eventual pointerup/pointercancel handleUp below needs in order to end the
-      // drag cleanly. Checked directly off the same ref handleUp/handleMove already use, not some
-      // derived boolean state, so this can never drift out of sync with the actual drag.
-      // No modifier key gates this any more — the whole stage is always a candidate for a native
-      // window-drag now (see atom-widget.css's static -webkit-app-region: drag on
-      // .atom-visual-stage), so hovering anywhere on it has to stay non-click-through, full stop.
-      // The one thing actually still click-through is the transparent margin *outside* the stage
-      // (the rest of this window's rectangle) — nothing there is drawn or draggable.
-      const dragInProgress = Boolean(dragRef.current.atomId);
-      const interactive = overHitTarget || dragInProgress || overStage;
+      // A drag already in progress — either a node-rotation (dragRef) or a widget window-move
+      // (widgetDragActiveRef, see handleWidgetDragStart/handleWidgetDragEnd below) — must never
+      // flip to click-through mid-gesture: forward: true (see main.js's
+      // atomfolio:widget-set-click-through handler) only forwards move events, not the eventual
+      // pointerup/pointercancel this component needs in order to end the drag cleanly. Missing
+      // the widget-drag half of this was the actual bug behind "grab the widget and it never lets
+      // go" — the cursor drifting off .atom-visual-stage's own bounds mid-drag (trivially easy
+      // during a real drag gesture) used to flip the window to click-through, which stops it from
+      // ever receiving the pointerup that would have ended the drag, leaving main.js's cursor-poll
+      // loop running indefinitely.
+      const dragInProgress = Boolean(dragRef.current.atomId) || widgetDragActiveRef.current;
+      // ⌘ held is also always interactive, regardless of overStage — the widget-move drag starts
+      // from .atom-section's own pointerdown (see handleWidgetDragStart), which includes the
+      // outer drag-margin padding *outside* .atom-visual-stage's own bounds; requiring overStage
+      // here too would make that margin permanently click-through, so a ⌘-drag could never start
+      // there in the first place.
+      const interactive = overHitTarget || dragInProgress || overStage || event.metaKey;
       const shouldIgnore = !interactive;
 
       if (shouldIgnore !== lastIgnoreRef.current) {
@@ -665,6 +666,48 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
     };
   }, [clientToLocalPoint]);
 
+  // Starts the widget's window-move drag — see atom-widget.css's own comment on .atom-section for
+  // why this is a synthetic (IPC-driven) drag rather than -webkit-app-region: drag. ⌘ gates this
+  // the same way it always has: without it, grabbing the widget's empty background (or its outer
+  // drag-margin padding) does nothing here, and — since handleNodePointerDown never
+  // stopPropagation()s a node press either way — a plain click-drag on a node still rotates it.
+  // Only reaches here for a press on .atom-section's own empty space; a press on
+  // .node-hit/.center-hit never bubbles this far, since handleNodePointerDown above already
+  // stopPropagation()s it first regardless of ⌘.
+  const handleWidgetDragStart = useCallback((event) => {
+    if (!event.metaKey) {
+      return;
+    }
+    if (event.button !== 0) {
+      // Native app-region drags only ever responded to the primary button too — a right-click here
+      // should reach the context-menu handler untouched, not also kick off a window move.
+      return;
+    }
+    widgetDragActiveRef.current = true;
+    window.atomfolio?.beginWidgetDrag?.();
+  }, []);
+
+  // Ends whatever drag main.js's beginAtomWidgetDrag started, on the next window-level
+  // pointerup/pointercancel after it — mirrors the node-rotation handleUp above (a window-level
+  // listener, not pointer capture; see handleNodePointerDown's own comment on why capture isn't
+  // load-bearing here either). Fires on *every* pointerup, including ones that never followed a
+  // widget-drag pointerdown (a plain click, or a node-rotate's own release) — main.js's
+  // endAtomWidgetDrag is safe to call unconditionally, so there's nothing to gate on *that* side;
+  // widgetDragActiveRef is reset here regardless, purely so the click-through hit-test's own
+  // dragInProgress read stops being true the instant the drag actually ends.
+  useEffect(() => {
+    const handleWidgetDragEnd = () => {
+      widgetDragActiveRef.current = false;
+      window.atomfolio?.endWidgetDrag?.();
+    };
+    window.addEventListener('pointerup', handleWidgetDragEnd);
+    window.addEventListener('pointercancel', handleWidgetDragEnd);
+    return () => {
+      window.removeEventListener('pointerup', handleWidgetDragEnd);
+      window.removeEventListener('pointercancel', handleWidgetDragEnd);
+    };
+  }, []);
+
   // A new proactive insight (stop-loss/take-profit/allocation drift) auto-selects its atom so it's
   // the first thing visible next time the popover opens — but only once per insight (tracked by
   // key, not by object identity, since a fresh insight object with the same key arrives on every
@@ -770,7 +813,7 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
   const selectedInfo = buildSelectedInfo(selectedHolding, selectedItem);
 
   return (
-    <div className="atom-section">
+    <div className="atom-section" onPointerDown={handleWidgetDragStart}>
       <div className="atom-visual-stage" ref={stageRef} onPointerDownCapture={dismissHint}>
         {/* Dissolve/materialize (useAtomTransition, shared with the web app) — whole-scene scale
             via a CSS custom property, not per-node repositioning. See atom-widget.css for the

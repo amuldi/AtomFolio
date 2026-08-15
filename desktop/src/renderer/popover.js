@@ -416,11 +416,6 @@ window.addEventListener('focus', resetToFirstPageIfVisible);
 function renderConnect(state) {
   const container = el('div', 'connect');
   container.append(el('div', 'connect__title', ['AtomFolio']));
-  container.append(
-    el('div', 'connect__copy', [
-      '웹 대시보드에 로그인한 상태에서 설정 → 계정 아래 "데스크톱 연결 코드 생성"을 눌러 나오는 코드(atomfolio_dt_로 시작)를 붙여넣으세요. WORKSPACE 칸에 있는 값이 아닙니다. 로그인 없이 게스트로만 쓰던 Workspace ID도 그대로 사용할 수 있습니다.',
-    ]),
-  );
 
   const input = el('input', 'connect__input');
   input.type = 'text';

@@ -30,17 +30,22 @@ body {
   height: 100%;
 }
 
-/* The widget's own padding is the only drag handle for moving the window — .atom-visual-stage
-   opts back out below so dragging the atom itself keeps rotating/selecting like it always has.
-   24px (not the original 10px, and not the first-pass 18px) so there's an actually-graspable
-   margin even at the widget's smallest resizable size, and cursor: grab so "you can pick the
-   window up here" reads visually. 24px specifically because .atom-visual-stage below sets
-   overflow: visible (unlike the popover's card, nothing here clips the atom to its box), which
-   exposes .sketch-svg's shared transform: scale(1.1) — a ~5%-per-side visual overflow that used
-   to be clipped. Measured at the widget's 160×190 floor, that overflow reaches ~6px past the
-   stage's own hit-test box; 24px keeps a real margin of *inert* drag padding outside that
-   overflow, so there's no band where the atom is visible but a click there actually drags the
-   window instead of hitting a node. */
+/* The widget's own padding is the only drag handle for moving the window — this element's own
+   onPointerDown (atom-view.jsx's handleWidgetDragStart) is what starts that drag, so the handle
+   covers this padding margin plus, by bubbling, .atom-visual-stage's own empty space below it.
+   ⌘ gates it (handleWidgetDragStart bails out without ⌘ held); .node-hit/.center-hit (nested
+   inside .atom-visual-stage) stopPropagation() in their own pointerdown handlers regardless of ⌘,
+   before a gesture can bubble up this far, which is what keeps dragging the atom itself
+   rotating/selecting instead of moving the window even with ⌘ held. 24px (not the original 10px,
+   and not the first-pass 18px) so there's an actually-graspable margin even at the widget's
+   smallest resizable size. 24px specifically because .atom-visual-stage below sets overflow:
+   visible (unlike the popover's card, nothing here clips the atom to its box), which exposes
+   .sketch-svg's shared transform: scale(1.1) — a ~5%-per-side visual overflow that used to be
+   clipped. Measured at the widget's 160×190 floor, that overflow reaches ~6px past the stage's own
+   hit-test box; 24px keeps a real margin of *inert* drag padding outside that overflow, so there's
+   no band where the atom is visible but a click there actually drags the window instead of hitting
+   a node. No -webkit-app-region here — see .atom-visual-stage's own comment below for why
+   window-dragging moved to JS (atom-view.jsx) + main.js instead of a native app-region. */
 .atom-section {
   /* position: relative so .atom-readout below can overlay this box instead of sharing flex space
      with .atom-visual-stage — a flex column with two children means every time the readout
@@ -54,37 +59,39 @@ body {
   width: 100%;
   height: 100%;
   padding: 24px;
-  -webkit-app-region: drag;
-  cursor: grab;
-}
-
-.atom-section:active {
-  cursor: grabbing;
+  /* Not cursor: grab — ⌘ gates the actual drag (see this rule's own comment), and a cursor that
+     visually promises "drag me" on every plain hover, when a plain drag does nothing without ⌘
+     held, reads as a bug in its own right. atom-view.jsx doesn't currently swap this reactively
+     while ⌘ is held either (that used to exist as .is-move-mode, removed along with the ⌘
+     requirement it served — restoring the requirement here didn't bring the cursor cue back with
+     it); default is the honest baseline until/unless that's worth reintroducing. */
+  cursor: default;
 }
 
 /* Overrides atom-sketch.css's popover-oriented version (fixed aspect-ratio, near-black star-field
    card, rounded corners) — no card here at all, the atom floats straight over the desktop.
-   -webkit-app-region: drag *statically*, from first paint, same as .atom-section's own margin
-   above — grabbing empty stage space (nothing painted, or the gaps between nodes) moves the
-   window via a real native OS drag, no modifier key needed; .node-hit/.center-hit below are
-   carved back out to no-drag so grabbing the atom itself (center, bond-lines, or an individual
-   stock node) still rotates/selects it instead, same as the real website's trackball. This used
-   to be no-drag by default here, with main.js polling the global cursor position over IPC to move
-   the window instead of using this property at all, gated behind a ⌘ modifier to disambiguate
-   "move" from "rotate" — a *reactively toggled* -webkit-app-region: drag was tried even earlier
-   than that and confirmed broken: the property only takes effect for a mousedown that starts
-   *after* the browser process already has the point cached as a draggable region from a prior
-   layout pass, so toggling the class from a pointerdown/pointermove handler was structurally too
-   late to affect that same pointerdown. A rule that's simply always true from page load (this
-   one) doesn't have that problem — nothing is toggled, so there's nothing for a mousedown to be
-   "too late" for; the node/center-hit carve-out below is what disambiguates now, not a modifier.
-   The payoff for going back to a real native drag: it's the only kind of drag macOS's own Mission
-   Control recognizes for its "hold at the screen edge to switch Spaces" behavior, carrying the
-   window along — a simulated drag (repeated setPosition() calls) never registered as a real
-   window-drag session to the window server, so that OS-level behavior never had a chance to fire
-   for it. atom-view.jsx's click-through hit-test is what gates whether the *window* is even
-   receiving mouse events at all over a given point — with no modifier key left to check, it's now
-   simply "yes, whenever the stage is under the cursor". */
+   ⌘-grabbing empty stage space (nothing painted, or the gaps between nodes) moves the window, via
+   .atom-section's own onPointerDown above (this element's empty space just bubbles up to it, see
+   handleWidgetDragStart's own ⌘ check); grabbing the atom itself (center, bond-lines, or an
+   individual stock node) always rotates/selects it instead, regardless of ⌘ — same as the real
+   website's trackball — since atom-view.jsx's node/center pointerdown handlers stopPropagation()
+   unconditionally, so their gesture never reaches that ancestor handler either way. This used to
+   be a real native OS window-drag, via a static -webkit-app-region: drag here — the only kind of
+   drag macOS's own Mission Control recognizes for its "hold at the screen edge to switch Spaces"
+   behavior, carrying the window along for free. That's exactly the tradeoff this widget no longer
+   wants: it's meant to stay on the single Space it was shown on (see createAtomWidget's own
+   comment in main.js), not tag along with the user mid-drag. Deliberately swapped back to a
+   synthetic drag instead — main.js's beginAtomWidgetDrag/endAtomWidgetDrag poll the cursor over
+   IPC while atom-view.jsx reports the drag as held (widgetDragActiveRef), the same shape the very
+   first version of this feature used before it was replaced by the native drag above. A synthetic
+   drag never registers as a real window-drag session with the window server, so Mission Control's
+   Space-carry never has a session to hook into — same 1:1 cursor-follow result, minus the
+   Space-carry. atom-view.jsx's click-through hit-test is still what gates whether the *window* is
+   even receiving mouse events at all over a given point — unrelated to, and unaffected by, which
+   of the two drag mechanisms starts once it does; that hit-test's own dragInProgress has to know
+   about *this* drag too (via widgetDragActiveRef), not just node-rotation drags, or the window can
+   flip to click-through mid-drag and never receive the pointerup that would end it — see that
+   effect's own comment in atom-view.jsx for the bug this was. */
 .atom-visual-stage {
   position: relative;
   flex: 1 1 auto;
@@ -95,11 +102,6 @@ body {
   overflow: visible;
   touch-action: none;
   user-select: none;
-  -webkit-app-region: drag;
-  /* Grab, not default — the whole stage is a drag target now (see the rule's own comment above),
-     so the cursor should read that way everywhere except the specific hit-targets carved back out
-     below, which override this via atom-sketch.css's own .node-hit { cursor: pointer }. */
-  cursor: grab;
   /* Permanently reserves room for .atom-readout at the bottom, instead of the readout overlaying
      on top of wherever the atom's own lines/nodes happen to be. .sketch-svg is width:100%/
      height:100% with a fixed viewBox + default preserveAspectRatio="meet" (atom-sketch.css), so
@@ -116,16 +118,6 @@ body {
 
 .atom-visual-stage:active {
   cursor: grabbing;
-}
-
-/* Carved back out of .atom-visual-stage's own static drag region above — a plain drag starting
-   on a node or the center has to rotate the atom via atom-view.jsx's own pointer handlers, never
-   get intercepted as a native window-drag first. atom-sketch.css (shared with the web app, where
-   -webkit-app-region is simply inert/ignored) is what actually defines these classes and their
-   own cursor: pointer — this file only adds the Electron-specific drag property on top of them. */
-.node-hit,
-.center-hit {
-  -webkit-app-region: no-drag;
 }
 
 /* Dissolve/materialize (src/utils/useAtomTransition.js, shared with the web app's identical

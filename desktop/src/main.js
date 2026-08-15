@@ -47,9 +47,13 @@ const ATOM_WIDGET_MAX_HEIGHT = 560;
 const ATOM_WIDGET_DEFAULT_MARGIN = 24;
 const ATOM_WIDGET_GEOMETRY_SAVE_DEBOUNCE_MS = 400;
 // How close to a work-area edge (in px) the widget needs to land, on release, to snap flush
-// against it. Deliberately not applied on every 'move' tick — only once the drag actually ends
-// (see the atomWidget.on('moved', ...) listener) — so it never fights the user's hand mid-drag.
+// against it. Deliberately not applied on every drag tick — only once the drag actually ends (see
+// endAtomWidgetDrag) — so it never fights the user's hand mid-drag.
 const ATOM_WIDGET_SNAP_THRESHOLD = 24;
+// How often beginAtomWidgetDrag's poll re-samples the cursor while a drag is held — fast enough to
+// read as 1:1 tracking, not a fixed-rate animation loop's worth of overkill for a value nothing
+// downstream needs sub-frame precision on.
+const ATOM_WIDGET_DRAG_POLL_INTERVAL_MS = 16;
 // Pages inside the popover's horizontal pager (see popover.js's createPager) — kept in one place
 // since both the header's own ⚙ shortcut and the context-menu shortcuts below need to agree on
 // the indices. Summary (the portfolio mini-dashboard) is page 0 — the popover opens there, not on
@@ -65,6 +69,11 @@ let tray = null;
 let popover = null;
 let atomWidget = null;
 let atomWidgetGeometrySaveTimer = null;
+// Set only while a synthetic drag (beginAtomWidgetDrag) is in flight — the interval handle plus
+// the cursor/window anchor point the poll measures every tick against. Both null whenever no drag
+// is in progress, which endAtomWidgetDrag's guard relies on to be safely callable any time.
+let atomWidgetDragPollTimer = null;
+let atomWidgetDragOrigin = null;
 let pollTimer = null;
 /** @type {Set<string>} article ids already pushed to the renderer at least once this session —
  * separate from the persisted lastSeenArticleIds, which only exists to avoid re-notifying across
@@ -243,10 +252,10 @@ function clampPointToVisibleDisplay(x, y, width, height) {
   };
 }
 
-// Called from the window's own native 'moved' event (see createAtomWidget below) — fires once
-// when a real drag actually ends, not on every intermediate position during it, so this never
-// fights the user's hand mid-drag. Each axis snaps independently, so a corner release snaps both
-// — same as most window managers' edge-snap behavior.
+// Called once per gesture, from endAtomWidgetDrag below, right when a drag actually ends — never
+// on an intermediate tick during it, so this can't fight the user's hand mid-drag. Each axis snaps
+// independently, so a corner release snaps both — same as most window managers' edge-snap
+// behavior.
 function snapAtomWidgetToEdges() {
   if (!atomWidget || atomWidget.isDestroyed()) {
     return;
@@ -269,13 +278,59 @@ function snapAtomWidgetToEdges() {
     y = workArea.y + workArea.height - height;
   }
 
-  // Guards against setPosition() re-triggering its own 'moved' event on a no-op move — with
-  // nothing to change, x/y already equal bounds.x/bounds.y, so this simply doesn't fire.
+  // No-op guard, kept mostly for cheapness (skips a pointless IPC/native call when the widget
+  // already released flush against an edge).
   if (x !== bounds.x || y !== bounds.y) {
     atomWidget.setPosition(x, y, false);
   }
 }
 
+// Replaces the native OS window-drag the widget used to rely on (atom-widget.css's
+// -webkit-app-region: drag) — polling screen.getCursorScreenPoint() on a timer while atom-view.jsx
+// reports the drag as held (see its own pointerdown/pointerup handlers), the same shape the very
+// first version of this feature used, before it was swapped out for a real native drag specifically
+// to get macOS's Mission Control "carry the window to a neighboring Space when held at the screen
+// edge" behavior for free. That's exactly the behavior this widget shouldn't have: it's meant to
+// stay on the single Space it was shown on (see createAtomWidget's own comment below), not tag
+// along with the user mid-drag. A synthetic, main-process-driven poll like this one never registers
+// as a real window-drag session with the window server, so Mission Control never gets a session to
+// hook into in the first place — same 1:1 cursor-follow result, minus the Space-carry.
+function beginAtomWidgetDrag() {
+  if (!atomWidget || atomWidget.isDestroyed()) {
+    return;
+  }
+  const cursor = screen.getCursorScreenPoint();
+  const bounds = atomWidget.getBounds();
+  atomWidgetDragOrigin = { cursorX: cursor.x, cursorY: cursor.y, windowX: bounds.x, windowY: bounds.y };
+  // Clears any stale timer first — guards a pointerdown arriving before a previous drag's pointerup
+  // ever reached the renderer (e.g. a lost event), which would otherwise leak a second interval
+  // ticking alongside the first.
+  clearInterval(atomWidgetDragPollTimer);
+  atomWidgetDragPollTimer = setInterval(() => {
+    if (!atomWidget || atomWidget.isDestroyed() || !atomWidgetDragOrigin) {
+      return;
+    }
+    const point = screen.getCursorScreenPoint();
+    const x = Math.round(atomWidgetDragOrigin.windowX + (point.x - atomWidgetDragOrigin.cursorX));
+    const y = Math.round(atomWidgetDragOrigin.windowY + (point.y - atomWidgetDragOrigin.cursorY));
+    atomWidget.setPosition(x, y, false);
+  }, ATOM_WIDGET_DRAG_POLL_INTERVAL_MS);
+}
+
+// Ends the poll from beginAtomWidgetDrag above and, only now — once per gesture, not once per tick
+// — applies the same edge-snap a real native drag's 'moved' event used to trigger on release (see
+// snapAtomWidgetToEdges). Safe to call any time, including when no drag is actually in progress
+// (atom-view.jsx sends this on every window-level pointerup/pointercancel, not just ones that
+// followed a widget-drag pointerdown) — the timer-handle guard below just no-ops for those.
+function endAtomWidgetDrag() {
+  if (!atomWidgetDragPollTimer) {
+    return;
+  }
+  clearInterval(atomWidgetDragPollTimer);
+  atomWidgetDragPollTimer = null;
+  atomWidgetDragOrigin = null;
+  snapAtomWidgetToEdges();
+}
 
 function createAtomWidget() {
   const config = loadConfig();
@@ -324,10 +379,11 @@ function createAtomWidget() {
 
   atomWidget.setOpacity(clampOpacity(config.widgetOpacity));
   // Deliberately *not* calling setVisibleOnAllWorkspaces here — the widget should only ever be
-  // visible on whichever single Space/Desktop it was showing on when "원자 위젯 표시" was turned
-  // on (Electron's default for a BrowserWindow), not chase the user across every Space the way an
-  // earlier version of this file made it do. The popover (opened from the tray icon, which is
-  // reachable from any Space) is the one that still needs to follow — see createPopover.
+  // visible on whichever single Space/Desktop it currently belongs to, not chase the user across
+  // every Space the way an earlier version of this file made it do. The popover (opened from the
+  // tray icon, which is reachable from any Space) is the one that still needs to follow — see
+  // createPopover. setAtomWidgetVisible below does briefly toggle this on show, but only to
+  // re-anchor the widget onto whatever Space is current at that moment — see its own comment.
   atomWidget.loadFile(path.join(__dirname, 'renderer', 'atom-widget.html'));
 
   // One shared debounce for both events, saving position + size together — not two independent
@@ -363,16 +419,9 @@ function createAtomWidget() {
     }
     atomWidget.webContents.invalidate();
   });
-  // macOS-only native event, distinct from 'move' above — fires once when an actual user drag (or
-  // window-manager move) settles, not continuously during it, so this is the right place for
-  // edge-snap: it can never fire mid-gesture and fight the user's hand the way hooking 'move'
-  // itself would. This is also what makes the drag a *real* native window drag in the first place
-  // (see atom-widget.css's static -webkit-app-region: drag on the stage) rather than a
-  // synthetic/simulated one — genuine native drags are what let macOS's own Mission Control
-  // "hold at the screen edge to switch Spaces" behavior carry the widget along for free; a
-  // simulated drag (repeated setPosition() calls from a timer) never registers as a real window
-  // drag session to the window server, so that OS-level behavior wouldn't trigger for it.
-  atomWidget.on('moved', snapAtomWidgetToEdges);
+  // No 'moved' listener here any more — the widget's own drag is synthetic now (see
+  // beginAtomWidgetDrag/endAtomWidgetDrag), and edge-snap is invoked directly from
+  // endAtomWidgetDrag once the gesture actually ends, rather than riding a native 'moved' event.
 
   // A discoverable way to reach things that would otherwise require knowing the tray menu exists.
   atomWidget.webContents.on('context-menu', () => {
@@ -459,7 +508,17 @@ function setAtomWidgetVisible(visible) {
     // briefly reappear still click-through from before it was hidden. Sleep mode still wins even
     // here, though — showing the widget shouldn't itself wake it back up.
     atomWidget.setIgnoreMouseEvents(Boolean(loadConfig().atomWidgetSleeping), { forward: true });
+    // Momentarily joins every Space right before showing, then drops back off all but the current
+    // one immediately after — the standard trick for "reappear on whatever Space I'm on right now"
+    // without permanently chasing the user the way the popover's own setVisibleOnAllWorkspaces does
+    // (see createAtomWidget's comment on why the widget deliberately doesn't do that normally).
+    // macOS reassigns a window's Space membership to whichever Space is active at the moment
+    // setVisibleOnAllWorkspaces(false) actually runs, not the Space the window happened to be on
+    // before — so a widget turned off while on Desktop 1 and back on while sitting on Desktop 2 now
+    // shows up on Desktop 2, instead of only being visible again after switching back to Desktop 1.
+    atomWidget.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     atomWidget.showInactive();
+    atomWidget.setVisibleOnAllWorkspaces(false);
     // Mirrors hideAtomWidgetAfterDissolve's 'closing' signal below — without this, a widget shown
     // again after being dissolved-and-hidden stays stuck at its dissolved (scale 0) state, since
     // nothing ever tells atom-view.jsx to materialize back in. No ack/timeout needed on this side
@@ -1031,6 +1090,17 @@ function registerIpcHandlers() {
       selection && typeof selection.label === 'string' && selection.label
         ? { ticker: selection.ticker ?? null, label: selection.label }
         : null;
+  });
+
+  // The widget's synthetic drag (see beginAtomWidgetDrag/endAtomWidgetDrag's own comments) —
+  // atom-view.jsx sends -start on a stage pointerdown and -end on the next window-level
+  // pointerup/pointercancel, regardless of whether that pointerup actually followed a widget drag;
+  // endAtomWidgetDrag's own guard makes an unmatched -end harmless.
+  ipcMain.on('atomfolio:widget-drag-start', () => {
+    beginAtomWidgetDrag();
+  });
+  ipcMain.on('atomfolio:widget-drag-end', () => {
+    endAtomWidgetDrag();
   });
 
   ipcMain.handle('atomfolio:connect', async (_event, rawValue) => {
