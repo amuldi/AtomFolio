@@ -3732,6 +3732,10 @@ function ToolSideDrawer({
     {
       key: 'accounts',
       label: language === 'en' ? 'Portfolios' : '포트폴리오 목록',
+      // Short enough to sit under the icon without widening the rail — label is still the full
+      // string above for aria-label/title (screen readers and the hover tooltip), this is only
+      // ever rendered as small on-rail text (see tool-drawer__button-label in the JSX below).
+      shortLabel: language === 'en' ? 'Funds' : '계좌',
       icon: <SketchAccountStackIcon />,
       available: true,
     },
@@ -3741,6 +3745,7 @@ function ToolSideDrawer({
       // not its own top-level icon, since it duplicated the button already in the accounts panel.
       key: 'manual',
       label: language === 'en' ? 'Add Stock' : '종목 추가',
+      shortLabel: language === 'en' ? 'Add' : '추가',
       icon: <SketchManualAccountIcon />,
       available: true,
       hidden: true,
@@ -3748,30 +3753,35 @@ function ToolSideDrawer({
     {
       key: 'overview',
       label: language === 'en' ? 'Overview' : '요약',
+      shortLabel: language === 'en' ? 'Summary' : '요약',
       icon: <SketchBurstIcon />,
       available: Boolean(analyticsSummary || heatmap || allocation || scorecard || groupOptions.length),
     },
     {
       key: 'compare',
       label: language === 'en' ? 'Compare' : '비교',
+      shortLabel: language === 'en' ? 'Compare' : '비교',
       icon: <SketchAccountStackIcon />,
       available: portfolioEntries.length >= 2,
     },
     {
       key: 'twin',
       label: language === 'en' ? 'Investment Simulation' : '투자 시뮬레이션',
+      shortLabel: language === 'en' ? 'Sim' : '모의',
       icon: <SketchTwinIcon />,
       available: true,
     },
     {
       key: 'news',
       label: language === 'en' ? 'Market News' : '시장 뉴스',
+      shortLabel: language === 'en' ? 'News' : '뉴스',
       icon: <SketchNewsIcon />,
       available: true,
     },
     {
       key: 'settings',
       label: text.settings,
+      shortLabel: text.settings,
       icon: <SketchGearIcon />,
       available: true,
     },
@@ -5553,7 +5563,11 @@ function ToolSideDrawer({
                 onSelectTool(tool.key);
               }}
             >
-              {tool.icon}
+              <span className="tool-drawer__button-icon">{tool.icon}</span>
+              {/* Short on-rail label — full `tool.label` still does the aria-label/title job above
+                  (screen readers, hover tooltip); this is purely the at-a-glance text so each tool
+                  reads without hovering first. */}
+              <span className="tool-drawer__button-label">{tool.shortLabel}</span>
             </button>
           ))}
         </div>

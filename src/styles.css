@@ -3475,13 +3475,21 @@ body::after {
   transform: scaleX(1.2);
 }
 
+/* Icon + short label, stacked — was icon-only (a bare title/aria-label tooltip was the only way to
+   learn what a tool did before hovering). display:flex column instead of the old grid
+   place-items:center so the label has somewhere to sit below the icon without the two overlapping;
+   height grew (3.58rem → 4.3rem) to fit it, width stayed put — the rail's own width
+   (--tool-drawer-rail-width) doesn't need to change, only how tall each button is. */
 .tool-drawer__button {
   position: relative;
   isolation: isolate;
   width: 3.58rem;
-  height: 3.58rem;
-  display: grid;
-  place-items: center;
+  height: 4.3rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.14rem;
   padding: 0;
   border: none;
   border-radius: 1rem;
@@ -3493,6 +3501,30 @@ body::after {
     transform 160ms ease,
     filter 190ms ease,
     opacity 160ms ease;
+}
+
+.tool-drawer__button-icon {
+  display: grid;
+  place-items: center;
+  width: 2.3rem;
+  height: 2.3rem;
+}
+
+.tool-drawer__button-label {
+  max-width: 3.3rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.58rem;
+  font-weight: 620;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  color: rgba(var(--frame-ink-c), 0.6);
+  transition: color 160ms ease;
+}
+
+.tool-drawer__button.is-active .tool-drawer__button-label {
+  color: rgba(var(--frame-ink-b), 0.92);
 }
 
 .tool-drawer__button:hover,
@@ -3520,8 +3552,11 @@ body::after {
 .tool-drawer__button .settings-gear__icon {
   position: relative;
   z-index: 1;
-  width: 3.2rem;
-  height: 3.2rem;
+  /* Shrunk from 3.2rem now that the button also carries a label below the icon (see
+     .tool-drawer__button-icon, which the icon sits inside) — the icon itself still fills that
+     2.3rem wrapper edge-to-edge, it's just a smaller wrapper than the whole old icon-only button. */
+  width: 2.3rem;
+  height: 2.3rem;
 }
 
 .tool-drawer__button.is-active .group-dock__burst-icon,
@@ -7678,6 +7713,20 @@ body::after {
   .tool-drawer__button {
     width: 3.42rem;
     height: 3.42rem;
+  }
+
+  .tool-drawer__button-icon {
+    width: 3.08rem;
+    height: 3.08rem;
+  }
+
+  /* Icon-only again at this width — the rail itself (--tool-drawer-rail-width above) stays
+     narrow on small screens, and there isn't room for a label under the icon without either
+     cramping it or widening the rail at the cost of the actual tool panel. title/aria-label
+     (long-press or a screen reader) still carry the full name here, same as before this rail
+     grew labels on wider viewports. */
+  .tool-drawer__button-label {
+    display: none;
   }
 
   .tool-drawer__button .group-dock__burst-icon,
