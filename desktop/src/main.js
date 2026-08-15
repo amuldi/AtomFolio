@@ -268,14 +268,51 @@ function centeredAtomWidgetPosition(width, height) {
 // re-enter the window's new bounds. screen.getCursorScreenPoint() has no such restriction (it's a
 // main-process, OS-level query), so polling it directly tracks the cursor everywhere, including
 // off-window and across displays, with nothing for a fast gesture to outrun.
+// How close (in px) two displays' bounds have to line up to count as physically touching —
+// covers the sub-pixel/rounding gaps some multi-monitor arrangements report between displays a
+// user has actually arranged flush against each other in System Settings.
+const DISPLAY_ADJACENCY_TOLERANCE_PX = 4;
+
+// Whether `display` has another connected display immediately beyond its given side — an
+// internal seam in an extended desktop, not a real edge of anything. This matters because
+// edgeProximityForBounds below feeds the Edge Dock trigger/preview zones: without this check, the
+// seam between two side-by-side monitors reads as "an edge" from *both* displays' point of view
+// (whichever display screen.getDisplayMatching currently attributes the dragged window to), so
+// dragging the widget across from one monitor to the other would trip the dock zone right at the
+// boundary instead of letting the drag continue through — exactly the "gets small instead of
+// moving to the other screen" bug this exists to fix. Only counts a display as adjacent if it
+// also overlaps vertically at all; one stacked directly above/below with no horizontal overlap
+// isn't adjacent for a left/right check.
+function hasAdjacentDisplay(display, side) {
+  return screen.getAllDisplays().some((other) => {
+    if (other.id === display.id) {
+      return false;
+    }
+    const verticalOverlap =
+      Math.min(display.bounds.y + display.bounds.height, other.bounds.y + other.bounds.height) -
+      Math.max(display.bounds.y, other.bounds.y);
+    if (verticalOverlap <= 0) {
+      return false;
+    }
+    return side === 'left'
+      ? Math.abs(other.bounds.x + other.bounds.width - display.bounds.x) <= DISPLAY_ADJACENCY_TOLERANCE_PX
+      : Math.abs(display.bounds.x + display.bounds.width - other.bounds.x) <= DISPLAY_ADJACENCY_TOLERANCE_PX;
+  });
+}
+
 // Which edge of whichever display currently contains `bounds` is closer, and by how much — used
-// both by the dock-zone tracking below and by snapAtomWidgetToEdges. Always returns a side (never
-// null); callers compare `distance` against whichever threshold is relevant to them.
+// by the dock-zone tracking below (updateAtomWidgetDockTracking). Always returns a side (never
+// null); callers compare `distance` against whichever threshold is relevant to them. A side
+// blocked by hasAdjacentDisplay above is never returned/never clears a threshold on its own — its
+// distance is reported as infinite specifically so a seam between monitors can't win the
+// left-vs-right comparison or independently trip the trigger/preview zones.
 function edgeProximityForBounds(bounds) {
   const display = screen.getDisplayMatching(bounds);
   const workArea = display.workArea;
-  const leftDistance = bounds.x - workArea.x;
-  const rightDistance = workArea.x + workArea.width - (bounds.x + bounds.width);
+  const leftDistance = hasAdjacentDisplay(display, 'left') ? Infinity : bounds.x - workArea.x;
+  const rightDistance = hasAdjacentDisplay(display, 'right')
+    ? Infinity
+    : workArea.x + workArea.width - (bounds.x + bounds.width);
   const side = leftDistance <= rightDistance ? 'left' : 'right';
   return { side, distance: Math.max(0, Math.min(leftDistance, rightDistance)), display, workArea };
 }
