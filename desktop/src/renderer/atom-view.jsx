@@ -341,50 +341,25 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
   // rotation feel like it was barely alive most of the time, gated on a signal that had nothing to
   // do with whether anyone actually wanted it to stop.
 
-  // ⌘ gates "move the window" vs "rotate the atom" — without it, grabbing anywhere on the stage
-  // (including the center/bond-lines) behaves like the website's trackball; holding ⌘ moves the
-  // window instead. This still updates .is-move-mode on hover (below) purely for the grab/grabbing
-  // cursor — but actually MOVING the window is done by hand (screenX/screenY deltas -> IPC), not
-  // via -webkit-app-region: drag. A native-app-region version was tried first and reported broken
-  // in real use (window just doesn't move): -webkit-app-region: drag only takes effect for a
-  // mousedown that starts *after* the browser process has already cached that point as a
-  // draggable region from a prior layout pass — the region has to be armed before the click, not
-  // during it. Toggling the class reactively from a pointerdown/pointermove handler is
-  // structurally too late for that same pointerdown (if the region had actually been armed in
-  // time, the native drag would have intercepted the mousedown before it ever reached this JS
-  // handler at all) — it only had a chance of working if the user happened to move the mouse
-  // (hover) with ⌘ already held before pressing, not the more natural press-then-hold-⌘-then-drag
-  // order. Reading event.metaKey off pointer events (below and in handleNodePointerDown) is still
-  // the right way to detect the modifier without keyboard focus — the OS attaches current modifier
-  // state to every mouse event regardless of window focus — it's specifically the "hand the drag
-  // off to app-region" part that didn't hold up.
-  useEffect(() => {
-    const stage = stageRef.current;
-    if (!stage) {
-      return undefined;
-    }
-    const syncMoveMode = (event) => {
-      stage.classList.toggle('is-move-mode', event.metaKey);
-    };
-    const clearMoveMode = () => {
-      stage.classList.remove('is-move-mode');
-    };
-    stage.addEventListener('pointermove', syncMoveMode);
-    stage.addEventListener('pointerdown', syncMoveMode);
-    stage.addEventListener('pointerleave', clearMoveMode);
-    return () => {
-      stage.removeEventListener('pointermove', syncMoveMode);
-      stage.removeEventListener('pointerdown', syncMoveMode);
-      stage.removeEventListener('pointerleave', clearMoveMode);
-    };
-  }, []);
-
-  // The ⌘-move drag needs no JS of its own any more — atom-widget.css gives .atom-visual-stage a
+  // No modifier key gates "move the window" vs "rotate the atom" any more — grabbing an actual
+  // node/center rotates/selects it (handleNodePointerDown below, and AtomSketch's own
+  // .center-hit, both stop propagation and take over the gesture themselves); grabbing anywhere
+  // else on the stage moves
+  // the window, because that's the one thing left with nothing else claiming it. An earlier
+  // version required holding ⌘ to disambiguate the two, but that turned "drag the widget to a
+  // screen edge to have macOS carry it onto a neighboring Space" (Mission Control's own built-in
+  // behavior for a real native window drag — see atom-widget.css's own comment on why this needs
+  // to be a *native* drag at all) into a two-handed gesture that's easy to get wrong mid-drag; a
+  // plain single-handed grab-and-drag is both simpler and matches how every other floating/
+  // always-on-top utility window on macOS already behaves.
+  //
+  // The actual move drag needs no JS of its own — atom-widget.css gives .atom-visual-stage a
   // *static* -webkit-app-region: drag (carving out .node-hit/.center-hit as no-drag, so clicking
   // an actual node/center still rotates/selects instead of moving the window), and the click-
   // through hit-test below is what gates *whether* the window is even receiving mouse events over
-  // that empty space at all — only while ⌘ is held (unchanged from before). Once the window is
-  // receiving events there, a real native OS window-drag can begin the instant the user presses
+  // that empty space at all — now unconditionally, any time the cursor is over the stage. Once
+  // the window is receiving events there, a real native OS window-drag can begin the instant the
+  // user presses
   // and drags, entirely inside Chromium/the window server — no pointerdown handler, no IPC, no
   // cursor polling. This replaces an earlier version that streamed synthetic drag positions to
   // main.js instead: that worked for plain repositioning, but a *simulated* drag (repeated
@@ -393,10 +368,10 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
   // particular, macOS's own Mission Control behavior of switching to a neighboring Space when a
   // window is held at the screen edge mid-drag, carrying the window along. A *static* app-region
   // (present from first paint, never toggled by a class) is also what actually makes native
-  // dragging work at all here — an earlier attempt that toggled the CSS reactively in response to
-  // ⌘ found real native drag doesn't arm that way (a mousedown only picks up an app-region the
-  // browser process had already cached from a prior layout pass, not one added by the same
-  // gesture's own pointerdown handler).
+  // dragging work at all here — an earlier attempt that toggled the CSS reactively (per a
+  // modifier key, before that requirement was dropped) found real native drag doesn't arm that
+  // way: a mousedown only picks up an app-region the browser process had already cached from a
+  // prior layout pass, not one added by the same gesture's own pointerdown handler.
 
   // Click-through for the widget's own empty space. This is a transparent, frameless
   // BrowserWindow — by default Electron gives it a normal opaque hit-box covering its whole
@@ -442,11 +417,13 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
       // events, not the eventual pointerup/pointercancel handleUp below needs in order to end the
       // drag cleanly. Checked directly off the same ref handleUp/handleMove already use, not some
       // derived boolean state, so this can never drift out of sync with the actual drag.
-      // ⌘ held over the stage also has to stay non-click-through — that's the one condition under
-      // which the empty stage becomes a native drag target (see atom-widget.css's static
-      // -webkit-app-region: drag on .atom-visual-stage) rather than pass-through to the desktop.
+      // No modifier key gates this any more — the whole stage is always a candidate for a native
+      // window-drag now (see atom-widget.css's static -webkit-app-region: drag on
+      // .atom-visual-stage), so hovering anywhere on it has to stay non-click-through, full stop.
+      // The one thing actually still click-through is the transparent margin *outside* the stage
+      // (the rest of this window's rectangle) — nothing there is drawn or draggable.
       const dragInProgress = Boolean(dragRef.current.atomId);
-      const interactive = overHitTarget || dragInProgress || (overStage && event.metaKey);
+      const interactive = overHitTarget || dragInProgress || overStage;
       const shouldIgnore = !interactive;
 
       if (shouldIgnore !== lastIgnoreRef.current) {
@@ -572,27 +549,10 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
 
   const handleNodePointerDown = useCallback(
     (atomId, event) => {
-      // ⌘ held means this is a window-move gesture, not a rotation — bail out without touching
-      // dragRef. .node-hit/.center-hit are statically -webkit-app-region: no-drag (see
-      // atom-widget.css), specifically so a *plain* drag on a node always rotates rather than
-      // risking the OS interpreting it as a window-move — the one tradeoff that comes with a
-      // static (not reactively toggled, see this file's own note on why) app-region: a ⌘-drag
-      // that starts with the pointer exactly on a node's own hit-circle won't move the window
-      // either (nothing here starts one, and the native drag region doesn't cover that exact
-      // pixel) — only ⌘-dragging from the empty stage around the nodes does. In practice the
-      // stage is mostly empty space around a handful of small nodes, so this rarely matters.
-      // Starting rotation tracking here anyway would also risk it never getting a matching
-      // pointerup if something else ends up handling the gesture, leaving dragRef.current.atomId
-      // stuck non-null — which would silently disable idle auto-rotate for good, since the render
-      // loop treats a non-null atomId as "still dragging".
-      if (event.metaKey) {
-        return;
-      }
       // Dissolving/materializing swaps the underlying atom data out from under any rotation state
       // that was mid-gesture, and is already animating rotation speed on its own — ignoring new
       // rotation drags while a transition is in flight is simpler and safer than reconciling the
-      // two. ⌘-drag (window move, handled above) is unaffected — it doesn't touch rotation state
-      // at all, so there's nothing for it to conflict with.
+      // two.
       if (atomTransitionPhase !== 'idle') {
         return;
       }
@@ -624,21 +584,6 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
     },
     [clientToLocalPoint, atomTransitionPhase],
   );
-
-  // AtomSketch's own .center-hit unconditionally stopPropagation()s on pointerdown (it has to —
-  // that's what makes a plain click-to-deselect work without also rotating the atom underneath
-  // it). Returning exactly `false` here opts out of that for the ⌘ case only, so a stopped React
-  // synthetic event (which also stops the underlying native one) never gets in the way of the
-  // stage's static native drag region picking up the gesture — same reasoning as
-  // handleNodePointerDown's own ⌘ bail-out just above, including the same "exactly on the
-  // center's own hit-circle" edge case. Returning undefined (the ⌘-not-held path) keeps
-  // AtomSketch's existing capture/stopPropagation/onCenterClick behavior exactly as it always was.
-  const handleCenterPointerDown = useCallback((event) => {
-    if (event.metaKey) {
-      return false;
-    }
-    return undefined;
-  }, []);
 
   useEffect(() => {
     const deltaQuaternion = new THREE.Quaternion();
@@ -841,7 +786,6 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
             ariaLabel="보유 종목 원자"
             highlightActive={false}
             onCenterClick={() => setSelectedAtomId(null)}
-            onCenterPointerDown={handleCenterPointerDown}
             onPointerDown={handleNodePointerDown}
             onPointerEnter={() => {}}
             onPointerMove={() => {}}

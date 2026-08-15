@@ -12,6 +12,67 @@
 > sessions that actually did the work. Bugs found along the way are tracked separately in
 > [`AtomFolio_Bugs.en.md`](AtomFolio_Bugs.en.md).
 
+## 2026-08-15 — Menu bar app overhaul: summary-first popover, 5s fast sync, native drag for the atom widget
+
+The menu bar companion app changed direction from "a small news-reading helper" to "a portfolio
+control panel." Summarizing several rounds of work here.
+
+**The popover now opens on a summary page.** It used to be a 2-page news/settings pager that
+always opened on news; it's now a 3-page summary / news / settings pager (total value, today's
+P/L, any active insight, top holdings by weight, quick-add) that always returns to summary on
+open. Settings were regrouped from two groups (split by control type) into three grouped by
+purpose: Basic (appearance/behavior), Alerts (every notification-triggering control), Advanced
+(refresh cadence, category filter, popup opacity — collapsed by default via a native
+`<details>`). Quick-add now names which portfolio it targets and shows a brief "✓ AAPL added"
+confirmation instead of silently clearing. Along the way we found the widget's own readout and
+the web dashboard were using different money formats — `formatKoreanWonShort` (the 억/만 compact
+format) was promoted from a local copy in `DigitalTwinPanel.jsx` into a shared
+`src/utils/format.js` export, now used by the dashboard, popover summary, and widget readout
+alike.
+
+![Menu bar summary panel — real macOS capture](assets/atomfolio-menubar-summary-live.jpg)
+
+**Portfolio changes now reach the widget within ~5 seconds.** It used to wait for the next full
+poll tick (60s default, up to 300s). A cheap version-check endpoint
+(`GET /api/portfolio?version=1` — riding the existing `/api/portfolio` route via a query param
+rather than a new path, since `api/portfolio/[id].js` already owns everything else under
+`/api/portfolio/*`) now returns just `atomfolio_workspaces.updated_at`, already bumped on every
+write in both store drivers. The desktop app polls it every 5 seconds (fixed, not
+user-configurable) and only triggers the heavier full refresh when the value actually changes.
+Real WebSocket/SSE push was ruled out — Vercel Hobby serverless functions can't hold a connection
+open long enough to be worth it.
+
+**Dragging the atom widget to a screen edge can now carry it to a different macOS Desktop
+(Space).** We first built "Edge Dock" (push to an edge, collapse into a small tab), but that
+wasn't actually what was wanted — the ask was macOS Mission Control's own built-in behavior:
+holding a dragged window at the screen edge switches to the neighboring Space, carrying the
+window along. Edge Dock was removed entirely, and the widget's drag mechanism itself changed —
+it used to be a simulated drag (repeated `setPosition()` calls polling the cursor every 16ms),
+which never registers as a real drag session to the window server, so Mission Control's
+edge-switch behavior had no way to trigger for it. `.atom-visual-stage` now gets a *static*
+`-webkit-app-region: drag` (present from first paint, never toggled by a class — a reactively
+toggled version was tried and doesn't arm in time), with `.node-hit`/`.center-hit` carved back
+out to `no-drag` so clicking an actual node/center still rotates/selects. No modifier key is
+needed for the drag any more — grab the empty background and go. **Important caveat**: whether
+this actually triggers a Space switch needs a real held mouse-drag gesture to test, which this
+session had no way to automate — please try it yourself with multiple Desktops set up and report
+back.
+
+**Right-clicking the atom widget with a stock selected now links straight to that stock's news.**
+"Open News" becomes "View {stock} News", opening the popover on the news page with that stock's
+name already running through the search bar.
+
+Docs were also corrected — both READMEs (`README.md`, `desktop/README.md`) described the tray
+icon as atom-shaped, which was wrong (it's a small profit/loss dot; the atom is the separate
+floating widget). The screenshot above was captured with macOS `screencapture` from the actually
+running app; a first full-screen capture briefly surfaced an unrelated personal browser tab and
+was discarded rather than used — the kept crop shows only this project's own VS Code window and
+the AtomFolio popover/widget.
+
+**Verified**: `npm run lint`/`npm test` (115 tests) all pass, web/desktop builds clean, the
+packaged desktop app was rebuilt and relaunched with stdout attached — no new errors. The
+Space-switch behavior itself remains unverified, as noted above.
+
 ## 2026-08-15 — Real Neon/Clerk connection, desktop account login, settings panel overhaul
 
 Followed through on the previous day's readiness check for real. Provisioned Neon Postgres and
