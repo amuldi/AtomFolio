@@ -19,7 +19,11 @@
 // backed by an actual API contract. resolveDomesticSymbolFromName closes that gap using only the
 // offline local alias table (searchLocalSymbolSuggestions — no network call, no cost, no latency)
 // so name-only domestic lookups get the same KIS-first treatment a bare ticker already had.
-import { fetchLiveMarketDataFromProviders, searchLocalSymbolSuggestions } from '../../src/lib/liveMarketData.js';
+import {
+  fetchLiveMarketDataFromProviders,
+  inferAssetClassFromMarketInfo,
+  searchLocalSymbolSuggestions,
+} from '../../src/lib/liveMarketData.js';
 import { isKisConfigured, fetchKisDomesticQuote } from './kisProvider.mjs';
 import { recordOperationalEvent } from '../operationalEvents.mjs';
 
@@ -72,6 +76,11 @@ export async function fetchLiveQuoteWithKisRouting({ ticker, name, signal } = {}
         name: name || quote.symbol,
         displayName: name || quote.symbol,
         rawName: name || quote.symbol,
+        // KIS's response has no assetClass either, and there's no local-security-universe match to
+        // fall back on here (this whole branch only runs for a bare/resolved domestic ticker, not
+        // a search-suggestion candidate) — the caller-supplied name is the only signal available,
+        // same as every other provider's heuristic fallback in liveMarketData.js.
+        assetClass: quote.assetClass || inferAssetClassFromMarketInfo({ name, rawName: name }),
       };
     } catch (error) {
       // Silent fallthrough by design — network error, expired/unreachable token, or simply not a

@@ -12,6 +12,38 @@
 > sessions that actually did the work. Bugs found along the way are tracked separately in
 > [`AtomFolio_Bugs.en.md`](AtomFolio_Bugs.en.md).
 
+## 2026-08-15 — Add-stock form now infers asset class from the security's own market info
+
+The "Add stock" (manual entry) form's 자산군/Asset dropdown (Stock/Dividend/Gold·Commodity ETF/
+Gold·Cash/REITs/Bond/Other) only ever auto-filled itself for the ~80 tickers hand-curated in
+`LOCAL_SECURITY_UNIVERSE` (`src/lib/liveMarketData.js`) — every real ticker outside that list came
+back from search or live quotes with `assetClass: ''`, which the form silently ignored, leaving the
+dropdown on whatever it last was (usually the '주식'/Stock default). Common holdings like Realty
+Income (a REIT), TLT (a bond ETF), or SCHD (a dividend ETF) all had to be classified by hand.
+
+Added `inferAssetClassFromMarketInfo`, a keyword heuristic over a security's name/sector/quoteType
+text — reusing the same keyword families `portfolioAllocation.js`'s `classifyAllocationLabel` and
+`digitalTwin.js`'s `isReitAsset`/`isGoldCashAsset`/`isDividendAsset` already use for *held*
+positions (REIT/real-estate, bond/treasury, gold/commodity, cash/money-market, dividend), folded
+onto this form's own 7-value enum — so a holding added this way gets scored and grouped the same
+way the rest of the app already reads assetClass. Wired it in as a fallback everywhere a quote or
+suggestion gets built: Yahoo search suggestions (`quoteToSuggestion` had no sector/assetClass field
+at all before this), Yahoo chart quotes, Naver, Mirae, Stooq, the local security dictionary, and the
+server-side KIS routing layer. Caught a real bug while wiring it up — most `LOCAL_SECURITY_UNIVERSE`
+entries (individual domestic stocks) never set `quoteType` explicitly and rely on the `'EQUITY'`
+default two lines below, but the inference call was reading the raw, undefined `entry.quoteType`
+instead of that already-defaulted value, so e.g. POSCO Holdings still came back with `assetClass: ''`.
+
+Verified live against a local dev server: searching "Realty Income" auto-fills the asset dropdown to
+"REITs"; typing "TLT" into the ticker field and clicking "Apply quote" auto-fills it to "Bond".
+Direct `/api/market/search` calls confirmed TLT/BND/GLD/SGOV/VNQ/SCHD/POSCO (all outside the local
+list) each classify correctly as bond/bond/gold·commodity/bond/REITs/dividend/stock respectively.
+
+**Verified**: added 9 regression tests exercising `inferAssetClassFromMarketInfo` directly
+(`tests/live-market-asset-class.test.mjs`), `npm run lint` clean, `npm test` 126 total — 125 pass, 1
+skip (pre-existing), 0 fail, `npm run build` clean. Also live-verified end-to-end in a browser
+against a local dev server, not just unit-tested.
+
 ## 2026-08-15 — Actually re-captured 4 of the README's screenshots (correcting a date-banner mistake from the entry right below)
 
 In the entry right below (the README rewrite), the "Screens" section's date banner got bumped from

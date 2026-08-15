@@ -793,6 +793,59 @@ function cleanQuoteTypeLabel(value, symbol = '') {
   return clean;
 }
 
+// Fallback for the ~99% of real tickers that aren't one of the ~80 hand-curated
+// LOCAL_SECURITY_UNIVERSE entries with an explicit assetClass — without this, every quote/
+// suggestion shape below (Yahoo, Naver, Mirae, Stooq, plain Yahoo search) just returns
+// assetClass: '', and the manual "종목 추가" form's own 자산군 dropdown silently stays on
+// whatever it last was (usually the '주식' default) no matter what's actually being added. Mirrors
+// the same keyword families portfolioAllocation.js's classifyAllocationLabel and digitalTwin.js's
+// isReitAsset/isGoldCashAsset/isDividendAsset already use for *held* positions, just collapsed onto
+// this form's narrower 7-value enum (주식/배당/금·원자재 ETF/금·현금/리츠/채권/기타) instead of
+// their own richer display buckets — so a holding added this way gets scored/grouped consistently
+// with how the rest of the app already reads assetClass, not a fourth, disconnected taxonomy.
+// Order matters: more specific buckets (REIT, bond, commodity, cash) are checked before the
+// generic "it's some kind of stock/ETF" catch-all, since a dividend or REIT ETF's name almost
+// always also contains "ETF"/"fund" and would otherwise fall into the wrong, too-generic bucket.
+export function inferAssetClassFromMarketInfo({
+  name = '',
+  rawName = '',
+  sector = '',
+  quoteType = '',
+  typeDisp = '',
+} = {}) {
+  const joined = `${name} ${rawName} ${sector} ${quoteType} ${typeDisp}`.toLowerCase();
+
+  if (!joined.trim()) {
+    return '';
+  }
+
+  if (/reit|real estate|realty|property|부동산|리츠/.test(joined)) {
+    return '리츠';
+  }
+
+  if (/\bbond\b|treasury|fixed income|국고채|국채|회사채|단기채|장기채|물가채|채권/.test(joined)) {
+    return '채권';
+  }
+
+  if (/gold|silver|commodity|\boil\b|copper|원자재|귀금속|원유|은현물|금현물|금선물|골드/.test(joined)) {
+    return '금/원자재 ETF';
+  }
+
+  if (/\bcash\b|\bcma\b|\bmmf\b|money ?market|머니마켓|deposit|파킹|예수금|현금성|단기자금/.test(joined)) {
+    return '금/현금';
+  }
+
+  if (/dividend|고배당|배당/.test(joined)) {
+    return '배당';
+  }
+
+  if (/equity|\bstock\b|\betf\b|\bfund\b|\bindex\b|trust|주식|보통주|펀드|인덱스|상장지수/.test(joined)) {
+    return '주식';
+  }
+
+  return '';
+}
+
 function unique(values) {
   return [...new Set(values.filter(Boolean))];
 }
@@ -904,7 +957,18 @@ function localSecurityToSuggestion(entry, localRank = 0, searchScore = 0) {
     quoteType: entry.quoteType || 'EQUITY',
     typeDisp: cleanQuoteTypeLabel(entry.typeDisp || entry.quoteType || 'equity', entry.symbol),
     sector: entry.sector || '',
-    assetClass: entry.assetClass || '',
+    // Most LOCAL_SECURITY_UNIVERSE entries (every plain individual stock) don't bother setting
+    // quoteType at all, relying on the 'EQUITY' default two lines up — reading entry.quoteType
+    // here directly instead of that already-defaulted value would silently pass quoteType: undefined
+    // into the inference below and lose the one signal that correctly resolves them to 주식.
+    assetClass:
+      entry.assetClass ||
+      inferAssetClassFromMarketInfo({
+        name: entry.name,
+        rawName: entry.rawName,
+        sector: entry.sector,
+        quoteType: entry.quoteType || 'EQUITY',
+      }),
     aliases: Array.isArray(entry.aliases) ? entry.aliases : [],
     source: '한국어 종목명 사전',
     localRank,
@@ -1137,14 +1201,28 @@ function quoteToSuggestion(quote) {
     String(quote?.name ?? '').trim() ||
     symbol;
 
+  const quoteType = String(quote?.quoteType ?? '').trim();
+  const typeDisp = cleanQuoteTypeLabel(quote?.typeDisp ?? quote?.quoteType ?? '', symbol);
+  const sector = String(quote?.sector ?? quote?.industry ?? '').trim();
+  // Yahoo's own /finance/search almost never returns quoteType-adjacent enough info to know
+  // anything finer than "some kind of equity/ETF" — the local table only helps when this exact
+  // symbol also happens to be one of the ~80 hand-curated LOCAL_SECURITY_UNIVERSE entries, which
+  // rarely lines up for a fresh Yahoo-only search hit. inferAssetClassFromMarketInfo is what
+  // actually carries this for the long tail of tickers search turns up.
+  const localMetadata = LOCAL_SYMBOL_METADATA[symbol] ?? {};
+
   return {
     symbol,
     name: cleanOfficialMarketName(rawName, symbol),
     rawName,
     displayName: cleanOfficialMarketName(rawName, symbol),
     exchangeName: cleanExchangeName(quote?.exchDisp ?? quote?.exchange ?? '', symbol),
-    quoteType: String(quote?.quoteType ?? '').trim(),
-    typeDisp: cleanQuoteTypeLabel(quote?.typeDisp ?? quote?.quoteType ?? '', symbol),
+    quoteType,
+    typeDisp,
+    sector: localMetadata.sector || sector,
+    assetClass:
+      localMetadata.assetClass ||
+      inferAssetClassFromMarketInfo({ name: rawName, rawName, sector, quoteType, typeDisp }),
     source: 'Yahoo Finance',
   };
 }
@@ -1312,10 +1390,16 @@ async function fetchYahooChart(symbol, windowConfig, signal) {
       localMetadata.exchangeName || meta.fullExchangeName || meta.exchangeName || '',
       meta.symbol || symbol,
     ),
-    quoteType: localMetadata.quoteType || '',
-    typeDisp: cleanQuoteTypeLabel(localMetadata.typeDisp || '', meta.symbol || symbol),
+    quoteType: localMetadata.quoteType || meta.instrumentType || '',
+    typeDisp: cleanQuoteTypeLabel(localMetadata.typeDisp || meta.instrumentType || '', meta.symbol || symbol),
     sector: localMetadata.sector || '',
-    assetClass: localMetadata.assetClass || '',
+    assetClass:
+      localMetadata.assetClass ||
+      inferAssetClassFromMarketInfo({
+        name: displayName,
+        rawName,
+        quoteType: meta.instrumentType || '',
+      }),
     currency: meta.currency || '',
     latestPrice,
     previousClose,
@@ -1416,7 +1500,9 @@ function normalizeMiraeQuotePayload(payload, symbol, name = '') {
     quoteType: localMetadata.quoteType || '',
     typeDisp: cleanQuoteTypeLabel(localMetadata.typeDisp || '', normalizedSymbol),
     sector: localMetadata.sector || '',
-    assetClass: localMetadata.assetClass || '',
+    assetClass:
+      localMetadata.assetClass ||
+      inferAssetClassFromMarketInfo({ name: rawName, rawName }),
     currency: data?.currency || 'KRW',
     latestPrice,
     previousClose,
@@ -1519,7 +1605,13 @@ async function fetchNaverStockQuote(symbol, name, signal) {
     quoteType: localMetadata.quoteType || payload?.stockEndType || '',
     typeDisp: cleanQuoteTypeLabel(localMetadata.typeDisp || payload?.stockEndType || '', normalizedSymbol),
     sector: localMetadata.sector || '',
-    assetClass: localMetadata.assetClass || '',
+    assetClass:
+      localMetadata.assetClass ||
+      inferAssetClassFromMarketInfo({
+        name: rawName,
+        rawName,
+        quoteType: payload?.stockEndType || '',
+      }),
     currency: 'KRW',
     latestPrice,
     previousClose,
@@ -1606,7 +1698,8 @@ async function fetchStooqQuote(symbol, signal) {
     quoteType: localMetadata.quoteType || '',
     typeDisp: cleanQuoteTypeLabel(localMetadata.typeDisp || '', symbol),
     sector: localMetadata.sector || '',
-    assetClass: localMetadata.assetClass || '',
+    assetClass:
+      localMetadata.assetClass || inferAssetClassFromMarketInfo({ name: displayName }),
     currency: '',
     latestPrice: close,
     previousClose: open,
@@ -1669,7 +1762,20 @@ function buildQuotePayload(candidate, quote, searchQuery) {
     quoteType: candidate.quoteType || quote.quoteType || '',
     typeDisp: candidate.typeDisp || quote.typeDisp || '',
     sector: candidate.sector || quote.sector || '',
-    assetClass: candidate.assetClass || quote.assetClass || '',
+    // candidate/quote almost always already carry a heuristic-derived assetClass by this point
+    // (every provider function above fills one in), but the raced/-fastest provider's own return
+    // shape can still legitimately end up empty in edge cases (e.g. Stooq's bare OHLC row) — one
+    // more pass here over the name this function just resolved catches those.
+    assetClass:
+      candidate.assetClass ||
+      quote.assetClass ||
+      inferAssetClassFromMarketInfo({
+        name: displayName,
+        rawName: candidate.rawName || quote.rawName || quote.name,
+        sector: candidate.sector || quote.sector || '',
+        quoteType: candidate.quoteType || quote.quoteType || '',
+        typeDisp: candidate.typeDisp || quote.typeDisp || '',
+      }),
   };
 }
 

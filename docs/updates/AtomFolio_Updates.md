@@ -11,6 +11,39 @@
 > 당시 세션에서 직접 검증하며 쓴 상세 기록입니다. 발견된 버그/오류는 이 문서와 별도로
 > [`AtomFolio_Bugs.md`](AtomFolio_Bugs.md)에 계속 정리합니다.
 
+## 2026-08-15 — 종목 추가 시 자산군을 종목 정보에서 자동으로 찾아 연동
+
+"종목 추가" 폼(직접 입력)의 자산군 드롭다운(주식/배당/금·원자재 ETF/금·현금/리츠/채권/기타)이
+실제로 자동 채워지는 건 미리 손으로 등록해둔 ~80개 종목(`LOCAL_SECURITY_UNIVERSE`,
+`src/lib/liveMarketData.js`)에 정확히 걸릴 때뿐이었습니다 — 그 목록 밖의 실제 티커 대부분은
+검색 결과든 실시간 시세든 항상 `assetClass: ''`로 돌아왔고, 폼은 그걸 조용히 무시한 채 드롭다운을
+마지막 상태(보통 기본값 '주식')로 그대로 뒀습니다. Realty Income(리츠), TLT(채권), SCHD(배당)
+같은 흔한 종목도 전부 수동으로 골라야 했습니다.
+
+`inferAssetClassFromMarketInfo`를 새로 만들어 이름·섹터·quoteType 텍스트에서 키워드로 자산군을
+추론하도록 했습니다 — `portfolioAllocation.js`의 `classifyAllocationLabel`, `digitalTwin.js`의
+`isReitAsset`/`isGoldCashAsset`/`isDividendAsset`가 이미 보유 종목에 쓰던 것과 같은 키워드
+계열(리츠/부동산, 채권/국채, 금·원자재, 현금성/머니마켓, 배당)을 이 폼의 7개 값으로 접어
+넣었습니다 — 그래야 이렇게 추가한 종목도 나머지 앱이 assetClass를 읽는 방식(점수, 원자 위젯
+카테고리 필터)과 계속 같은 기준으로 묶입니다. Yahoo 검색 제안(`quoteToSuggestion` — 원래
+sector/assetClass 필드 자체가 없었음), Yahoo 차트, Naver, Mirae, Stooq, 로컬 종목 사전, KIS
+라우팅까지 assetClass를 만드는 자리마다 이 추론을 폴백으로 연결했습니다. 붙이는 과정에서 실제
+버그 하나도 발견해 고쳤습니다 — 로컬 종목 사전 항목 대부분(개별 국내 주식)은 quoteType을 아예
+안 정해 두고 'EQUITY' 기본값에 의존하는데, 추론 함수에는 그 기본값이 아니라 원본
+`entry.quoteType`(undefined)을 그대로 넘기고 있어서 POSCO홀딩스 같은 종목이 assetClass ''로
+돌아왔습니다.
+
+로컬 dev 서버에서 실제로 확인: "Realty Income" 검색 → 자산군이 자동으로 "리츠"로 채워짐,
+티커 필드에 "TLT" 입력 후 "현재가 적용" → "채권"으로 채워짐. `/api/market/search` 직접 호출로도
+TLT·BND·GLD·SGOV·VNQ·SCHD·POSCO 등 로컬 목록 밖 티커들이 각각 채권/채권/금·원자재
+ETF/채권/리츠/배당/주식으로 정확히 분류되는 것 확인.
+
+**검증**: `inferAssetClassFromMarketInfo`를 직접 테스트하는 회귀 테스트
+(`tests/live-market-asset-class.test.mjs`) 9개 추가, `npm run lint` 클린, `npm test` 126개 중
+125 통과·1 skip(기존과 동일)·0 실패, `npm run build` 클린. 로컬 dev 서버(`npm run dev`)를 띄워
+브라우저로 "종목 추가" 폼에 직접 REIT·채권 ETF를 입력해 자산군이 자동으로 바뀌는 것까지
+라이브로 확인.
+
 ## 2026-08-15 — README 실행 화면 스크린샷 4장을 실제로 다시 캡처 (직전 항목의 날짜 표기 실수 정정)
 
 바로 아래 항목(README 재작성)에서 "실행 화면" 배너의 날짜만 2026-08-13 → 2026-08-15로 고치고
