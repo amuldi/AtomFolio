@@ -1,5 +1,4 @@
 import { useState, useRef } from 'react';
-import { clamp } from '../../utils/math.js';
 import {
   textFor,
   formatHeatmapValue,
@@ -25,6 +24,10 @@ export function PortfolioAllocationRing({
   compact = false,
 }) {
   const text = textFor(language);
+  const hoveredSegment =
+    interactive && hoverInfo?.segmentId
+      ? (allocation.segments.find((segment) => segment.id === hoverInfo.segmentId) ?? null)
+      : null;
   const center = 96;
   const radius = 58;
   const segmentGapAngle = allocation.segments.length > 1 ? 0.068 : 0;
@@ -147,11 +150,8 @@ export function PortfolioAllocationRing({
               <path
                 className="allocation-chart__segment-hit"
                 d={softPath || mainPath}
-                onPointerEnter={(event) => {
-                  setSegmentHover?.(segment, event.clientX, event.clientY);
-                }}
-                onPointerMove={(event) => {
-                  setSegmentHover?.(segment, event.clientX, event.clientY);
+                onPointerEnter={() => {
+                  setSegmentHover?.(segment);
                 }}
                 onPointerLeave={() => {
                   clearSegmentHover?.();
@@ -180,22 +180,35 @@ export function PortfolioAllocationRing({
       </g>
       {compact ? null : (
         <>
+          {/* Hovering a segment/legend row swaps this center text to that segment's own
+              name+share instead of popping a floating tooltip box over the chart — same
+              information, no element that can cover other content on screen. */}
           <text className="allocation-chart__center-label" x={center} y="84" textAnchor="middle">
-            {text.allocationTotalReturn}
+            {hoveredSegment
+              ? hoveredSegment.isUnknown
+                ? text.allocationUnknown
+                : translateDisplayValue(hoveredSegment.label, language)
+              : text.allocationTotalReturn}
           </text>
           <text
             className={`allocation-chart__center-value${
-              allocation.hasReturnData && allocation.totalReturn > 0
-                ? ' is-positive'
-                : allocation.hasReturnData && allocation.totalReturn < 0
-                  ? ' is-negative'
-                  : ''
+              hoveredSegment
+                ? ''
+                : allocation.hasReturnData && allocation.totalReturn > 0
+                  ? ' is-positive'
+                  : allocation.hasReturnData && allocation.totalReturn < 0
+                    ? ' is-negative'
+                    : ''
             }`}
             x={center}
             y="108"
             textAnchor="middle"
           >
-            {allocation.hasReturnData ? formatHeatmapValue(allocation.totalReturn, 'percent') : '—'}
+            {hoveredSegment
+              ? formatAllocationPercent(hoveredSegment.weight)
+              : allocation.hasReturnData
+                ? formatHeatmapValue(allocation.totalReturn, 'percent')
+                : '—'}
           </text>
         </>
       )}
@@ -212,44 +225,18 @@ export function PortfolioAllocationCard({
 }) {
   const panelRef = useRef(null);
   const text = textFor(language);
+  // Just which segment, no cursor position to track — the hover effect is the donut's own center
+  // text swapping plus the segment/legend highlight (see PortfolioAllocationRing), not a
+  // cursor-anchored floating box, so there's nothing here that needs a coordinate.
   const [hoverInfo, setHoverInfo] = useState(null);
 
-  const resolveHoverPosition = (clientX, clientY) => {
-    const bounds = panelRef.current?.getBoundingClientRect();
-
-    if (!bounds) {
-      return { x: 96, y: 78 };
-    }
-
-    return {
-      x: clamp(clientX - bounds.left, 84, bounds.width - 84),
-      // The tooltip anchors here but then rises by its own full height plus 10px
-      // (`.allocation-panel__tooltip`'s `translate(-50%, calc(-100% - 10px))`) — a 48px floor left
-      // barely more than half the tooltip's actual rendered height (~55-65px) above it, so it could
-      // clip through the panel's own top edge. 78px leaves real headroom for that upward shift.
-      y: clamp(clientY - bounds.top - 16, 78, bounds.height - 24),
-    };
-  };
-
-  const setSegmentHover = (segment, clientX, clientY) => {
-    setHoverInfo({
-      segmentId: segment.id,
-      x: resolveHoverPosition(clientX, clientY).x,
-      y: resolveHoverPosition(clientX, clientY).y,
-    });
+  const setSegmentHover = (segment) => {
+    setHoverInfo({ segmentId: segment.id });
   };
 
   const clearSegmentHover = () => {
     setHoverInfo(null);
   };
-
-  const hoveredSegment =
-    allocation.segments.find((segment) => segment.id === hoverInfo?.segmentId) ?? null;
-  const hoveredSegmentLabel = hoveredSegment
-    ? hoveredSegment.isUnknown
-      ? text.allocationUnknown
-      : translateDisplayValue(hoveredSegment.label, language)
-    : '';
 
   return (
     <aside
@@ -272,21 +259,6 @@ export function PortfolioAllocationCard({
         />
       </div>
 
-      {hoveredSegment && hoverInfo ? (
-        <div
-          className="allocation-panel__tooltip"
-          style={{
-            left: `${hoverInfo.x}px`,
-            top: `${hoverInfo.y}px`,
-          }}
-        >
-          <strong className="allocation-panel__tooltip-title">{hoveredSegmentLabel}</strong>
-          <span className="allocation-panel__tooltip-value">
-            {text.allocationShareLabel} {formatAllocationPercent(hoveredSegment.weight)}
-          </span>
-        </div>
-      ) : null}
-
       <div className="allocation-panel__legend">
         {allocation.segments.map((segment, index) => {
           const palette = ALLOCATION_SEGMENT_PALETTE[index % ALLOCATION_SEGMENT_PALETTE.length];
@@ -302,14 +274,7 @@ export function PortfolioAllocationCard({
               className={`allocation-panel__legend-row${isHovered ? ' is-active' : ''}${
                 isDimmed ? ' is-dimmed' : ''
               }`}
-              onPointerEnter={(event) => {
-                const rect = event.currentTarget.getBoundingClientRect();
-                setSegmentHover(segment, rect.left + rect.width * 0.5, rect.top);
-              }}
-              onPointerMove={(event) => {
-                const rect = event.currentTarget.getBoundingClientRect();
-                setSegmentHover(segment, rect.left + rect.width * 0.5, rect.top);
-              }}
+              onPointerEnter={() => setSegmentHover(segment)}
               onPointerLeave={clearSegmentHover}
             >
               <span

@@ -1276,46 +1276,6 @@ body::after {
   display: none;
 }
 
-/* background was a hardcoded near-black literal (6,6,6) while the title/value text below use
-   --frame-ink-a — a token that's *supposed* to flip between themes, and does: under a light-mode
-   system it resolves to dark ink meant for a light panel, composited here against a background
-   that never changed to match, reading as dark text on a near-black box. --frame-surface is the
-   same token .hover-card already uses for exactly this reason; already-opaque at 0.94 here (unlike
-   .hover-card's own low-alpha default) so unlike .hover-card this doesn't also need the separate
-   light-mode opacity boost elsewhere in this file — a light hue at 0.94 alpha already reads as a
-   clean opaque panel with no "haze" to fix. */
-.allocation-panel__tooltip {
-  position: absolute;
-  z-index: 3;
-  min-width: 8.5rem;
-  padding: 0.52rem 0.62rem 0.56rem;
-  border: 1px solid rgba(var(--frame-white), 0.14);
-  border-radius: 12px 14px 12px 16px / 14px 12px 16px 12px;
-  background: rgba(var(--frame-surface), 0.94);
-  box-shadow:
-    0 12px 28px rgba(var(--frame-void), 0.34),
-    0 0 0 1px rgba(var(--frame-white), 0.04) inset;
-  backdrop-filter: blur(12px);
-  pointer-events: none;
-  transform: translate(-50%, calc(-100% - 10px)) rotate(-1.5deg);
-}
-
-.allocation-panel__tooltip-title {
-  display: block;
-  color: rgba(var(--frame-ink-a), 0.94);
-  font-size: 0.78rem;
-  font-weight: 620;
-  letter-spacing: -0.01em;
-}
-
-.allocation-panel__tooltip-value {
-  display: block;
-  margin-top: 0.18rem;
-  color: rgba(var(--frame-ink-a), 0.68);
-  font-size: 0.72rem;
-  font-weight: 540;
-  letter-spacing: -0.01em;
-}
 
 .twin-dock {
   --twin-dock-size: 3.9rem;
@@ -1698,8 +1658,15 @@ body::after {
 
 .twin-metric-card strong,
 .twin-comparison-card strong {
+  display: block;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  /* Was overflow-wrap: anywhere, which happily breaks mid-digit-group when a card is too narrow
+     for the number — "₩18,000,0" then "00" on the next line. A currency figure should never break
+     inside itself; ellipsis-truncating (never actually reached now that the numbers themselves are
+     also formatted compactly, see formatKoreanWonShort) is the fallback that keeps it a number. */
+  white-space: nowrap;
+  text-overflow: ellipsis;
   color: rgba(var(--frame-ink-a), 0.95);
   font-size: 0.72rem;
   font-weight: 760;
@@ -1736,8 +1703,11 @@ body::after {
 }
 
 .twin-comparison-card em {
+  display: block;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   color: rgba(var(--frame-ink-c), 0.58);
   font-size: 0.62rem;
   font-style: normal;
@@ -1995,6 +1965,10 @@ body::after {
 }
 
 .twin-result-card strong {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   color: rgba(var(--frame-white), 0.96);
   font-size: 1.06rem;
   font-weight: 720;

@@ -30,8 +30,6 @@ const DRAG_SPIN_DECAY = 7.4;
 const MAX_DRAG_SPIN_VELOCITY = 0.58;
 const DRAG_ROTATION_RESPONSE = 30;
 const IDLE_ROTATION_RESPONSE = 10;
-// How far idle auto-rotate slows down once nobody's engaged with the (now always-visible) widget.
-const IDLE_ROTATE_DISENGAGED_MULTIPLIER = 0.12;
 
 // The widget is now user-resizable (main.js createAtomWidget, 160×190 – 480×560), but SVG text
 // has no "stay a fixed screen size" mode — font-size lives in the same viewBox-scaled coordinate
@@ -324,49 +322,13 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
   }, []);
 
   // The atom widget is always on screen (unlike the old popover atom page, only open when
-  // clicked), so an ambient full-speed spin runs indefinitely whether or not anyone's looking.
-  // Idle rotation only drops to a slow crawl while the pointer is actually resting on the widget
-  // — that's the one moment motion should ease off (spinning under the cursor while someone's
-  // trying to read a holding's label is the opposite of helpful). Everywhere else — cursor
-  // elsewhere, or asleep — it stays fully alive as ambient motion.
-  //
-  // This used to gate on window focus instead of hover. Focus is a poor signal for a small
-  // always-on-top overlay that's rarely the actual focused window even while someone's looking
-  // right at it, so in practice idle rotation almost always crawled at
-  // IDLE_ROTATE_DISENGAGED_MULTIPLIER outside of sleep mode — reading as barely-alive rather than
-  // ambient. Hover is the more honest "is anyone actually paying attention to this right now"
-  // signal for this kind of widget.
-  //
-  // A ref (not read from the `sleeping` prop directly) because the rAF loop below is set up once,
-  // in a mount-only effect — reading a prop's current value inside a closure that never re-runs
-  // would freeze it at whatever `sleeping` was on first render. A sleeping widget is fully
-  // click-through (main.js's atomfolio:widget-set-click-through), so it can never actually receive
-  // pointer events — without this override, hoveredRef would stay permanently false anyway, but
-  // this makes the "sleep always counts as engaged" intent explicit rather than incidental.
-  const sleepingRef = useRef(sleeping);
-  useEffect(() => {
-    sleepingRef.current = sleeping;
-  }, [sleeping]);
-
-  const hoveredRef = useRef(false);
-  useEffect(() => {
-    const stage = stageRef.current;
-    if (!stage) {
-      return undefined;
-    }
-    const setHovered = () => {
-      hoveredRef.current = true;
-    };
-    const clearHovered = () => {
-      hoveredRef.current = false;
-    };
-    stage.addEventListener('pointerenter', setHovered);
-    stage.addEventListener('pointerleave', clearHovered);
-    return () => {
-      stage.removeEventListener('pointerenter', setHovered);
-      stage.removeEventListener('pointerleave', clearHovered);
-    };
-  }, []);
+  // clicked), so an ambient full-speed spin runs indefinitely — hovering it, sleeping, window
+  // focus, none of that slows it down. The only thing that stops it is actually picking an atom up
+  // (isDragging below, set from a real pointerdown-and-move on an atom): motion pauses under your
+  // hand while you're actively spinning it yourself, and resumes the instant you let go. This went
+  // through two other gates first (window focus, then hover) before landing here — both made
+  // rotation feel like it was barely alive most of the time, gated on a signal that had nothing to
+  // do with whether anyone actually wanted it to stop.
 
   // ⌘ gates "move the window" vs "rotate the atom" — without it, grabbing anywhere on the stage
   // (including the center/bond-lines) behaves like the website's trackball; holding ⌘ moves the
@@ -590,10 +552,13 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
       }
 
       if (!isDragging && !prefersReducedMotionRef.current) {
-        const engaged = sleepingRef.current || !hoveredRef.current;
-        const idleMultiplier = engaged ? 1 : IDLE_ROTATE_DISENGAGED_MULTIPLIER;
-        autoRotateY.setFromAxisAngle(yAxis, delta * AUTO_ROTATE_SPEED * idleMultiplier);
-        autoRotateX.setFromAxisAngle(xAxis, Math.sin(now * 0.00012) * delta * 0.0038 * idleMultiplier);
+        // Negative angle: with projectPoint's screen-x mapping directly onto 3D x (no camera-side
+        // flip — see src/utils/scene.js), a positive setFromAxisAngle(yAxis, +θ) rotation drifts
+        // the near-facing atoms toward screen-*right*. Negating it is what actually makes the
+        // widget spin left, not just "whichever way the default sign happens to fall out" — and
+        // it's a fixed direction, not something idle state ever flips.
+        autoRotateY.setFromAxisAngle(yAxis, -delta * AUTO_ROTATE_SPEED);
+        autoRotateX.setFromAxisAngle(xAxis, Math.sin(now * 0.00012) * delta * 0.0038);
         rotationRef.current.target.premultiply(autoRotateY).premultiply(autoRotateX).normalize();
       }
 

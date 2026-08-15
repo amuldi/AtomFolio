@@ -586,6 +586,12 @@ function togglePopover() {
   positionPopoverNearTray();
   popover.show();
   popover.focus();
+  // The background poll only runs every pollIntervalSec (60s+, see MIN_POLL_INTERVAL_SEC) — a web
+  // edit made a moment before opening the popover would otherwise sit stale on screen for up to
+  // that whole interval. Opening the popover is exactly the moment someone's about to look at this
+  // data, so it's worth one extra silent refresh right here rather than waiting on the timer.
+  // silent: true keeps this from flashing a loading state for what's usually already up to date.
+  void refresh({ silent: true });
 }
 
 // Re-registers from scratch rather than diffing old/new accelerator — globalShortcut has no
