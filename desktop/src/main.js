@@ -42,13 +42,29 @@ const ATOM_WIDGET_MAX_HEIGHT = 560;
 const ATOM_WIDGET_DEFAULT_MARGIN = 24;
 const ATOM_WIDGET_GEOMETRY_SAVE_DEBOUNCE_MS = 400;
 // How close to a work-area edge (in px) the widget needs to land, on release, to snap flush
-// against it. Deliberately not applied on every 'move' tick — only from the 'moved' handler,
-// which macOS fires once the drag actually settles — so it never fights the user's hand mid-drag.
+// against it. Deliberately not applied on every 'move' tick — only once the drag actually ends
+// (see the atomfolio:widget-drag-end handler) — so it never fights the user's hand mid-drag.
 const ATOM_WIDGET_SNAP_THRESHOLD = 24;
 // How often the main process re-reads the global cursor position while ⌘-dragging the widget
 // (see startAtomWidgetDrag). 16ms ~ 60Hz — smooth without meaningfully loading the CPU for what's
 // normally a few-second gesture.
 const ATOM_WIDGET_DRAG_POLL_MS = 16;
+// Edge Dock — see dockAtomWidgetTo/undockAtomWidgetAt. Deliberately a *much* tighter zone than
+// ATOM_WIDGET_SNAP_THRESHOLD above: plain edge-snap (flush, but still floating/full-size) already
+// owns the 24px zone, so docking only kicks in when the widget has been pushed essentially all
+// the way to the edge — a distinctly more deliberate gesture than a normal release that happens
+// to land near one.
+const ATOM_WIDGET_DOCK_TRIGGER_THRESHOLD = 10;
+// Wider than the trigger zone — this is just when the drag-preview visual (compress + edge glow)
+// starts showing "let go here to dock", well before the release itself would actually commit.
+const ATOM_WIDGET_DOCK_PREVIEW_THRESHOLD = 40;
+// The widget has to stay inside the trigger zone continuously for at least this long before a
+// release counts as an intentional dock, not just a fast drag that happened to pass close to the
+// edge on its way somewhere else. See updateAtomWidgetDockTracking.
+const ATOM_WIDGET_DOCK_DWELL_MS = 200;
+// Size of the small always-visible tab a docked widget collapses to.
+const ATOM_WIDGET_DOCKED_WIDTH = 84;
+const ATOM_WIDGET_DOCKED_HEIGHT = 108;
 // Pages inside the popover's horizontal pager (see popover.js's createPager) — kept in one place
 // since both the header's own ⚙ shortcut and the context-menu shortcuts below need to agree on
 // the indices.
@@ -65,6 +81,16 @@ let atomWidgetGeometrySaveTimer = null;
 // Non-null only while a ⌘-drag is in flight — see startAtomWidgetDrag/stopAtomWidgetDrag.
 let atomWidgetDragInterval = null;
 let atomWidgetDragOrigin = null;
+// Edge Dock bookkeeping for the drag currently in flight (all null/false when no drag is active).
+// atomWidgetDockZone tracks how long the widget has continuously been inside the dock-trigger
+// zone (see updateAtomWidgetDockTracking) — read once, at drag-end, to decide dock vs. plain
+// edge-snap. atomWidgetDockPreviewSide is only the last value *sent* to the renderer, so the
+// preview IPC only fires on an actual change, not every 16ms poll tick. atomWidgetDragOriginWasDocked
+// records whether *this* drag started from a docked state, so drag-end knows to grow back out to
+// floating (undock) rather than falling back to a plain edge-snap when it doesn't end in a dock.
+let atomWidgetDockZone = null;
+let atomWidgetDockPreviewSide = null;
+let atomWidgetDragOriginWasDocked = false;
 let pollTimer = null;
 /** @type {Set<string>} article ids already pushed to the renderer at least once this session —
  * separate from the persisted lastSeenArticleIds, which only exists to avoid re-notifying across
@@ -97,6 +123,12 @@ let state = {
   // once actually interacted with" signal would otherwise stay permanently false and the widget
   // would crawl at IDLE_ROTATE_DISENGAGED_MULTIPLIER forever instead of reading as ambient motion.
   sleeping: false,
+  // Mirrors config.atomWidgetMode the same way categoryDimension/sleeping above mirror their own
+  // config fields — atom-view.jsx uses this to switch into the compact Edge Dock layout and to
+  // set data-widget-mode on <html> (same mechanism as data-theme). Hardcoded to store.mjs's own
+  // default here for the same reason as sleeping above; corrected from the real config before
+  // either window's first paint.
+  atomWidgetMode: 'floating',
 };
 
 function broadcastState() {
@@ -231,6 +263,56 @@ function centeredAtomWidgetPosition(width, height) {
 // re-enter the window's new bounds. screen.getCursorScreenPoint() has no such restriction (it's a
 // main-process, OS-level query), so polling it directly tracks the cursor everywhere, including
 // off-window and across displays, with nothing for a fast gesture to outrun.
+// Which edge of whichever display currently contains `bounds` is closer, and by how much — used
+// both by the dock-zone tracking below and by snapAtomWidgetToEdges. Always returns a side (never
+// null); callers compare `distance` against whichever threshold is relevant to them.
+function edgeProximityForBounds(bounds) {
+  const display = screen.getDisplayMatching(bounds);
+  const workArea = display.workArea;
+  const leftDistance = bounds.x - workArea.x;
+  const rightDistance = workArea.x + workArea.width - (bounds.x + bounds.width);
+  const side = leftDistance <= rightDistance ? 'left' : 'right';
+  return { side, distance: Math.max(0, Math.min(leftDistance, rightDistance)), display, workArea };
+}
+
+// Called on every drag-poll tick (see startAtomWidgetDrag below) with the widget's just-updated
+// bounds. Maintains two independent things, both purely local state read back out at drag-end/
+// during the drag — neither one moves or resizes the window itself:
+//   1. atomWidgetDockZone — how long the widget has been continuously inside the tight
+//      dock-trigger zone. Reset to null the instant it leaves that zone, so a drag that grazes
+//      the edge and moves on doesn't accumulate dwell time from an earlier, unrelated pass.
+//   2. atomWidgetDockPreviewSide — the wider, cosmetic preview zone. Only sent to the renderer
+//      when it actually changes, not every 16ms tick, to keep the IPC traffic proportional to
+//      actual state changes rather than the poll rate.
+function updateAtomWidgetDockTracking(bounds) {
+  const proximity = edgeProximityForBounds(bounds);
+  const inTriggerZone = proximity.distance <= ATOM_WIDGET_DOCK_TRIGGER_THRESHOLD;
+  const inPreviewZone = proximity.distance <= ATOM_WIDGET_DOCK_PREVIEW_THRESHOLD;
+
+  if (inTriggerZone) {
+    if (!atomWidgetDockZone || atomWidgetDockZone.side !== proximity.side) {
+      atomWidgetDockZone = { side: proximity.side, enteredAt: Date.now() };
+    }
+  } else {
+    atomWidgetDockZone = null;
+  }
+
+  const previewSide = inPreviewZone ? proximity.side : null;
+  if (previewSide !== atomWidgetDockPreviewSide) {
+    atomWidgetDockPreviewSide = previewSide;
+    if (atomWidget && !atomWidget.isDestroyed()) {
+      atomWidget.webContents.send('atomfolio:widget-edge-preview', { side: previewSide });
+    }
+  }
+}
+
+// Global-cursor-polling drag, not renderer pointermove deltas. Electron's renderer process only
+// receives pointer events while the cursor is over its own window — a fast drag lets the cursor
+// outrun the (still catching-up) window edge, at which point the cursor leaves the window and
+// pointermove stops arriving entirely, so the drag visibly "sticks" until the cursor happens to
+// re-enter the window's new bounds. screen.getCursorScreenPoint() has no such restriction (it's a
+// main-process, OS-level query), so polling it directly tracks the cursor everywhere, including
+// off-window and across displays, with nothing for a fast gesture to outrun.
 function startAtomWidgetDrag() {
   if (!atomWidget || atomWidget.isDestroyed()) {
     return;
@@ -240,12 +322,19 @@ function startAtomWidgetDrag() {
   stopAtomWidgetDrag();
   const cursor = screen.getCursorScreenPoint();
   const bounds = atomWidget.getBounds();
+  // Captured once, at drag-start — a drag never resizes the window, so re-reading width/height on
+  // every poll tick would just be a wasted getBounds() call.
   atomWidgetDragOrigin = {
     cursorX: cursor.x,
     cursorY: cursor.y,
     windowX: bounds.x,
     windowY: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
   };
+  atomWidgetDragOriginWasDocked = state.atomWidgetMode !== 'floating';
+  atomWidgetDockZone = null;
+  atomWidgetDockPreviewSide = null;
   atomWidgetDragInterval = setInterval(() => {
     if (!atomWidget || atomWidget.isDestroyed() || !atomWidgetDragOrigin) {
       stopAtomWidgetDrag();
@@ -254,15 +343,13 @@ function startAtomWidgetDrag() {
     const point = screen.getCursorScreenPoint();
     const dx = point.x - atomWidgetDragOrigin.cursorX;
     const dy = point.y - atomWidgetDragOrigin.cursorY;
+    const x = Math.round(atomWidgetDragOrigin.windowX + dx);
+    const y = Math.round(atomWidgetDragOrigin.windowY + dy);
     // No clampPointToVisibleDisplay here on purpose (see this module's own note elsewhere) — a
     // drag in progress should be able to cross freely onto another display, not get held at the
-    // edge of whichever one it started on. Edge-snap/display-matching only apply once the drag
-    // actually ends, in stopAtomWidgetDrag below.
-    atomWidget.setPosition(
-      Math.round(atomWidgetDragOrigin.windowX + dx),
-      Math.round(atomWidgetDragOrigin.windowY + dy),
-      false,
-    );
+    // edge of whichever one it started on. Edge-snap/dock only apply once the drag actually ends.
+    atomWidget.setPosition(x, y, false);
+    updateAtomWidgetDockTracking({ x, y, width: atomWidgetDragOrigin.width, height: atomWidgetDragOrigin.height });
   }, ATOM_WIDGET_DRAG_POLL_MS);
 }
 
@@ -272,6 +359,17 @@ function stopAtomWidgetDrag() {
     atomWidgetDragInterval = null;
   }
   atomWidgetDragOrigin = null;
+  atomWidgetDockZone = null;
+  // Whatever decision the drag-end handler makes next (dock, undock, or a plain snap) supersedes
+  // any lingering preview visual — but dock/undock each send their own transition message, and a
+  // plain snap sends nothing, so the preview has to be explicitly cleared here or it'd stay stuck
+  // showing "let go to dock" after a drag that didn't actually dock.
+  if (atomWidgetDockPreviewSide !== null) {
+    atomWidgetDockPreviewSide = null;
+    if (atomWidget && !atomWidget.isDestroyed()) {
+      atomWidget.webContents.send('atomfolio:widget-edge-preview', { side: null });
+    }
+  }
 }
 
 // A position saved on a display that's since been unplugged (external monitor, different desk)
@@ -286,9 +384,11 @@ function clampPointToVisibleDisplay(x, y, width, height) {
   };
 }
 
-// Called only from the 'moved' listener below (once per completed drag), never mid-gesture.
-// Each axis snaps independently, so a corner release snaps both — same as most window managers'
-// edge-snap behavior.
+// Called only once a drag actually ends (see the atomfolio:widget-drag-end handler), never
+// mid-gesture. Each axis snaps independently, so a corner release snaps both — same as most
+// window managers' edge-snap behavior. This is the *plain* snap (flush against the edge, still
+// full floating size) — see dockAtomWidgetTo below for the separate, more deliberate Edge Dock
+// transition, which this function has nothing to do with and never triggers on its own.
 function snapAtomWidgetToEdges() {
   if (!atomWidget || atomWidget.isDestroyed()) {
     return;
@@ -318,23 +418,128 @@ function snapAtomWidgetToEdges() {
   }
 }
 
+// Edge Dock: collapses the widget into a small always-visible tab flush against the given screen
+// edge. Called both when a drag ends inside the dock-trigger zone (see the drag-end handler
+// below) and when restoring a previously-docked state at launch (createAtomWidget). Deliberately
+// leaves config's atomWidgetPosition/atomWidgetSize (the *floating* geometry) untouched — those
+// still mean "the widget's last known floating bounds" even while docked, which is what lets
+// undockAtomWidgetAt below always have somewhere sane to grow back into. animate:false is only
+// used for the launch-time restore path, where the window is being created already-docked and
+// there's nothing to visibly transition from.
+function dockAtomWidgetTo(side, { animate = true } = {}) {
+  if (!atomWidget || atomWidget.isDestroyed()) {
+    return;
+  }
+  const anchorBounds = atomWidget.getBounds();
+  const display = screen.getDisplayMatching(anchorBounds);
+  const workArea = display.workArea;
+  const width = ATOM_WIDGET_DOCKED_WIDTH;
+  const height = ATOM_WIDGET_DOCKED_HEIGHT;
+  const x = side === 'left' ? workArea.x : workArea.x + workArea.width - width;
+  const y = Math.round(
+    Math.min(Math.max(anchorBounds.y, workArea.y), workArea.y + workArea.height - height),
+  );
+
+  // Loosened before setBounds, not after — setBounds would otherwise be clamped right back up to
+  // the still-in-effect floating minimums.
+  atomWidget.setMinimumSize(width, height);
+  atomWidget.setMaximumSize(width, height);
+  atomWidget.setResizable(false);
+  if (animate) {
+    atomWidget.webContents.send('atomfolio:widget-dock-transition', { phase: 'docking', side });
+  }
+  atomWidget.setBounds({ x, y, width, height }, animate);
+
+  saveConfig({ atomWidgetMode: `docked-${side}`, atomWidgetDockDisplayId: display.id });
+  setState({ atomWidgetMode: `docked-${side}` });
+}
+
+// The reverse of dockAtomWidgetTo — grows the widget back out to its normal floating size/
+// behavior. dropBounds is wherever the (still docked-sized) window currently sits at the moment
+// undocking is triggered — a click, or a drag that ended outside the dock-trigger zone — not
+// necessarily the display it was originally docked on, since a drag can carry it onto a different
+// display first. The floating rect reappears just clear of whichever edge it was resting against,
+// roughly level with dropBounds, rather than jumping back to wherever a long-past drag last left
+// it — that would read as disconnected from the gesture that just undocked it.
+function undockAtomWidgetAt(dropBounds, { animate = true } = {}) {
+  if (!atomWidget || atomWidget.isDestroyed()) {
+    return;
+  }
+  const config = loadConfig();
+  const floatWidth = config.atomWidgetSize?.width ?? ATOM_WIDGET_WIDTH;
+  const floatHeight = config.atomWidgetSize?.height ?? ATOM_WIDGET_HEIGHT;
+  const display = screen.getDisplayMatching(dropBounds);
+  const workArea = display.workArea;
+  const dockedFromLeft = dropBounds.x <= workArea.x + workArea.width / 2;
+  const x = dockedFromLeft
+    ? Math.round(workArea.x + ATOM_WIDGET_DEFAULT_MARGIN)
+    : Math.round(workArea.x + workArea.width - floatWidth - ATOM_WIDGET_DEFAULT_MARGIN);
+  const y = Math.round(
+    Math.min(
+      Math.max(dropBounds.y - (floatHeight - dropBounds.height) / 2, workArea.y),
+      workArea.y + workArea.height - floatHeight,
+    ),
+  );
+
+  atomWidget.setMaximumSize(ATOM_WIDGET_MAX_WIDTH, ATOM_WIDGET_MAX_HEIGHT);
+  atomWidget.setMinimumSize(ATOM_WIDGET_MIN_WIDTH, ATOM_WIDGET_MIN_HEIGHT);
+  atomWidget.setResizable(true);
+  if (animate) {
+    atomWidget.webContents.send('atomfolio:widget-dock-transition', { phase: 'undocking', side: null });
+  }
+  atomWidget.setBounds({ x, y, width: floatWidth, height: floatHeight }, animate);
+
+  saveConfig({
+    atomWidgetMode: 'floating',
+    atomWidgetDockDisplayId: null,
+    atomWidgetPosition: { x, y },
+    atomWidgetSize: { width: floatWidth, height: floatHeight },
+  });
+  setState({ atomWidgetMode: 'floating' });
+}
+
 function createAtomWidget() {
   const config = loadConfig();
-  const width = config.atomWidgetSize?.width ?? ATOM_WIDGET_WIDTH;
-  const height = config.atomWidgetSize?.height ?? ATOM_WIDGET_HEIGHT;
-  const { x, y } = config.atomWidgetPosition
-    ? clampPointToVisibleDisplay(config.atomWidgetPosition.x, config.atomWidgetPosition.y, width, height)
-    : defaultAtomWidgetPosition();
+
+  // A dock remembered against a display that's no longer connected (unplugged monitor, different
+  // desk) has nowhere safe to restore to — correct it back to floating up front rather than
+  // guessing where a now-nonexistent edge would be. Corrected in config immediately (not just
+  // read-around locally) so every other function that reads atomWidgetMode this session — the
+  // drag-end handler, the context menu — agrees with what actually got created below.
+  const dockedSide = config.atomWidgetMode === 'docked-left' ? 'left' : config.atomWidgetMode === 'docked-right' ? 'right' : null;
+  const dockedDisplay = dockedSide && config.atomWidgetDockDisplayId != null
+    ? screen.getAllDisplays().find((display) => display.id === config.atomWidgetDockDisplayId)
+    : null;
+  const restoreDocked = Boolean(dockedSide && dockedDisplay);
+  if (dockedSide && !dockedDisplay) {
+    saveConfig({ atomWidgetMode: 'floating', atomWidgetDockDisplayId: null });
+    config.atomWidgetMode = 'floating';
+    config.atomWidgetDockDisplayId = null;
+  }
+
+  const width = restoreDocked ? ATOM_WIDGET_DOCKED_WIDTH : (config.atomWidgetSize?.width ?? ATOM_WIDGET_WIDTH);
+  const height = restoreDocked ? ATOM_WIDGET_DOCKED_HEIGHT : (config.atomWidgetSize?.height ?? ATOM_WIDGET_HEIGHT);
+  let x;
+  let y;
+  if (restoreDocked) {
+    const workArea = dockedDisplay.workArea;
+    x = dockedSide === 'left' ? workArea.x : workArea.x + workArea.width - width;
+    y = Math.round(workArea.y + (workArea.height - height) / 2);
+  } else if (config.atomWidgetPosition) {
+    ({ x, y } = clampPointToVisibleDisplay(config.atomWidgetPosition.x, config.atomWidgetPosition.y, width, height));
+  } else {
+    ({ x, y } = defaultAtomWidgetPosition());
+  }
 
   atomWidget = new BrowserWindow({
     width,
     height,
     x,
     y,
-    minWidth: ATOM_WIDGET_MIN_WIDTH,
-    minHeight: ATOM_WIDGET_MIN_HEIGHT,
-    maxWidth: ATOM_WIDGET_MAX_WIDTH,
-    maxHeight: ATOM_WIDGET_MAX_HEIGHT,
+    minWidth: restoreDocked ? width : ATOM_WIDGET_MIN_WIDTH,
+    minHeight: restoreDocked ? height : ATOM_WIDGET_MIN_HEIGHT,
+    maxWidth: restoreDocked ? width : ATOM_WIDGET_MAX_WIDTH,
+    maxHeight: restoreDocked ? height : ATOM_WIDGET_MAX_HEIGHT,
     show: false,
     frame: false,
     transparent: true,
@@ -344,7 +549,7 @@ function createAtomWidget() {
     // window shadow behind it would look like a visible glitch, not depth. The atom's own SVG
     // glow already does the "lifted off the desktop" job.
     hasShadow: false,
-    resizable: true,
+    resizable: !restoreDocked,
     movable: true,
     skipTaskbar: true,
     alwaysOnTop: true,
@@ -377,9 +582,17 @@ function createAtomWidget() {
   // regardless of which event happened to fire, so saving both from either event can't miss half
   // the change the way two separately-scoped handlers could.
   const saveAtomWidgetGeometry = () => {
+    // Only *floating* geometry is meaningful to remember as "last floating bounds" — while docked
+    // (or mid-transition into/out of dock, which itself fires synthetic move/resize events via
+    // setBounds), the window's current rect is the tiny dock tab, not something a future floating
+    // restore should ever land on. dockAtomWidgetTo/undockAtomWidgetAt already persist their own
+    // geometry explicitly; this debounce would otherwise race and clobber it right back.
+    if (state.atomWidgetMode !== 'floating') {
+      return;
+    }
     clearTimeout(atomWidgetGeometrySaveTimer);
     atomWidgetGeometrySaveTimer = setTimeout(() => {
-      if (!atomWidget || atomWidget.isDestroyed()) {
+      if (!atomWidget || atomWidget.isDestroyed() || state.atomWidgetMode !== 'floating') {
         return;
       }
       const { x, y, width, height } = atomWidget.getBounds();
@@ -435,6 +648,18 @@ function createAtomWidget() {
         })),
       });
     }
+    // Same toggle either direction reaches (dock via drag-to-edge, undock via click/drag-out) —
+    // just a discoverable, no-gesture-required fallback for the same action.
+    if (state.atomWidgetMode !== 'floating') {
+      template.push({
+        label: '가장자리 고정 해제',
+        click: () => {
+          if (atomWidget && !atomWidget.isDestroyed()) {
+            undockAtomWidgetAt(atomWidget.getBounds());
+          }
+        },
+      });
+    }
     template.push({ type: 'separator' }, { label: '위젯 숨기기', click: () => setAtomWidgetVisible(false) });
     Menu.buildFromTemplate(template).popup({ window: atomWidget });
   });
@@ -475,9 +700,14 @@ function setAtomWidgetVisible(visible) {
     // during a drag) relevant only to createAtomWidget's *initial* window bounds at app launch,
     // not to anything that happens on a later show — it's kept rather than removed because it
     // still does that one job, and atomWidgetSize is saved by the same debounced handler.
-    const { width, height } = atomWidget.getBounds();
-    const { x, y } = centeredAtomWidgetPosition(width, height);
-    atomWidget.setPosition(x, y, false);
+    // Docked is the one exception: a docked tab already has a deliberate, meaningful position
+    // (flush against its edge) — recentering it on show would both visually contradict "docked"
+    // and require briefly growing it back to floating size just to center it, for no reason.
+    if (state.atomWidgetMode === 'floating') {
+      const { width, height } = atomWidget.getBounds();
+      const { x, y } = centeredAtomWidgetPosition(width, height);
+      atomWidget.setPosition(x, y, false);
+    }
     // Reset click-through explicitly rather than trusting whatever state a previous hide left it
     // in — atom-view.jsx's own hit-test (see atomfolio:widget-set-click-through) only re-evaluates
     // on pointermove, so without this a widget re-shown under a cursor that hasn't moved yet could
@@ -770,6 +1000,35 @@ async function refresh({ silent = false } = {}) {
       ? selectedPortfolio.items
       : [];
 
+    // Insights are a pure function of items + config (no network), so they're ready at the same
+    // time as everything else above — computing them here (not down where they used to live,
+    // after the news fetch) is what lets the broadcast below go out without waiting on news at
+    // all. See the immediate setState just below for why that gap mattered.
+    const allInsights = evaluateInsights({ items: selectedPortfolioItems, config });
+    const activeInsight = allInsights[0] ?? null;
+
+    // Broadcast the portfolio-scoped state (items/totals/holdings/selectedPortfolioId) the moment
+    // it's known, instead of waiting on the news fetch below too. Switching portfolios used to
+    // stay visually frozen for both awaited network calls combined (fetchPortfolios, then
+    // fetchHoldingNews) before atom-view.jsx's own selectedPortfolioId-watching effect ever saw a
+    // change and could start its dissolve/materialize transition — a multi-hundred-ms dead patch
+    // that read as the widget "hanging" rather than switching. News (and the notification it can
+    // trigger) genuinely has nothing to do with what the atom widget renders, so it's decoupled
+    // into its own later setState instead of gating this one.
+    if (requestToken === latestRefreshToken) {
+      setState({
+        connected: true,
+        loading: false,
+        lastError: null,
+        totals,
+        holdings,
+        items: selectedPortfolioItems,
+        portfolios: portfolioList,
+        selectedPortfolioId,
+        activeInsight,
+      });
+    }
+
     let newsItems = [];
     try {
       const newsPayload = await api.fetchHoldingNews(tickers);
@@ -810,14 +1069,11 @@ async function refresh({ silent = false } = {}) {
       rememberSeenArticleIds(config, newsItems.map((item) => item.id).filter(Boolean));
     }
 
-    // Proactive insights (stop-loss/take-profit/allocation drift): the popover always highlights
-    // whatever's currently true (not rate-limited — showing it when the user happens to open the
-    // popover isn't spammy the way a repeat notification would be), but only the first one still
-    // outside its cooldown window actually fires a Notification, and only the single most severe
-    // one — several highlighted at once would just be noise.
-    const allInsights = evaluateInsights({ items: selectedPortfolioItems, config });
-    const activeInsight = allInsights[0] ?? null;
-
+    // Proactive insights (stop-loss/take-profit/allocation drift) were already computed above,
+    // alongside totals/holdings, so the atom widget's broadcast didn't have to wait on this news
+    // fetch. Only the notification side (rate-limited by cooldown) still happens here — nothing
+    // about it depends on when the popover/widget saw the insight, only on whether the user has
+    // already been told about it recently.
     if (config.notificationsEnabled && Notification.isSupported()) {
       const [notifiable] = filterByCooldown(allInsights, config.insightCooldowns);
       if (notifiable) {
@@ -927,11 +1183,47 @@ function registerIpcHandlers() {
   });
 
   // Sent once, on pointerup/pointercancel or on ⌘ being released mid-drag — the one moment
-  // edge-snapping should actually run (see snapAtomWidgetToEdges's own comment and
-  // createAtomWidget's for why this isn't wired off a native window event instead).
+  // edge-snapping/Edge-Dock decisions should actually run (see snapAtomWidgetToEdges's own
+  // comment and createAtomWidget's for why this isn't wired off a native window event instead).
+  // Three possible outcomes, decided here rather than split across separate handlers so the
+  // dock/undock/plain-snap choice is made from one consistent snapshot of drag state:
+  //   1. The widget spent the required dwell time pushed into the tight dock-trigger zone right
+  //      up to release — dock it (this also covers "dragged from one dock, released near the
+  //      other side", which just re-docks to whichever edge won).
+  //   2. The drag started from a docked state but didn't end in a dock zone — the user pulled it
+  //      away from the edge, so it grows back out to floating at the drop point.
+  //   3. Neither — the existing plain edge-snap (flush, but still full floating size).
   ipcMain.on('atomfolio:widget-drag-end', () => {
+    const bounds = atomWidget && !atomWidget.isDestroyed() ? atomWidget.getBounds() : null;
+    const dockZone = atomWidgetDockZone;
+    const wasDockOriginDrag = atomWidgetDragOriginWasDocked;
     stopAtomWidgetDrag();
-    snapAtomWidgetToEdges();
+
+    if (!bounds) {
+      return;
+    }
+
+    const dwellMs = dockZone ? Date.now() - dockZone.enteredAt : 0;
+    const shouldDock = Boolean(dockZone) && dwellMs >= ATOM_WIDGET_DOCK_DWELL_MS;
+
+    if (shouldDock) {
+      dockAtomWidgetTo(dockZone.side);
+    } else if (wasDockOriginDrag) {
+      undockAtomWidgetAt(bounds);
+    } else {
+      snapAtomWidgetToEdges();
+    }
+  });
+
+  // A plain click on the docked tab (no drag) — see atom-view.jsx's docked-mode pointer handling,
+  // which calls this instead of startWidgetDrag/endWidgetDrag when the pointer never actually
+  // moved. Undocks back to floating at the tab's current position, same as dragging it out would,
+  // just without a drag having happened.
+  ipcMain.handle('atomfolio:undock-widget', () => {
+    if (!atomWidget || atomWidget.isDestroyed() || state.atomWidgetMode === 'floating') {
+      return;
+    }
+    undockAtomWidgetAt(atomWidget.getBounds());
   });
 
   // atom-view.jsx's own hit-test decides *when* this should flip (see its own comment) — this
@@ -1223,7 +1515,13 @@ app.whenReady().then(async () => {
   // comment) to whatever's actually persisted, before either window's first paint — setState
   // (not a bare assignment) so this also broadcasts to the popover/atom widget the same way any
   // other settings change would.
-  setState({ categoryDimension: config.atomCategoryDimension, sleeping: config.atomWidgetSleeping });
+  setState({
+    categoryDimension: config.atomCategoryDimension,
+    sleeping: config.atomWidgetSleeping,
+    // Re-read after createAtomWidget() above, which may have corrected atomWidgetMode back to
+    // 'floating' itself if the display it was docked on is no longer connected.
+    atomWidgetMode: config.atomWidgetMode,
+  });
   broadcastTheme();
   if (config.workspaceId) {
     await refresh();

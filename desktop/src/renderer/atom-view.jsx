@@ -41,6 +41,16 @@ const IDLE_ROTATION_RESPONSE = 10;
 const ATOM_LABEL_REFERENCE_STAGE_PX = 192;
 const ATOM_LABEL_MAX_SCALE = 3;
 
+// Edge Dock — how long the dock/undock spring-overshoot class (atom-widget.css's
+// .is-dock-transition) stays applied, matching its own keyframe duration. Kept here (not read
+// off the CSS) since main.js's own setBounds(..., true) native animation runs on a roughly
+// similar timescale and the two are meant to read as one motion, not two independently-timed ones.
+const ATOM_WIDGET_DOCK_ANIMATE_MS = 300;
+// Edge Dock — same squared-distance threshold atom-node dragging already uses elsewhere in this
+// file (see handleNodePointerDown's own drag vs. click distinction) to tell a real drag from
+// pointer jitter during what's actually just a click.
+const DOCKED_DRAG_MOVE_THRESHOLD_SQ = 36;
+
 
 function formatCurrency(value) {
   if (!Number.isFinite(value)) {
@@ -198,7 +208,7 @@ function AtomReadout({ info }) {
   );
 }
 
-function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categoryDimension, sleeping }) {
+function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categoryDimension, sleeping, dockMode }) {
   const stageRef = useRef(null);
   const svgRef = useRef(null);
   const [selectedAtomId, setSelectedAtomId] = useState(null);
@@ -291,6 +301,41 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
       void materializeAtom();
     });
   }, [materializeAtom]);
+
+  // Edge Dock — mirrors state.atomWidgetMode onto <html> the same way AtomViewRoot's own theme
+  // effect mirrors data-theme, so atom-widget.css can style the compact docked layout purely off
+  // a CSS attribute selector instead of every rule needing a JS-computed class.
+  useEffect(() => {
+    document.documentElement.dataset.widgetMode = dockMode;
+  }, [dockMode]);
+
+  // Edge Dock — drag-preview feedback (see main.js's updateAtomWidgetDockTracking). Only ever
+  // active while a ⌘-drag or a docked-tab drag is actually in flight; main.js already only sends
+  // a message here on an actual zone change, not every poll tick.
+  const [edgePreviewSide, setEdgePreviewSide] = useState(null);
+  useEffect(() => {
+    return window.atomfolio?.onWidgetEdgePreview?.(({ side }) => {
+      setEdgePreviewSide(side ?? null);
+    });
+  }, []);
+
+  // Edge Dock — the brief spring/overshoot class applied alongside main.js's own native
+  // setBounds(..., true) window-move animation (see dockAtomWidgetTo/undockAtomWidgetAt). Cleared
+  // on a timer rather than an animationend listener so it self-heals even if the class somehow
+  // never actually started animating (e.g. prefers-reduced-motion, where the keyframe is a no-op).
+  const [dockTransitionPhase, setDockTransitionPhase] = useState(null);
+  const dockTransitionTimerRef = useRef(null);
+  useEffect(() => {
+    const unsubscribe = window.atomfolio?.onWidgetDockTransition?.(({ phase }) => {
+      setDockTransitionPhase(phase);
+      clearTimeout(dockTransitionTimerRef.current);
+      dockTransitionTimerRef.current = setTimeout(() => setDockTransitionPhase(null), ATOM_WIDGET_DOCK_ANIMATE_MS);
+    });
+    return () => {
+      unsubscribe?.();
+      clearTimeout(dockTransitionTimerRef.current);
+    };
+  }, []);
 
   const baseAtoms = useMemo(
     () => {
@@ -435,6 +480,69 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
     };
   }, []);
 
+  // Edge Dock — docked-tab interaction: pointerdown here is *always* a potential undock, no ⌘
+  // needed (unlike the floating-mode drag above), since a docked tab has nothing else competing
+  // for a plain click/drag — no per-node rotate/select to protect. Whether it turns into a drag
+  // (pull it back out) or stays a click (undock in place) is decided the same way
+  // handleNodePointerDown/handleUp already decide drag-vs-click for atom nodes: a real movement
+  // has to clear a small squared-distance threshold before it counts as a drag at all.
+  const dockDragRef = useRef({ active: false, moved: false, pointerId: null, startX: 0, startY: 0 });
+
+  const handleDockedPointerDown = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dockDragRef.current = {
+      active: true,
+      moved: false,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+    };
+    try {
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Same rationale as handleNodePointerDown below — capture is a nice-to-have, not required.
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleMove = (event) => {
+      const drag = dockDragRef.current;
+      if (!drag.active || event.pointerId !== drag.pointerId || drag.moved) {
+        return;
+      }
+      const dx = event.clientX - drag.startX;
+      const dy = event.clientY - drag.startY;
+      if (dx * dx + dy * dy > DOCKED_DRAG_MOVE_THRESHOLD_SQ) {
+        drag.moved = true;
+        // Only now does main.js's cursor-poll drag actually start — a click that never moves this
+        // far never touches it at all, so a plain click has nothing to visually "settle" from.
+        window.atomfolio?.startWidgetDrag?.();
+      }
+    };
+    const handleUp = (event) => {
+      const drag = dockDragRef.current;
+      if (!drag.active || event.pointerId !== drag.pointerId) {
+        return;
+      }
+      dockDragRef.current.active = false;
+      if (drag.moved) {
+        // main.js's own drag-end handler decides dock/undock/snap from where this landed.
+        window.atomfolio?.endWidgetDrag?.();
+      } else {
+        window.atomfolio?.undockWidget?.();
+      }
+    };
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+    window.addEventListener('pointercancel', handleUp);
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+      window.removeEventListener('pointercancel', handleUp);
+    };
+  }, []);
+
   // Click-through for the widget's own empty space. This is a transparent, frameless
   // BrowserWindow — by default Electron gives it a normal opaque hit-box covering its whole
   // rectangle, so *any* pixel inside that rectangle intercepts clicks regardless of whether
@@ -471,6 +579,17 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
     });
 
     const evaluate = (event) => {
+      // A docked tab is small and entirely "the button" — the whole thing (via .atom-dock-hit,
+      // see its own comment) is meant to catch clicks/drags, so there's no meaningful click-
+      // through region to compute here at all while docked, unlike the floating widget's much
+      // larger, mostly-empty stage.
+      if (dockMode !== 'floating') {
+        if (lastIgnoreRef.current !== false) {
+          lastIgnoreRef.current = false;
+          window.atomfolio?.setWidgetClickThrough?.(false);
+        }
+        return;
+      }
       const target = document.elementFromPoint(event.clientX, event.clientY);
       const overHitTarget = Boolean(target?.closest?.('.node-hit, .center-hit'));
       const overStage = Boolean(target && stage.contains(target));
@@ -497,7 +616,7 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
       window.removeEventListener('pointermove', evaluate);
       unsubscribeOpening?.();
     };
-  }, []);
+  }, [dockMode]);
 
   // Imperative (not React state) on purpose — this fires continuously while the user drags-resizes
   // the window, and a CSS custom property write is far cheaper than a re-render on every tick.
@@ -522,6 +641,13 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
     observer.observe(stage);
     return () => observer.disconnect();
   }, []);
+
+  // Read by the RAF loop below via a ref (not a dependency-array restart) so toggling dock mode
+  // never interrupts the loop itself — only what it does on each tick changes.
+  const dockModeRef = useRef(dockMode);
+  useEffect(() => {
+    dockModeRef.current = dockMode;
+  }, [dockMode]);
 
   useEffect(() => {
     let frameId = 0;
@@ -551,7 +677,12 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
         }
       }
 
-      if (!isDragging && !prefersReducedMotionRef.current) {
+      // Edge Dock: idle spin stops while docked — a small edge tab is meant to sit quiet and cheap
+      // (see dockAtomWidgetTo's own "CPU를 과하게 쓰지 마라" requirement), not keep animating at
+      // full ambient speed the way the much more visible floating widget does. The rAF loop itself
+      // keeps running regardless (advanceAtomTransition/frameTime below still need it), just this
+      // one contribution to rotationRef.current.target is skipped.
+      if (!isDragging && !prefersReducedMotionRef.current && dockModeRef.current === 'floating') {
         // Negative angle: with projectPoint's screen-x mapping directly onto 3D x (no camera-side
         // flip — see src/utils/scene.js), a positive setFromAxisAngle(yAxis, +θ) rotation drifts
         // the near-facing atoms toward screen-*right*. Negating it is what actually makes the
@@ -842,19 +973,32 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
       ) ?? null
     : null;
   const selectedInfo = buildSelectedInfo(selectedHolding, selectedItem);
+  const isDocked = dockMode !== 'floating';
+
+  const stageClassName = [
+    'atom-visual-stage',
+    edgePreviewSide === 'left' ? 'is-edge-preview-left' : '',
+    edgePreviewSide === 'right' ? 'is-edge-preview-right' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const materializeClassName = ['atom-materialize-wrapper', dockTransitionPhase ? 'is-dock-transition' : '']
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <div className="atom-section">
       <div
-        className="atom-visual-stage"
+        className={stageClassName}
         ref={stageRef}
         onPointerDownCapture={dismissHint}
-        onPointerDown={handleStagePointerDown}
+        onPointerDown={isDocked ? undefined : handleStagePointerDown}
       >
         {/* Dissolve/materialize (useAtomTransition, shared with the web app) — whole-scene scale
             via a CSS custom property, not per-node repositioning. See atom-widget.css for the
-            class itself. */}
-        <div className="atom-materialize-wrapper" style={{ '--materialize': atomTransitionScale }}>
+            class itself. is-dock-transition layers a brief spring/overshoot on top, alongside
+            main.js's own native window-bounds animation (see dockAtomWidgetTo/undockAtomWidgetAt). */}
+        <div className={materializeClassName} style={{ '--materialize': atomTransitionScale }}>
           <AtomSketch
             svgRef={svgRef}
             atoms={atoms}
@@ -875,13 +1019,22 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
             }
           />
         </div>
-        {hintVisible ? (
+        {/* Edge Dock: while docked, this transparent overlay is the *only* thing that catches
+            pointer events on the stage (atom-widget.css sets the AtomSketch wrapper above to
+            pointer-events: none in that state) — a docked tab has no per-node selection, just
+            "click to undock" / "drag to pull out", so routing every pointer straight through one
+            handler is simpler and more robust than trying to make each node/center hit-area
+            cooperate with a completely different gesture set. */}
+        {isDocked ? (
+          <div className="atom-dock-hit" onPointerDown={handleDockedPointerDown} aria-hidden="true" />
+        ) : null}
+        {hintVisible && !isDocked ? (
           <div className="atom-hint" role="status">
             원자를 눌러 자세히 보기
           </div>
         ) : null}
       </div>
-      <AtomReadout info={selectedInfo} />
+      <AtomReadout info={isDocked ? null : selectedInfo} />
     </div>
   );
 }
@@ -934,6 +1087,7 @@ function AtomViewRoot() {
       selectedPortfolioId={state.selectedPortfolioId ?? null}
       categoryDimension={state.categoryDimension ?? 'sector'}
       sleeping={state.sleeping ?? false}
+      dockMode={state.atomWidgetMode ?? 'floating'}
     />
   );
 }

@@ -7,6 +7,11 @@ contextBridge.exposeInMainWorld('atomfolio', {
   // main process polling the cursor, not by streaming deltas up from here.
   startWidgetDrag: () => ipcRenderer.send('atomfolio:widget-drag-start'),
   endWidgetDrag: () => ipcRenderer.send('atomfolio:widget-drag-end'),
+  // A plain click on the docked tab (no real movement) — see main.js's atomfolio:undock-widget
+  // handler. Distinct from endWidgetDrag: that one lets main.js's own dock-zone tracking decide
+  // dock vs. undock vs. plain-snap; this one is only ever sent when the renderer already knows
+  // for certain (no movement happened) that undocking is the only sensible outcome.
+  undockWidget: () => ipcRenderer.invoke('atomfolio:undock-widget'),
   // Fire-and-forget, sent only when atom-view.jsx's own hit-test actually changes state (not on
   // every pointermove) — see main.js's atomfolio:widget-set-click-through handler for what this
   // does to the window itself.
@@ -49,6 +54,21 @@ contextBridge.exposeInMainWorld('atomfolio', {
     const listener = () => callback();
     ipcRenderer.on('atomfolio:widget-opening', listener);
     return () => ipcRenderer.removeListener('atomfolio:widget-opening', listener);
+  },
+  // Edge Dock — see main.js's updateAtomWidgetDockTracking. Fires only on an actual zone change
+  // (entering/leaving/switching sides), not on every drag-poll tick.
+  onWidgetEdgePreview: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('atomfolio:widget-edge-preview', listener);
+    return () => ipcRenderer.removeListener('atomfolio:widget-edge-preview', listener);
+  },
+  // Edge Dock — see main.js's dockAtomWidgetTo/undockAtomWidgetAt. Fires once per transition,
+  // right as the window's own setBounds animation starts, so the renderer's spring/overshoot
+  // keyframe can run alongside it.
+  onWidgetDockTransition: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('atomfolio:widget-dock-transition', listener);
+    return () => ipcRenderer.removeListener('atomfolio:widget-dock-transition', listener);
   },
   onTheme: (callback) => {
     const listener = (_event, theme) => callback(theme);
