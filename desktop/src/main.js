@@ -30,6 +30,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Polling never runs faster than this even if a config file is hand-edited — protects the shared
 // news/portfolio API from a misconfigured client.
 const MIN_POLL_INTERVAL_SEC = 60;
+// Not user-configurable (unlike pollIntervalSec) — deliberately fixed rather than exposed as a
+// setting, so there's no config-file/UI knob that could turn this into the kind of
+// misconfigured-client request storm MIN_POLL_INTERVAL_SEC above guards the heavier endpoints
+// against. See startVersionPolling for what this actually hits.
+const VERSION_POLL_INTERVAL_SEC = 5;
 // Atom moved out into its own floating widget — popover only needs to fit news + settings now.
 const POPOVER_WIDTH = 340;
 const POPOVER_HEIGHT = 480;
@@ -1172,6 +1177,71 @@ function startPolling() {
   }, intervalSec * 1000);
 }
 
+// Fast, cheap polling for "did anything change", separate from the much heavier startPolling
+// above (which re-fetches portfolios, holding-scoped news, and re-evaluates insights every tick).
+// Without this, a web-side edit only ever reached the widget on the *next* full poll tick — up to
+// config.pollIntervalSec, several minutes by default — or when the popover happened to be
+// reopened (togglePopover's own silent refresh). Hits handleWorkspaceVersionRequest
+// (server/apiHandlers.mjs), a single indexed-row lookup against a timestamp that's already bumped
+// on every write in both store drivers — cheap enough to poll every few seconds without the
+// bandwidth/compute cost a full refresh() at that frequency would mean, and only triggers the
+// real (silent) refresh() when the value actually moves.
+let versionPollTimer = null;
+// null means "haven't observed a version yet" — the tick right after (re)starting this always
+// just establishes that baseline instead of firing a refresh() that would just redundantly repeat
+// whatever the connect/startup flow's own full refresh() already did moments earlier.
+let lastKnownWorkspaceVersion = null;
+// Guards against a slow response (network hiccup) leaving two checks in flight at once — the
+// interval fires on a wall-clock schedule regardless of whether the previous tick's request has
+// actually resolved yet.
+let versionPollInFlight = false;
+
+function startVersionPolling() {
+  stopVersionPolling();
+
+  versionPollTimer = setInterval(async () => {
+    if (versionPollInFlight) {
+      return;
+    }
+    const config = loadConfig();
+    if (!config.workspaceId) {
+      return;
+    }
+
+    versionPollInFlight = true;
+    try {
+      const api = createApiClient({
+        apiBaseUrl: config.apiBaseUrl,
+        workspaceId: config.workspaceId,
+        deviceToken: config.deviceToken,
+      });
+      const { version } = await api.fetchWorkspaceVersion();
+
+      if (lastKnownWorkspaceVersion === null) {
+        lastKnownWorkspaceVersion = version;
+      } else if (version !== lastKnownWorkspaceVersion) {
+        lastKnownWorkspaceVersion = version;
+        void refresh({ silent: true });
+      }
+    } catch {
+      // A transient blip on a background check every few seconds isn't worth surfacing — the
+      // much slower full poll (startPolling, via refresh()) already owns real connectivity-error
+      // reporting through state.lastError.
+    } finally {
+      versionPollInFlight = false;
+    }
+  }, VERSION_POLL_INTERVAL_SEC * 1000);
+}
+
+function stopVersionPolling() {
+  if (versionPollTimer) {
+    clearInterval(versionPollTimer);
+    versionPollTimer = null;
+  }
+  lastKnownWorkspaceVersion = null;
+  versionPollInFlight = false;
+}
+
 function registerIpcHandlers() {
   ipcMain.handle('atomfolio:get-state', () => state);
 
@@ -1300,6 +1370,7 @@ function registerIpcHandlers() {
     notifiedThisSessionIds.clear();
     await refresh();
     startPolling();
+    startVersionPolling();
     return { ok: true };
   });
 
@@ -1311,6 +1382,7 @@ function registerIpcHandlers() {
       clearInterval(pollTimer);
       pollTimer = null;
     }
+    stopVersionPolling();
 
     setState({
       connected: false,
@@ -1526,6 +1598,7 @@ app.whenReady().then(async () => {
   if (config.workspaceId) {
     await refresh();
     startPolling();
+    startVersionPolling();
   }
 });
 

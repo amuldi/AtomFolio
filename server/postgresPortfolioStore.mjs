@@ -451,6 +451,22 @@ export async function ensurePostgresWorkspaceAccess(workspaceId, user) {
   return workspaceAccessFromRow(workspace);
 }
 
+// A cheap "has anything in this workspace changed since I last checked" signal — every mutation
+// in this file (upsertPostgresPortfolio, deletePostgresPortfolio, imports, AI analyses, broker
+// links) already calls touchWorkspace(workspaceId) as part of its own write, so
+// atomfolio_workspaces.updated_at is already a comprehensive last-write timestamp for the whole
+// workspace with zero extra bookkeeping needed here. Deliberately a single indexed row lookup
+// (no joins, no scanning atomfolio_portfolios) — the whole point is that this stays fast enough to
+// poll far more often than the real listPostgresPortfolios above. Returns null for a workspace
+// that's never been touched (no row yet) rather than creating one — unlike touchWorkspace itself,
+// a version *check* shouldn't have the side effect of bringing a workspace into existence.
+export async function getPostgresWorkspaceVersion(workspaceId) {
+  const rows = await query(`SELECT updated_at FROM atomfolio_workspaces WHERE id = $1 LIMIT 1`, [
+    workspaceId,
+  ]);
+  return rows[0]?.updated_at ? toIsoString(rows[0].updated_at) : null;
+}
+
 export async function listPostgresPortfolios(workspaceId) {
   const rows = await query(
     `SELECT *

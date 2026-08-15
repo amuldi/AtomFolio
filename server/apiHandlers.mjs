@@ -19,6 +19,7 @@ import {
   deletePortfolio,
   getPortfolio,
   getPortfolioStoreStatus,
+  getWorkspaceVersion,
   listImportHistory,
   listPortfolios,
   saveImportHistory,
@@ -537,6 +538,26 @@ export async function handlePortfolioIngestRequest({ method, readBody, clientKey
     recordApiError('portfolio-ingest', 'portfolio-ingest-failed', error);
     sendJson(500, {
       error: errorMessage(error, 'Portfolio ingestion failed.'),
+    });
+  }
+}
+
+// Cheap poll target for the desktop widget's fast version-check loop (see desktop/src/main.js's
+// startVersionPolling) — a client polls this far more often than it would ever want to run the
+// real handlePortfolioCollectionRequest below, just to learn whether anything's actually worth
+// fetching. GET-only; nothing here needs a body or a write path.
+export async function handleWorkspaceVersionRequest({ method, workspaceId, sendJson }) {
+  if (method !== 'GET') {
+    sendMethodNotAllowed(sendJson);
+    return;
+  }
+
+  try {
+    sendJson(200, { version: await getWorkspaceVersion(workspaceId) });
+  } catch (error) {
+    recordApiError('portfolio-version', 'portfolio-version-failed', error, { workspaceId });
+    sendJson(500, {
+      error: errorMessage(error, 'Portfolio version check failed.'),
     });
   }
 }

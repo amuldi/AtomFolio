@@ -9,6 +9,7 @@ import {
   getPostgresImportRecord,
   getPostgresPortfolio,
   getPostgresStoreStatus,
+  getPostgresWorkspaceVersion,
   isPostgresStoreEnabled,
   listPostgresAiAnalyses,
   listPostgresImportHistory,
@@ -646,6 +647,29 @@ export function resolveWorkspaceId(requestOrValue) {
   const queryWorkspaceId = allowQueryWorkspaceId ? requestOrValue?.query?.workspaceId : null;
 
   return cleanWorkspaceId(headerWorkspaceId ?? queryWorkspaceId);
+}
+
+// A cheap "has anything changed since I last checked" signal for polling clients (the desktop
+// widget in particular — see desktop/src/main.js's startVersionPolling) that would otherwise have
+// to run the full listPortfolios (and everything a caller does with its result) just to find out
+// nothing changed. Mirrors listPortfolios' own store-driver branch; the in-memory/file store's
+// version is just workspace.updatedAt, already bumped on every mutation. Deliberately reads
+// store.workspaces directly instead of going through ensureWorkspace (unlike listPortfolios
+// above) — ensureWorkspace's auto-create-on-first-read would hand back a *freshly minted*
+// updatedAt for a workspace that only exists because this very check just created it, and since
+// that creation is never persisted back via saveStore, the next poll would recreate it all over
+// again with yet another new timestamp — a workspace that's only ever been read (never written)
+// would look like it changes on literally every poll. null here just means "nothing to compare
+// against yet", which every caller already has to handle as the very first poll's baseline case.
+export async function getWorkspaceVersion(workspaceId) {
+  const safeWorkspaceId = cleanWorkspaceId(workspaceId);
+
+  if (isPostgresStoreEnabled()) {
+    return getPostgresWorkspaceVersion(safeWorkspaceId);
+  }
+
+  const store = await readStore();
+  return store.workspaces?.[safeWorkspaceId]?.updatedAt ?? null;
 }
 
 export async function listPortfolios(workspaceId) {

@@ -52,6 +52,13 @@ async function requestJson(baseUrl, pathname, { workspaceId, deviceToken, search
 export function createApiClient({ apiBaseUrl, workspaceId, deviceToken }) {
   return {
     fetchPortfolios: () => requestJson(apiBaseUrl, '/api/portfolio', { workspaceId, deviceToken }),
+    // Cheap poll target for the fast version-check loop (see main.js's startVersionPolling) — a
+    // single indexed row lookup server-side (server/apiHandlers.mjs's handleWorkspaceVersionRequest),
+    // not the full portfolio fetch above. `?version=1` (not a separate path) because
+    // api/portfolio/[id].js already dynamically owns every other path under /api/portfolio/* —
+    // see that file's own comment for why a query param was the only option here.
+    fetchWorkspaceVersion: () =>
+      requestJson(apiBaseUrl, '/api/portfolio', { workspaceId, deviceToken, searchParams: { version: '1' } }),
     fetchPortfolio: (portfolioId) =>
       requestJson(apiBaseUrl, `/api/portfolio/${encodeURIComponent(portfolioId)}`, { workspaceId, deviceToken }),
     // PUT with the full portfolio document — the same call the web app's own edit flows make

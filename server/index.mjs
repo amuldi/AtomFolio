@@ -16,6 +16,7 @@ import {
   handleWorkspaceClaimGuestRequest,
   handleWorkspaceDeviceTokenRequest,
   handleWorkspaceSessionRequest,
+  handleWorkspaceVersionRequest,
 } from './apiHandlers.mjs';
 import {
   resolveAuthContext,
@@ -232,14 +233,26 @@ const server = http.createServer(async (request, response) => {
   }
 
   if (requestUrl.pathname === '/api/portfolio') {
+    // Mirrors api/portfolio/index.js's own query-param branch — see its comment for why a version
+    // check rides the exact /api/portfolio route instead of its own path.
+    const isVersionCheck = requestUrl.searchParams.has('version');
     const workspaceContext = await getWorkspaceContextFromUrl(
       request,
       requestUrl,
-      request.method === 'GET' ? 'viewer' : 'editor',
+      isVersionCheck || request.method === 'GET' ? 'viewer' : 'editor',
     );
 
     if (!workspaceContext.ok) {
       sendWorkspaceAccessError(workspaceContext, sendApiJson);
+      return;
+    }
+
+    if (isVersionCheck) {
+      await handleWorkspaceVersionRequest({
+        method: request.method,
+        workspaceId: workspaceContext.workspaceId,
+        sendJson: sendApiJson,
+      });
       return;
     }
 
