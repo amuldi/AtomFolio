@@ -7100,43 +7100,52 @@ body::after {
 }
 
 /* Unlike the transient tap-hint above, this one has nothing to be transient about - it's the only
-   thing on screen explaining what to do with zero portfolios, so it stays up the whole time that's
-   true instead of fading out after a few seconds. Real <button> (not the plain <div role="status">
-   the tap-hint uses) since clicking it actually opens the accounts drawer. */
+   thing on screen indicating what to do with zero portfolios, so it stays up the whole time
+   that's true instead of fading out after a few seconds. Real <button> (not the plain <div
+   role="status"> the tap-hint uses) since clicking it actually opens the accounts drawer.
+   Deliberately one quiet line, not a headline-plus-explanation card (that read as an
+   instructional callout, not part of the atom scene) — a small "+" and a short label, dim until
+   hovered, closer to a UI affordance than a sentence you're expected to read. */
 .atom-hint--empty-state {
-  display: flex;
-  flex-direction: column;
+  display: inline-flex;
   align-items: center;
-  gap: 0.22rem;
+  gap: 0.48rem;
   width: max-content;
-  max-width: min(20rem, calc(100vw - 3rem));
-  padding: 0.65rem 1.1rem;
-  border-radius: 16px;
+  padding: 0.42rem 0.95rem 0.42rem 0.5rem;
+  border-radius: 999px;
   appearance: none;
-  white-space: normal;
-  text-align: center;
+  white-space: nowrap;
   pointer-events: auto;
   cursor: pointer;
-  opacity: 1;
+  opacity: 0.7;
   animation: none;
-  transition: background-color 160ms ease, border-color 160ms ease;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: rgba(250, 240, 220, 0.8);
+  transition: opacity 160ms ease, background-color 160ms ease, border-color 160ms ease;
 }
 
-.atom-hint--empty-state:hover {
-  background: rgba(7, 7, 7, 0.92);
-  border-color: rgba(255, 242, 216, 0.22);
+.atom-hint--empty-state:hover,
+.atom-hint--empty-state:focus-visible {
+  opacity: 1;
+  background: rgba(7, 7, 7, 0.9);
+  border-color: rgba(255, 242, 216, 0.24);
+  outline: none;
 }
 
-.atom-hint--empty-state strong {
-  font-size: 0.82rem;
-  font-weight: 680;
-  color: rgba(250, 240, 220, 0.94);
-}
-
-.atom-hint--empty-state span {
-  font-size: 0.7rem;
+.atom-hint--empty-state-glyph {
+  display: grid;
+  place-items: center;
+  width: 1.05rem;
+  height: 1.05rem;
+  border: 1px solid rgba(255, 242, 216, 0.4);
+  border-radius: 50%;
+  font-size: 0.72rem;
   font-weight: 500;
-  color: rgba(250, 240, 220, 0.68);
+  line-height: 1;
+  color: rgba(250, 240, 220, 0.92);
 }
 
 @keyframes atomHintFade {

@@ -316,8 +316,7 @@ const UI_TEXT = {
     allocationSourceEqual: '균등 비중 기준',
     atomAria: '검은 배경 위 손으로 그린 인터랙티브 포트폴리오 스케치',
     atomHint: '원자를 눌러 자세히 보기',
-    emptyStateHint: '포트폴리오가 아직 없어요',
-    emptyStateHintAction: '왼쪽에서 CSV를 가져오거나 직접 만들어보세요',
+    emptyStateHint: '포트폴리오 추가',
     scorePointUnit: '점',
     parseError: '종목 행을 찾지 못했습니다. ticker/name 컬럼이 있는 CSV를 올려주세요.',
     readError: '파일을 읽지 못했습니다.',
@@ -464,8 +463,7 @@ const UI_TEXT = {
     allocationSourceEqual: 'Weighted equally',
     atomAria: 'Interactive hand-drawn portfolio sketch on a black background',
     atomHint: 'Tap an atom to see details',
-    emptyStateHint: "You don't have a portfolio yet",
-    emptyStateHintAction: 'Import a CSV or build one manually from the left',
+    emptyStateHint: 'Add portfolio',
     scorePointUnit: 'pts',
     parseError: 'Could not find portfolio rows. Upload a CSV with ticker or name columns.',
     readError: 'Could not read the file.',
@@ -8606,11 +8604,13 @@ export default function App() {
                   </div>
                 ) : null}
                 {/* First-launch gap found during a new-user walkthrough: with zero portfolios, the
-                    stage showed nothing but the idle-pulse atom - no headline, no indication that
-                    the icon-only rail on the left is where you'd start, nothing distinguishing
-                    "empty because you haven't added anything" from "broken." Clicking straight
-                    through to the accounts drawer (the same handler the rail button itself uses)
-                    turns this into a working shortcut, not just a static label. */}
+                    stage showed nothing but the idle-pulse atom - nothing distinguishing "empty
+                    because you haven't added anything" from "broken." Clicking straight through
+                    to the accounts drawer (the same handler the rail button itself uses) turns
+                    this into a working shortcut, not just a static label. Kept to one quiet line
+                    (was a bold headline + an explanatory sentence about CSV/manual entry) — the
+                    accounts drawer it opens is where that choice actually gets made, so spelling
+                    it out here first was just prose standing between the click and the drawer. */}
                 {!hasPortfolio ? (
                   <button
                     type="button"
@@ -8620,8 +8620,10 @@ export default function App() {
                       handleDrawerToolSelect('accounts');
                     }}
                   >
-                    <strong>{text.emptyStateHint}</strong>
-                    <span>{text.emptyStateHintAction}</span>
+                    <span className="atom-hint--empty-state-glyph" aria-hidden="true">
+                      +
+                    </span>
+                    {text.emptyStateHint}
                   </button>
                 ) : null}
                 {portfolioEntries.length ? (
