@@ -34,9 +34,10 @@ body {
    onPointerDown (atom-view.jsx's handleWidgetDragStart) is what starts that drag, so the handle
    covers this padding margin plus, by bubbling, .atom-visual-stage's own empty space below it.
    ⌘ gates it (handleWidgetDragStart bails out without ⌘ held); .node-hit/.center-hit (nested
-   inside .atom-visual-stage) stopPropagation() in their own pointerdown handlers regardless of ⌘,
-   before a gesture can bubble up this far, which is what keeps dragging the atom itself
-   rotating/selecting instead of moving the window even with ⌘ held. 24px (not the original 10px,
+   inside .atom-visual-stage) stopPropagation() in their own pointerdown handlers only when ⌘ isn't
+   held, which is what keeps dragging the atom itself rotating/selecting by default — with ⌘ held,
+   those same handlers opt out instead, so a node/center press bubbles up this far too and moves the
+   window just like empty space does. 24px (not the original 10px,
    and not the first-pass 18px) so there's an actually-graspable margin even at the widget's
    smallest resizable size. 24px specifically because .atom-visual-stage below sets overflow:
    visible (unlike the popover's card, nothing here clips the atom to its box), which exposes
@@ -72,10 +73,13 @@ body {
    card, rounded corners) — no card here at all, the atom floats straight over the desktop.
    ⌘-grabbing empty stage space (nothing painted, or the gaps between nodes) moves the window, via
    .atom-section's own onPointerDown above (this element's empty space just bubbles up to it, see
-   handleWidgetDragStart's own ⌘ check); grabbing the atom itself (center, bond-lines, or an
-   individual stock node) always rotates/selects it instead, regardless of ⌘ — same as the real
-   website's trackball — since atom-view.jsx's node/center pointerdown handlers stopPropagation()
-   unconditionally, so their gesture never reaches that ancestor handler either way. This used to
+   handleWidgetDragStart's own ⌘ check). Without ⌘, grabbing the atom itself (center, bond-lines,
+   or an individual stock node) rotates/selects it instead, same as the real website's trackball —
+   atom-view.jsx's node/center pointerdown handlers stopPropagation() in that case, so the gesture
+   never reaches that ancestor handler. With ⌘ held, though, those same handlers deliberately don't:
+   they opt out and let the press bubble up to .atom-section's handler instead, so a ⌘-held grab
+   moves the window no matter what it lands on — see handleNodePointerDown/handleCenterPointerDown's
+   own comments in atom-view.jsx. This used to
    be a real native OS window-drag, via a static -webkit-app-region: drag here — the only kind of
    drag macOS's own Mission Control recognizes for its "hold at the screen edge to switch Spaces"
    behavior, carrying the window along for free. That's exactly the tradeoff this widget no longer

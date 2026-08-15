@@ -508,6 +508,18 @@ export function AtomSketch({
                 event.currentTarget.setPointerCapture?.(event.pointerId);
               }}
               onPointerUp={(event) => {
+                // Mirrors the onPointerDown escape hatch above, gated the same way (only for
+                // callers that opted in by passing onCenterPointerDown at all — the web app never
+                // does, so this branch is dead there regardless of ⌘). A ⌘-held window-move drag
+                // that started on this circle keeps the cursor over roughly the same spot on it the
+                // whole time (the widget follows 1:1, so its relative position under the cursor
+                // barely changes) — without this, the release would still land on this circle and
+                // stopPropagation() here, which would both fire an unwanted onCenterClick and, more
+                // importantly, swallow the pointerup atom-view.jsx's own window-level listener
+                // needs in order to end the drag (see main.js's endAtomWidgetDrag).
+                if (onCenterPointerDown && event.metaKey) {
+                  return;
+                }
                 event.stopPropagation();
                 event.preventDefault();
                 onCenterClick?.();

@@ -348,12 +348,18 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
   // rotation feel like it was barely alive most of the time, gated on a signal that had nothing to
   // do with whether anyone actually wanted it to stop.
 
-  // No modifier key gates "move the window" vs "rotate the atom" — grabbing an actual node/center
-  // rotates/selects it (handleNodePointerDown below, and AtomSketch's own .center-hit, both stop
-  // propagation and take over the gesture themselves); grabbing anywhere else on .atom-section
-  // (handleWidgetDragStart below) moves the window, because that's the one thing left with nothing
-  // else claiming it. A plain single-handed grab-and-drag, matching how every other floating/
-  // always-on-top utility window on macOS already behaves.
+  // ⌘ held is what turns a press into "move the window" instead of "rotate/select the atom" —
+  // without it, grabbing a node/center still rotates/selects it (handleNodePointerDown below, and
+  // AtomSketch's own .center-hit, stop propagation and take over the gesture themselves the same
+  // as always) and grabbing anywhere else on .atom-section does nothing (handleWidgetDragStart
+  // bails without ⌘). With ⌘ held, though, *every* press moves the window — including one that
+  // starts on a node or the center — because handleNodePointerDown/handleCenterPointerDown below
+  // both opt out (without stopPropagation()) the moment they see event.metaKey, letting the press
+  // bubble up to .atom-section's own handler instead of being taken over locally. Reintroduced
+  // after an earlier version dropped the modifier entirely (a plain single-handed grab-anywhere
+  // drag, no ⌘): that felt right for the empty background, but meant there was no way to reposition
+  // the widget by grabbing a node without it rotating first — ⌘ fixes that by making "move" an
+  // explicit, always-available gesture regardless of what's under the cursor.
   //
   // The move drag itself is synthetic, not a native OS window-drag — handleWidgetDragStart just
   // tells main.js a drag started (window.atomfolio.beginWidgetDrag), and main.js's
@@ -550,6 +556,15 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
 
   const handleNodePointerDown = useCallback(
     (atomId, event) => {
+      // ⌘ held: this press should move the window, the same as grabbing empty stage space does —
+      // see handleWidgetDragStart below. Returning here without stopPropagation()/preventDefault()
+      // lets the pointerdown bubble straight up to .atom-section's own handler instead of this one
+      // taking it over; handleCenterPointerDown below does the identical thing for the center-hit
+      // circle, just via AtomSketch's own onCenterPointerDown escape hatch instead of a plain
+      // return, since that circle's pointerdown is handled inside the shared component, not here.
+      if (event.metaKey) {
+        return;
+      }
       // Dissolving/materializing swaps the underlying atom data out from under any rotation state
       // that was mid-gesture, and is already animating rotation speed on its own — ignoring new
       // rotation drags while a transition is in flight is simpler and safer than reconciling the
@@ -585,6 +600,18 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
     },
     [clientToLocalPoint, atomTransitionPhase],
   );
+
+  // AtomSketch's own center-hit circle takes the pointerdown over itself (stopPropagation) unless
+  // this returns exactly `false` — see that component's own comment on onCenterPointerDown. Same
+  // ⌘ branch as handleNodePointerDown above, just expressed through that escape hatch instead of a
+  // plain early return, since the center-hit's pointerdown handling lives in the shared component,
+  // not here.
+  const handleCenterPointerDown = useCallback((event) => {
+    if (event.metaKey) {
+      return false;
+    }
+    return undefined;
+  }, []);
 
   useEffect(() => {
     const deltaQuaternion = new THREE.Quaternion();
@@ -667,13 +694,13 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
   }, [clientToLocalPoint]);
 
   // Starts the widget's window-move drag — see atom-widget.css's own comment on .atom-section for
-  // why this is a synthetic (IPC-driven) drag rather than -webkit-app-region: drag. ⌘ gates this
-  // the same way it always has: without it, grabbing the widget's empty background (or its outer
-  // drag-margin padding) does nothing here, and — since handleNodePointerDown never
-  // stopPropagation()s a node press either way — a plain click-drag on a node still rotates it.
-  // Only reaches here for a press on .atom-section's own empty space; a press on
-  // .node-hit/.center-hit never bubbles this far, since handleNodePointerDown above already
-  // stopPropagation()s it first regardless of ⌘.
+  // why this is a synthetic (IPC-driven) drag rather than -webkit-app-region: drag. ⌘ gates it:
+  // without it, this does nothing at all, so a plain click-drag on empty background does nothing
+  // here and a plain click-drag on a node/center still rotates/selects it as always. Reaches here
+  // for a press on .atom-section's own empty space unconditionally, *and* — with ⌘ held — for a
+  // press that started on a node or the center too, since handleNodePointerDown/
+  // handleCenterPointerDown both opt out and let it bubble up in that case instead of
+  // stopPropagation()ing it the way they do without ⌘.
   const handleWidgetDragStart = useCallback((event) => {
     if (!event.metaKey) {
       return;
@@ -829,6 +856,7 @@ function AtomView({ items, holdings, activeInsight, selectedPortfolioId, categor
             ariaLabel="보유 종목 원자"
             highlightActive={false}
             onCenterClick={() => setSelectedAtomId(null)}
+            onCenterPointerDown={handleCenterPointerDown}
             onPointerDown={handleNodePointerDown}
             onPointerEnter={() => {}}
             onPointerMove={() => {}}

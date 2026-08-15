@@ -12,6 +12,65 @@
 > sessions that actually did the work. Bugs found along the way are tracked separately in
 > [`AtomFolio_Bugs.en.md`](AtomFolio_Bugs.en.md).
 
+## 2026-08-15 — Atom widget drag reverted back to ⌘-required, plus a stuck-drag fix and a news-date fix
+
+The entry right below this one moved the atom widget's drag to a plain grab-anywhere native OS
+drag, aiming to piggyback on Mission Control's Space-switching. Living with it changed the call —
+the widget is meant to stay on whichever single Space it's floating on, not follow the user to a
+different Desktop mid-drag. The drag was reverted back to the earlier synthetic (IPC-polling) drag,
+gated behind holding ⌘ (Command) again.
+
+**Reverting it surfaced two real bugs, fixed in the same pass.**
+
+1. **The widget moved on a plain grab, no ⌘ needed.** The ⌘ check the native-drag experiment had
+   dropped never came back when the drag mechanism was reverted — restored `event.metaKey` in
+   `handleWidgetDragStart`.
+2. **A drag never ended — it just kept following the cursor.** The click-through hit-test's
+   "is a drag in progress" check only ever looked at node-rotation drags (`dragRef`), never a
+   widget-move drag. The drag starts from `.atom-section`'s own outer padding, which sits outside
+   `.atom-visual-stage`'s actual bounds, so the cursor drifting there mid-drag flipped the window to
+   click-through — and from that point on it stopped receiving mouse events entirely, including the
+   `pointerup` that would have ended the drag. Added `widgetDragActiveRef` and folded it into the
+   click-through's `dragInProgress`, and widened the interactive check so holding ⌘ counts on its
+   own, regardless of whether the cursor is technically over `.atom-visual-stage`.
+
+A narrow edge case turned up while fixing this and got cleaned up too — a ⌘-drag starting exactly
+on a node or the center circle used to get swallowed by the rotate/select handler before the
+window-move handler ever saw it. `handleNodePointerDown`/`handleCenterPointerDown` (and the shared
+`onCenterPointerDown` callback in `src/components/atom/index.jsx`, used by both the web app and the
+widget) now skip `stopPropagation()` when ⌘ is held, so a ⌘-drag moves the window no matter what
+it starts on.
+
+**Removed the news/settings shortcut buttons from the popover's summary page.** The summary page is
+now just portfolio numbers; news and settings are still reachable via the pager's own swipe/dots,
+the header's ⚙ button, and the widget's right-click menu.
+
+**Fixed news dates showing one day ahead.** Naver News gives dates in KST with no timezone marker
+(e.g. "2026.08.15. 23:45"), and `marketNews.js`'s `parsePublishedAt` was handing that straight to
+`Date.parse()` — which resolves against the *host process's* timezone, and Vercel's serverless Node
+runtime defaults to UTC. A naive-KST string read as UTC lands 9 hours later, which crosses into the
+next UTC calendar day for anything published after ~3pm KST. Reproduced directly with
+`TZ=UTC node -e "..."`, then fixed by parsing the numeric components and anchoring via
+`Date.UTC(...) - 9h` (Korea has no DST, so a fixed offset is safe). Also widened the regex once
+testing showed Naver's raw text normalizes to two different shapes depending on whether there's a
+trailing period before the time. Added a regression test
+(`tests/market-news-date.test.mjs`) that passes under both `TZ=UTC` and `TZ=Asia/Seoul`.
+
+**Trimmed the portfolio list card down to just the portfolio name.** It used to also show either
+"no account info" or an "N holdings · M rows" line beneath the name; after the user asked what
+those meant (confirmed: "no account info" fires when the CSV never carried account metadata at
+all, and "M rows" counts the dated repeat-rows behind the same holding), both were dropped as
+unnecessary. The underlying `summarizePortfolioEntryAccounts()` computation is untouched since
+other screens still read it — only this card's rendering was trimmed.
+
+![Atom widget and popover summary page — real macOS capture, provided by the user](assets/atomfolio-menubar-widget-and-summary-live.jpg)
+
+**Verified**: `npm run lint` clean (web + desktop), `npm test` 119 total — 118 pass, 1 skip
+(pre-existing), 0 fail, desktop renderer/main-libs bundles rebuild clean, the compiled bundle
+confirmed to contain both the ⌘ check and `widgetDragActiveRef`. The actual mouse-drag gesture
+itself couldn't be reproduced live in this sandbox — verified by code reading and automated tests
+only.
+
 ## 2026-08-15 — Menu bar app overhaul: summary-first popover, 5s fast sync, native drag for the atom widget
 
 The menu bar companion app changed direction from "a small news-reading helper" to "a portfolio
