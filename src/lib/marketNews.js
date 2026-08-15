@@ -3,6 +3,9 @@ const NAVER_FINANCE_NEWS_URL = 'https://finance.naver.com/news/news_list.naver';
 const NAVER_NEWS_SEARCH_URL = 'https://search.naver.com/search.naver';
 const NEWS_TIMEOUT_MS = 8500;
 const KOREA_TIME_ZONE = 'Asia/Seoul';
+// Fixed — Korea doesn't observe DST, so this is safe as a plain constant rather than something
+// that needs the Intl timezone machinery. See parsePublishedAt's own comment for why this exists.
+const KOREA_UTC_OFFSET_MS = 9 * 60 * 60 * 1000;
 const DEFAULT_KOREAN_STOCK_NEWS_QUERY = '증시 오늘';
 // Size of the combined pool the default "today" view draws from (finance-list + Naver-search
 // pages merged, deduped, filtered) — sized well past one page (20) so /api/market/news can serve
@@ -144,7 +147,9 @@ function safeExternalLink(value, baseUrl) {
   }
 }
 
-function parsePublishedAt(value) {
+// Exported only so tests/market-news-date.test.mjs can exercise the KST-anchoring fix directly,
+// regardless of the test runner's own process timezone — not meant as a general-purpose export.
+export function parsePublishedAt(value) {
   const cleanValue = stripHtml(value);
 
   if (!cleanValue) {
@@ -164,6 +169,35 @@ function parsePublishedAt(value) {
     .replace(/-\s*$/, '')
     .replace(/\s+/g, ' ')
     .trim();
+
+  // Naver Finance/Naver News (the only sources that reach this branch — Bing's RSS pubDate
+  // carries its own explicit offset and never needs this) publish times in Korea Standard Time
+  // with no timezone marker of their own: "2026-08-15 23:45" always means 23:45 *in Korea*, never
+  // whatever zone happens to be running this code. Date.parse's own handling of a naive date-time
+  // string (no 'Z'/offset) resolves it against the *host's* local timezone instead — harmless
+  // when this runs in a browser already on KST, but this module also runs server-side
+  // (server/apiHandlers.mjs's news handlers, on Vercel's Node runtime, which defaults to UTC).
+  // There, the same "23:45" gets read as 23:45 UTC — 9 hours later than intended, which crosses
+  // into the next KST calendar day for anything published after ~3pm KST. That's exactly the
+  // "article says the 15th, the site shows the 16th" bug this replacement exists to fix: parse
+  // the wall-clock numbers directly and anchor them to KST explicitly instead of trusting
+  // whichever zone Date.parse happens to assume.
+  // Day/time separator varies with the raw source text: "2026.08.15 23:45" (space before the
+  // time) normalizes above to "2026-08-15 23:45", but "2026.08.15. 23:45" (Naver's other common
+  // shape, a trailing period before the time) normalizes to "2026-08-15-23:45" instead — that
+  // period gets swallowed into the same dot-to-hyphen pass as the date's own separators. [ T-]
+  // covers both.
+  const kstMatch = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T-](\d{1,2}):(\d{2}))?/);
+  if (kstMatch) {
+    const [, year, month, day, hour, minute] = kstMatch;
+    const kstAnchoredMs =
+      Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour ?? 0), Number(minute ?? 0)) -
+      KOREA_UTC_OFFSET_MS;
+    return Number.isFinite(kstAnchoredMs) ? kstAnchoredMs : null;
+  }
+
+  // Fallback for any shape that isn't the YYYY-MM-DD[ HH:MM] form above (e.g. a source that
+  // already includes its own explicit offset) — Date.parse handles those correctly on its own.
   const parsed = Date.parse(normalized);
 
   return Number.isFinite(parsed) ? parsed : null;
