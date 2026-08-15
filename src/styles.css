@@ -4751,36 +4751,21 @@ body::after {
   min-width: 0;
 }
 
-.tool-drawer__account-copy strong,
-.tool-drawer__account-copy em,
-.tool-drawer__account-copy small {
+/* Was strong+em+small (filename, account label, "N개 종목 · N개 행") — only the filename itself
+   stays now (removed per direct feedback: the account-info fallback text and the row/security
+   count read as clutter, not useful information, on a card whose only real job is picking a
+   portfolio). Kept as its own rule (not folded back into a plain .tool-drawer__account-copy
+   selector) in case a second line is ever reintroduced here. */
+.tool-drawer__account-copy strong {
   min-width: 0;
   overflow: hidden;
   letter-spacing: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.tool-drawer__account-copy strong {
   color: rgba(var(--frame-ink-b), 0.92);
   font-family: var(--ui-font);
   font-size: 0.74rem;
   font-weight: 700;
-}
-
-.tool-drawer__account-copy em {
-  color: rgba(var(--frame-ink-a), 0.72);
-  font-family: var(--ui-font);
-  font-size: 0.68rem;
-  font-style: normal;
-  font-weight: 560;
-}
-
-.tool-drawer__account-copy small {
-  color: rgba(var(--frame-ink-a), 0.48);
-  font-family: var(--ui-font);
-  font-size: 0.64rem;
-  font-weight: 560;
 }
 
 .tool-drawer__account-clear {

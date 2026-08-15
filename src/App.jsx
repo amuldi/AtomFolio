@@ -5112,12 +5112,6 @@ function ToolSideDrawer({
                       />
                       <span className="tool-drawer__account-copy">
                         <strong title={entry.fileName}>{compactFileName(entry.fileName, 28)}</strong>
-                        <em title={accountSummary.accountText}>{accountSummary.accountText}</em>
-                        <small>
-                          {language === 'en'
-                            ? `${accountSummary.securityCount} assets · ${accountSummary.rowCount} rows`
-                            : `${accountSummary.securityCount}개 종목 · ${accountSummary.rowCount}개 행`}
-                        </small>
                       </span>
                     </button>
                     <button
