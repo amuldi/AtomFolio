@@ -1,7 +1,3 @@
-const NON_STOCK_ASSET_CLASS_PATTERN =
-  /(bond|bonds|fixedincome|treasury|cash|money|commodity|commodities|gold|silver|metal|crypto|digitalasset|realestate|reit|채권|국채|현금|현금성자산|원자재|금99|금괴|금현물|디지털자산|부동산|리츠)/i;
-const STOCK_ASSET_CLASS_PATTERN =
-  /(stock|stocks|equity|equities|equityetf|single stock|common stock|주식|개별주식|국내주식|미국주식|해외주식|글로벌주식|주식etf)/i;
 const SECURITY_CODE_PATTERN = /^(?:[A-Z]{1,6}(?:[.-][A-Z0-9]{1,4})?|\d{5,6}(?:\.(?:KS|KQ))?)$/i;
 const SECURITY_NAME_HINT_PATTERN =
   /(tiger|kodex|arirang|ace|kbstar|hanaro|kosef|sol|rise|plus|timefolio|spdr|ishares|vanguard|invesco|schwab|s&p|nasdaq|dow|russell|msci|kospi|kosdaq|etf|etn|fund|trust|inc|corp|corporation|company|ltd|limited|plc|holdings?|group|전자|화학|금융|은행|제약|바이오|홀딩스?|건설|증권|통신|식품|에너지|반도체|자동차|배터리|테크|배당|성장)/i;
@@ -77,12 +73,6 @@ function readSecurityName(item) {
   ]
     .map((value) => String(value ?? '').trim())
     .find(Boolean) ?? '';
-}
-
-function isNonStockAssetClass(value) {
-  const normalized = normalizePortfolioItemKey(value);
-
-  return NON_STOCK_ASSET_CLASS_PATTERN.test(normalized) && !STOCK_ASSET_CLASS_PATTERN.test(normalized);
 }
 
 // Labels/top-level properties that mean "this row already carries real holding numbers" —
@@ -168,13 +158,9 @@ export function isPortfolioAtomItem(item) {
     return false;
   }
 
-  const assetClass =
-    String(item.assetClass ?? '').trim() ||
-    readPortfolioField(item, ['자산 구분', '자산군', '자산유형', 'assetClass', 'assetType']);
-
-  if (isNonStockAssetClass(assetClass)) {
-    return false;
-  }
+  // Asset class (주식/채권/리츠/금 등) no longer gates atom visibility — every recognizable
+  // holding gets a node regardless of asset class, so a bond or REIT position doesn't just
+  // vanish from the scene the moment its 자산군 dropdown is set to a non-stock value.
 
   // A row still needs *some* name before "it has holding numbers" is enough to admit it — a totals/
   // subtotal row in a real broker export (매수가 column holding a summed total, name column reading
@@ -204,14 +190,6 @@ export function explainExcludedPortfolioAtomItem(item) {
 
   if (!item || typeof item !== 'object') {
     return 'invalid-item';
-  }
-
-  const assetClass =
-    String(item.assetClass ?? '').trim() ||
-    readPortfolioField(item, ['자산 구분', '자산군', '자산유형', 'assetClass', 'assetType']);
-
-  if (isNonStockAssetClass(assetClass)) {
-    return 'non-stock-asset-class';
   }
 
   return 'no-recognizable-identity';

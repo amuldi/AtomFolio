@@ -2531,8 +2531,6 @@ function summarizePortfolioEntryAccounts(entry, language) {
 function excludedAtomReasonLabel(reason, language) {
   if (language === 'en') {
     switch (reason) {
-      case 'non-stock-asset-class':
-        return 'not a stock/ETF asset class';
       case 'invalid-item':
         return 'unreadable row';
       default:
@@ -2541,8 +2539,6 @@ function excludedAtomReasonLabel(reason, language) {
   }
 
   switch (reason) {
-    case 'non-stock-asset-class':
-      return '주식/ETF 자산군이 아님';
     case 'invalid-item':
       return '읽을 수 없는 행';
     default:

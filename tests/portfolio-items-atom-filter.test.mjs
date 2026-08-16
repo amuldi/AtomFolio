@@ -65,14 +65,17 @@ test('account-label and date rows are still excluded even though this filter got
   assert.equal(isPortfolioAtomItem(dateRow), false);
 });
 
-test('an explicitly non-stock asset class is excluded even with holding data present', () => {
+// Regression coverage for "채권/리츠/금 자산군을 고르면 원자에서 사라지는 문제": asset class
+// (주식/채권/리츠/금 등) must never gate atom visibility on its own — a bond, REIT, or gold
+// position with real holding data still gets a node, same as a stock would.
+test('a non-stock asset class is still kept when real holding data is present', () => {
   const bond = {
     label: '국고채 10년',
     assetClass: '채권',
     fields: [{ label: '매수가', value: '10,000' }],
   };
 
-  assert.equal(isPortfolioAtomItem(bond), false);
+  assert.equal(isPortfolioAtomItem(bond), true);
 });
 
 test('a bare zero return (the manual-entry form\'s default for a blank field) does not count as substantive data on its own', () => {
@@ -131,10 +134,6 @@ test('filterPortfolioItemsForAtomScene keeps data-backed items and drops non-sec
 
 test('explainExcludedPortfolioAtomItem returns null for included items and a reason for excluded ones', () => {
   assert.equal(explainExcludedPortfolioAtomItem({ label: 'Apple Inc.', code: 'AAPL' }), null);
-  assert.equal(
-    explainExcludedPortfolioAtomItem({ label: '국고채 10년', assetClass: '채권' }),
-    'non-stock-asset-class',
-  );
   assert.equal(explainExcludedPortfolioAtomItem({ label: '개인연금' }), 'no-recognizable-identity');
   assert.equal(explainExcludedPortfolioAtomItem(null), 'invalid-item');
 });
