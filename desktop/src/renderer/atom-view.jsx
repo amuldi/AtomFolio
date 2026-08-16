@@ -157,10 +157,18 @@ function buildSelectedInfo(holding, item) {
     return {
       label: item.label || item.stockName || item.name || item.ticker || '종목',
       valueText: item.marketPrice || (Number.isFinite(item.latestPrice) ? formatCurrency(item.latestPrice) : '—'),
-      changeText: Number.isFinite(item.marketChangePercent)
-        ? `${formatSignedCurrency(item.marketChange)} · ${formatPercent(item.marketChangePercent)}`
-        : null,
-      changeTone: toneClass(item.marketChangePercent),
+      // No changeText here (unlike the `holding` branch above) — item.marketChange/
+      // marketChangePercent are the security's own *today's* price move, in its *native*
+      // currency (item.marketPrice above might read €0.28, $12.40, etc. depending on the
+      // listing), not the portfolio's total return in KRW. formatSignedCurrency always prefixes
+      // ₩ regardless of what currency the number is actually denominated in, so rendering it here
+      // produced a won-sign amount that was neither the right currency nor the right metric —
+      // e.g. showing "-₩0 · -1.39%" (today's move) right where a stop-loss notification for the
+      // same stock had just said "-98.10%" (total return since purchase). Nothing accurate to
+      // show without a real holding (see this function's own comment above on why one might be
+      // missing), so this stays blank rather than showing something actively misleading.
+      changeText: null,
+      changeTone: '',
       weightText: Number.isFinite(weightPercent) ? `비중 ${weightPercent.toFixed(1)}%` : null,
     };
   }

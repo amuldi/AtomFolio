@@ -287,17 +287,24 @@ body {
 .summary {
   display: flex;
   flex-direction: column;
-  /* Was 6px while .summary__quicknav's own top padding closed out the page below it — that row
-     is gone now (뉴스/설정 buttons removed), so this is the only bottom breathing room
-     .summary__holdings' last row gets. */
-  padding-bottom: 16px;
   /* Mirrors #news-root's own is-loading fade (see popover.js's showPortfolioSwitchLoading) — the
      numbers here are exactly as portfolio-scoped as the news list, so a switch dims both
      together, not just one half of the panel. */
   transition: opacity 180ms ease;
 }
 
-#summary-stats-root.is-loading {
+/* Was 6px while .summary__quicknav's own top padding closed out the page below it — that row is
+   gone now (뉴스/설정 buttons removed), so this is the only bottom breathing room
+   .summary__holdings' last row gets. Lives on .summary--holdings specifically (not shared .summary
+   above) now that the hero half and holdings half are two separate blocks with quick-add-root
+   sandwiched between them — the hero half isn't the last thing on the page any more, so it
+   shouldn't carry the page's own closing padding. */
+.summary--holdings {
+  padding-bottom: 16px;
+}
+
+#summary-hero-root.is-loading,
+#summary-holdings-root.is-loading {
   opacity: 0.4;
 }
 

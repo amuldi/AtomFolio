@@ -16,12 +16,15 @@
           <div class="pager__track" id="pager-track">
             <div class="pager__page" data-page="summary">
               <!-- Rebuilt on every state push (poll tick, portfolio switch) — pure numbers, no
-                   input to lose. -->
-              <div id="summary-stats-root"></div>
+                   input to lose. Split from the holdings list below (used to be one
+                   summary-stats-root covering both) so quick-add can sit between them, right
+                   under the total, instead of after the full (now unbounded) holdings list. -->
+              <div id="summary-hero-root"></div>
               <!-- Mounted once at bootstrap and never torn down, same reasoning as
                    news-search-root/settings-root elsewhere in this file: a poll tick landing
                    mid-keystroke must not blow away what's typed or where focus is. -->
               <div id="quick-add-root"></div>
+              <div id="summary-holdings-root"></div>
             </div>
             <div class="pager__page" data-page="news">
               <div id="news-search-root"></div>

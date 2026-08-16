@@ -6,7 +6,8 @@ const connectRoot = document.getElementById('connect-root');
 const appRoot = document.getElementById('app-root');
 const headerRoot = document.getElementById('header-root');
 const pickerRoot = document.getElementById('picker-root');
-const summaryStatsRoot = document.getElementById('summary-stats-root');
+const summaryHeroRoot = document.getElementById('summary-hero-root');
+const summaryHoldingsRoot = document.getElementById('summary-holdings-root');
 const newsSearchRoot = document.getElementById('news-search-root');
 const newsRoot = document.getElementById('news-root');
 const settingsRoot = document.getElementById('settings-root');
@@ -479,14 +480,13 @@ function renderSummaryHolding(holding) {
   ]);
 }
 
-// The mini dashboard itself — total value, today's P/L, an active insight if there is one, and
-// the top few holdings by weight. Deliberately just these: the point of a menu-bar popover is "an
-// answer in one glance", not a second copy of the web dashboard's full analytics. Portfolio name
-// (the picker, fixed chrome above this) and last-updated time (.header__updated, also fixed
-// chrome) both already show elsewhere on every page — repeating either here would just be the
-// same fact twice on a 340px-wide panel.
-function renderSummaryPage(state) {
-  const page = el('div', 'summary', []);
+// The mini dashboard's hero half — total value, today's P/L, and an active insight if there is
+// one. Split from the holdings list below (renderSummaryHoldings) so quick-add-root can sit
+// between the two as a persistent, never-rebuilt sibling (see popover.html) — it used to come
+// after the whole summary block, which meant it slid further down the page every time the
+// holdings list below it grew.
+function renderSummaryHero(state) {
+  const page = el('div', 'summary summary--hero', []);
   const totals = state.totals;
 
   if (!totals || !Number.isFinite(totals.totalMarketValue)) {
@@ -515,12 +515,28 @@ function renderSummaryPage(state) {
     page.append(el('div', 'summary__insight', [state.activeInsight.message]));
   }
 
-  page.append(el('div', 'section-label', ['보유 상위']));
-  const topHoldings = Array.isArray(state.holdings) ? state.holdings.slice(0, 5) : [];
-  if (!topHoldings.length) {
+  return page;
+}
+
+// The mini dashboard's holdings half — every current holding, not just a top-N slice (this used
+// to be state.holdings.slice(0, 5) labeled "보유 상위"/top holdings; per direct feedback the
+// popover should show the full list, same as the atom widget itself already renders every
+// holding as a node). .pager__page[data-page='summary']'s own overflow-y: auto is what keeps an
+// arbitrarily long list from blowing out the popover's fixed height.
+function renderSummaryHoldings(state) {
+  const page = el('div', 'summary summary--holdings', []);
+  const totals = state.totals;
+
+  if (!totals || !Number.isFinite(totals.totalMarketValue)) {
+    return page;
+  }
+
+  page.append(el('div', 'section-label', ['보유 종목']));
+  const holdings = Array.isArray(state.holdings) ? state.holdings : [];
+  if (!holdings.length) {
     page.append(el('div', 'empty-state', ['보유 종목이 없습니다.']));
   } else {
-    page.append(el('div', 'summary__holdings', topHoldings.map(renderSummaryHolding)));
+    page.append(el('div', 'summary__holdings', holdings.map(renderSummaryHolding)));
   }
 
   // No 뉴스/설정 shortcut buttons here (removed per direct feedback) — the pager dots/swipe,
@@ -531,8 +547,10 @@ function renderSummaryPage(state) {
 }
 
 function updateSummaryPage(state) {
-  setChildren(summaryStatsRoot, renderSummaryPage(state));
-  summaryStatsRoot.classList.remove('is-loading');
+  setChildren(summaryHeroRoot, renderSummaryHero(state));
+  setChildren(summaryHoldingsRoot, renderSummaryHoldings(state));
+  summaryHeroRoot.classList.remove('is-loading');
+  summaryHoldingsRoot.classList.remove('is-loading');
 }
 
 function renderHeader(state) {
@@ -994,7 +1012,8 @@ function showPortfolioSwitchLoading() {
     return;
   }
   newsRoot.classList.add('is-loading');
-  summaryStatsRoot.classList.add('is-loading');
+  summaryHeroRoot.classList.add('is-loading');
+  summaryHoldingsRoot.classList.add('is-loading');
 }
 
 function updateNewsPage(state) {
