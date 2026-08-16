@@ -10,10 +10,16 @@
    triplet — same RGB-triplet-token technique as popover.css's --surface. --atom-ink itself is
    defined in atom-widget.css (the file that actually owns light/dark switching for the desktop
    widget; the web app never sets data-theme at all, so :root's plain warm-cream default is the
-   *only* value that ever applies there, unchanged from before this became a variable). Every
-   alpha value below is untouched from the original hardcoded rules — only the RGB channel was
-   parameterized, so dark mode (the web app's only mode, and the widget's default) renders
-   byte-identical to before. */
+   *only* value that ever applies there, unchanged from before this became a variable).
+
+   .stroke-soft/.stroke-shadow/.node-soft/.label-detail's own alpha values must match
+   src/styles.css's — SketchAtom/AtomLabel (src/components/atom/index.jsx) compute a per-depth JS
+   opacity that multiplies against these CSS alphas, and that JS is genuinely shared (imported, not
+   copied) by both the web app and this widget. src/styles.css's own alphas were raised alongside
+   that JS (see "Atom stage: fix clipping and low contrast on short (MacBook) viewports") to fix
+   furthest-back atoms landing near-invisible — this file's copy had drifted out of sync with that
+   raise (still the pre-fix 0.31/0.54/0.67/0.62) until this comment was updated, silently
+   reintroducing the same low-contrast bug here even though the web app's own copy was fixed. */
 :root {
   --atom-ink: 250, 240, 220;
 }
@@ -56,7 +62,7 @@
 }
 
 .label-detail {
-  fill: rgba(var(--atom-ink), 0.62);
+  fill: rgba(var(--atom-ink), 0.72);
   /* 14px, not 13.5px's old 10.5px pair — measured against the shared AtomLabel component's own
      internal detail-vs-main scale, the old 10.5px rendered detail text ~40% the height of the main
      label even at the widget's default size, well under comfortable legibility. 14px brings it to
@@ -101,7 +107,7 @@
 
 .stroke-soft {
   fill: none;
-  stroke: rgba(var(--atom-ink), 0.31);
+  stroke: rgba(var(--atom-ink), 0.42);
   stroke-width: 1.08;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -109,7 +115,7 @@
 
 .stroke-shadow {
   fill: none;
-  stroke: rgba(var(--atom-ink), 0.54);
+  stroke: rgba(var(--atom-ink), 0.65);
   stroke-width: 2.18;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -125,7 +131,7 @@
 
 .node-soft {
   fill: rgba(var(--atom-ink), 0.09);
-  stroke: rgba(var(--atom-ink), 0.67);
+  stroke: rgba(var(--atom-ink), 0.75);
   stroke-width: 1.2;
   stroke-linecap: round;
   stroke-linejoin: round;
