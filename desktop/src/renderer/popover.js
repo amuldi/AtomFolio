@@ -238,7 +238,18 @@ function createPager({ container, track, dots }) {
     } else {
       target = Math.round(progress);
     }
-    return Math.max(0, Math.min(PAGE_COUNT - 1, target));
+    // One gesture advances at most one page, regardless of how far the raw translate actually
+    // traveled — a trackpad's momentum "tail" alone routinely covers more than one pageWidth even
+    // for what felt like an ordinary single swipe (Chromium keeps delivering decaying deltaX
+    // events for a while after the finger lifts, and nothing here stops accumulating translate
+    // from them), so `progress` at gesture-end could already read e.g. 1.6 off of a single
+    // "flip to the next page" swipe — ceil/round of that lands on index+2, silently skipping a
+    // page (요약 straight to 설정, no 종목 뉴스). currentIndex hasn't changed since this gesture
+    // began (only goToPage below ever moves it, and that only happens once the gesture is fully
+    // resolved), so clamping the raw target to within one of it is exactly "which page did this
+    // one swipe mean to land on", independent of exactly how much raw scroll distance it produced.
+    const clampedToOnePage = Math.max(currentIndex - 1, Math.min(currentIndex + 1, target));
+    return Math.max(0, Math.min(PAGE_COUNT - 1, clampedToOnePage));
   }
 
   function velocityFromSamples(samples) {
