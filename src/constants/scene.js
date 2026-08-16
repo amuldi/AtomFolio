@@ -9,9 +9,10 @@ export const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 // Desktop-widget-only: src/App.jsx (the web app) keeps its own separate, hardcoded
 // AUTO_ROTATE_SPEED = 0.018 rather than importing this one, so raising this value only speeds up
 // the menu bar widget's idle auto-rotate (desktop/src/renderer/atom-view.jsx imports it directly)
-// — the website's own rotation is untouched. Bumped modestly (0.018 -> 0.022, ~22%) per a "just a
-// bit faster" request; nudge further if it still reads as too slow/fast once seen running.
-export const AUTO_ROTATE_SPEED = 0.022;
+// — the website's own rotation is untouched. Bumped once already (0.018 -> 0.022, ~22%) per a
+// "just a bit faster" request; nudged again (0.022 -> 0.026, ~18%) per a follow-up "a little more
+// still" — nudge further if it still reads as too slow/fast once seen running.
+export const AUTO_ROTATE_SPEED = 0.026;
 
 export const DEFAULT_SCENE_CAMERA = {
   panX: 0,
