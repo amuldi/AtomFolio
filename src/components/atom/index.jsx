@@ -19,9 +19,14 @@ export function SketchAtom({
   onPointerLeave,
   onKeyboardSelect,
 }) {
-  const softOpacity = 0.1 + atom.depth * 0.19 + atom.hoverMix * 0.07;
-  const shadowOpacity = 0.18 + atom.depth * 0.3 + atom.hoverMix * 0.08;
-  const mainOpacity = 0.3 + atom.depth * 0.48 + atom.hoverMix * 0.08;
+  // Base offsets raised from 0.1/0.18/0.3 — this JS opacity multiplies with .stroke-*'s own CSS
+  // alpha (see styles.css), so the lowest-depth (furthest-back) atoms were landing well under
+  // 0.1 effective alpha, nearly invisible on a bright/glossy Retina panel. See
+  // atomfolio-atom-two-layer-opacity memory note: same two-layer mechanism as the light-mode bug,
+  // never revisited for dark mode's own low-depth values.
+  const softOpacity = 0.22 + atom.depth * 0.19 + atom.hoverMix * 0.07;
+  const shadowOpacity = 0.3 + atom.depth * 0.3 + atom.hoverMix * 0.08;
+  const mainOpacity = 0.45 + atom.depth * 0.48 + atom.hoverMix * 0.08;
   const scale = atom.scale * (0.86 + atom.depth * 0.1);
   const nodeScale =
     scale *
@@ -70,7 +75,7 @@ export function SketchAtom({
           d={atom.nodePaths[0]}
           opacity={Math.min(
             1,
-            (0.3 + atom.depth * 0.26 + atom.hoverMix * 0.12) * dimFactor * focusBoost,
+            (0.4 + atom.depth * 0.26 + atom.hoverMix * 0.12) * dimFactor * focusBoost,
           )}
           strokeWidth={1.08}
         />
@@ -79,7 +84,7 @@ export function SketchAtom({
           d={atom.nodePaths[1]}
           opacity={Math.min(
             1,
-            (0.48 + atom.depth * 0.38 + atom.hoverMix * 0.08) * dimFactor * focusBoost,
+            (0.6 + atom.depth * 0.38 + atom.hoverMix * 0.08) * dimFactor * focusBoost,
           )}
           strokeWidth={1.24}
         />
@@ -140,7 +145,7 @@ export function AtomLabel({ atom }) {
   const noteX = atom.x + direction.x * atom.labelOffset;
   const noteY = atom.y + direction.y * atom.labelOffset + jitter(atom.seed + 601, 4);
   const opacity =
-    (0.48 + atom.depth * 0.32 + atom.hoverMix * 0.08) *
+    (0.58 + atom.depth * 0.32 + atom.hoverMix * 0.08) *
     (atom.dimmed ? 0.24 : atom.isSelected ? 1.06 : atom.isGroupMatch ? 1.03 : 1);
 
   return (

@@ -6923,19 +6923,31 @@ body::after {
 }
 
 .label-detail {
-  fill: rgba(var(--atom-ink), calc(0.62 * var(--atom-ink-alpha-boost)));
+  fill: rgba(var(--atom-ink), calc(0.72 * var(--atom-ink-alpha-boost)));
   font-size: 10.5px;
 }
 
 .stage-frame {
   position: relative;
   z-index: var(--z-stage);
-  width: min(76vw, 900px, max(18rem, calc(100vw - var(--tool-drawer-current-width) - 3.2rem)));
+  /* The square used to be sized purely from vw, so aspect-ratio:1 could ask for more height
+     than a shorter viewport (a MacBook's own panel vs. a large external monitor) actually has —
+     .app-shell doesn't scroll, so the excess just got clipped. The vh term below caps the square
+     to the vertical room actually left inside .app-shell's own clamp() padding. */
+  width: min(
+    76vw,
+    900px,
+    max(18rem, calc(100vw - var(--tool-drawer-current-width) - 3.2rem)),
+    calc(100vh - 2 * clamp(2.5rem, 8vw, 7rem) - 1.5rem)
+  );
   aspect-ratio: 1;
   display: grid;
   place-items: center;
   perspective: 1400px;
-  transform: translate3d(var(--stage-panel-shift, 0px), calc(-46px - 1.5cm), 0);
+  /* Was a fixed calc(-46px - 1.5cm) ~-103px upward shift regardless of viewport height — a
+     rounding error on a tall external monitor, but a large bite out of a short MacBook window's
+     already-tight vertical room. clamp() scales it down on shorter screens instead. */
+  transform: translate3d(var(--stage-panel-shift, 0px), clamp(-70px, -8vh, -20px), 0);
   transition:
     width 320ms cubic-bezier(0.2, 0.78, 0.22, 1),
     transform 320ms cubic-bezier(0.2, 0.78, 0.22, 1);
@@ -7294,7 +7306,7 @@ body::after {
 
 .stroke-soft {
   fill: none;
-  stroke: rgba(var(--atom-ink), calc(0.31 * var(--atom-ink-alpha-boost)));
+  stroke: rgba(var(--atom-ink), calc(0.42 * var(--atom-ink-alpha-boost)));
   stroke-width: 1.08;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -7302,7 +7314,7 @@ body::after {
 
 .stroke-shadow {
   fill: none;
-  stroke: rgba(var(--atom-ink), calc(0.54 * var(--atom-ink-alpha-boost)));
+  stroke: rgba(var(--atom-ink), calc(0.65 * var(--atom-ink-alpha-boost)));
   stroke-width: 2.18;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -7318,7 +7330,7 @@ body::after {
 
 .node-soft {
   fill: rgba(var(--atom-ink), calc(0.09 * var(--atom-ink-alpha-boost)));
-  stroke: rgba(var(--atom-ink), calc(0.67 * var(--atom-ink-alpha-boost)));
+  stroke: rgba(var(--atom-ink), calc(0.75 * var(--atom-ink-alpha-boost)));
   stroke-width: 1.2;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -7547,7 +7559,12 @@ body::after {
   }
 
   .stage-frame {
-    width: min(88vw, 760px, max(18rem, calc(100vw - var(--tool-drawer-current-width) - 2rem)));
+    width: min(
+      88vw,
+      760px,
+      max(18rem, calc(100vw - var(--tool-drawer-current-width) - 2rem)),
+      calc(100vh - 2 * clamp(2.5rem, 8vw, 7rem) - 1rem)
+    );
   }
 
   .stage-breath {
@@ -7955,8 +7972,8 @@ body::after {
   }
 
   .stage-frame {
-    width: 100%;
-    transform: translate3d(var(--stage-panel-shift, 0px), calc(-28px - 1.5cm), 0);
+    width: min(100%, calc(100vh - 2 * 1.6rem - 1rem));
+    transform: translate3d(var(--stage-panel-shift, 0px), clamp(-50px, -6vh, -14px), 0);
   }
 
   .stage-frame::after {
