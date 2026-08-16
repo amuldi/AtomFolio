@@ -24,10 +24,13 @@ import {
 
 // Same tuning as App.jsx's DRAG_ROTATION_SENSITIVITY/DRAG_SPIN_DECAY/MAX_DRAG_SPIN_VELOCITY/
 // DRAG_ROTATION_RESPONSE/IDLE_ROTATION_RESPONSE — not exported from scene.js (they're plain
-// top-level consts in App.jsx), copied here so the drag feel matches exactly.
+// top-level consts in App.jsx), copied here so the drag feel matches exactly. Keep MAX_DRAG_SPIN_
+// VELOCITY/DRAG_SPIN_DECAY in sync with App.jsx's own copy in particular — see that file's comment
+// on why these two specifically (not just "match by convention" like the others) have to move
+// together: their ratio is the hard ceiling on how far the atom can keep spinning after release.
 const DRAG_ROTATION_SENSITIVITY = 0.68;
 const DRAG_SPIN_DECAY = 7.4;
-const MAX_DRAG_SPIN_VELOCITY = 0.58;
+const MAX_DRAG_SPIN_VELOCITY = 3.2;
 const DRAG_ROTATION_RESPONSE = 30;
 const IDLE_ROTATION_RESPONSE = 10;
 
