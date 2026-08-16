@@ -130,7 +130,11 @@ function createPager({ container, track, dots }) {
   const VELOCITY_FLICK_THRESHOLD = 0.35; // px/ms — above this, a flick commits to the next/prev
   // page even if it hasn't crossed the halfway point yet.
   const AXIS_LOCK_THRESHOLD = 6; // px of movement before a drag commits to horizontal vs vertical
-  const WHEEL_IDLE_MS = 120; // gap with no wheel events that means "the trackpad gesture ended"
+  // Gap with no wheel events that means "the trackpad gesture ended". Was 120 — bumped up a bit
+  // as cheap extra slack around the same bursty-delivery issue handleWheel's own axis-lock fix
+  // now handles for real (see that function's comment): a still-live gesture occasionally has a
+  // frame-to-frame gap wider than a bare minimum here would tolerate.
+  const WHEEL_IDLE_MS = 160;
 
   let pageWidth = container.getBoundingClientRect().width || 1;
   let currentIndex = 0;
@@ -346,8 +350,23 @@ function createPager({ container, track, dots }) {
 
   // ---- Trackpad wheel (horizontal deltaX) ----
 
+  // A continuous two-finger swipe doesn't arrive as one clean deltaX-only stream — mid-gesture
+  // frames routinely have a transient deltaY blip larger than that frame's deltaX (diagonal
+  // finger noise, or the trailing/momentum tail of the gesture thinning out). Deciding the axis
+  // fresh on *every* event (the old `Math.abs(deltaX) <= Math.abs(deltaY)` check with no memory
+  // of wheelState) meant those blips fell through untouched: not added to the pan, and — because
+  // returning early here also skipped the idleTimer reset below — not even keeping the gesture's
+  // idle clock alive. A long enough run of them let WHEEL_IDLE_MS lapse mid-swipe, which ended
+  // the gesture early (goToPage firing on a half-finished pan) right before the *next* real
+  // deltaX event arrived and started a brand new gesture on top of it — two separate page-turns
+  // out of what was physically one swipe (the "두 칸씩 넘어가는" jump), each with its own
+  // stopSpring()-then-restart cutting the settle animation short (the "떨리는" tremor). The axis
+  // is now decided once, the same way the pointer-drag handler above locks dragState.axis on
+  // first move and never re-evaluates it — once a gesture has committed to horizontal, every
+  // event until it actually goes idle counts toward it regardless of that single frame's deltaY.
   function handleWheel(event) {
-    if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
+    const committedToHorizontal = wheelState != null;
+    if (!committedToHorizontal && Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
       return; // vertical scroll — let the page under the cursor handle it normally
     }
     event.preventDefault();
@@ -467,6 +486,55 @@ function renderConnect(state) {
 
 // ---------- Summary page (mini portfolio dashboard, page 0) ----------
 
+function findFieldValue(fields, label) {
+  const match = Array.isArray(fields) ? fields.find((field) => field?.label === label) : null;
+  return match ? Number(match.value) : null;
+}
+
+// state.holdings (summarizeWorkspaceHoldings) only covers positions with a computable
+// marketValue, which needs a share quantity — the exact same gap atom-view.jsx's own
+// buildSelectedInfo already works around for the atom widget's node readout (see its comment).
+// state.items is the raw, unfiltered list that feeds the atom's own generateAtomLayout, so it's
+// always the complete count (every node the atom actually draws) — a weight-only import (12
+// holdings on the atom, only 8 with a computed marketValue) used to mean this list quietly
+// dropped the other 4 instead of just showing them without a return%. Matches an item to its
+// holding the same way atom-view.jsx does (ticker/stockCode/code, whichever the position's own
+// `code` happens to be), and falls back to the raw item (label + weight from its own 비중(%)
+// field, no return — nothing accurate to show without a real holding, same reasoning as this
+// file's atom-view.jsx sibling) when there isn't one.
+function buildDisplayHoldings(state) {
+  const holdings = Array.isArray(state.holdings) ? state.holdings : [];
+  const items = Array.isArray(state.items) ? state.items : [];
+
+  if (!items.length) {
+    // No raw items to fall back to (e.g. an older cached state shape) — the summarized list is
+    // still better than nothing.
+    return holdings;
+  }
+
+  return items
+    .map((item) => {
+      const keys = [item?.ticker, item?.stockCode, item?.code]
+        .map((value) => String(value ?? '').trim())
+        .filter(Boolean);
+      const holding = keys.length
+        ? holdings.find((entry) => keys.includes(String(entry.code ?? '').trim()))
+        : null;
+
+      if (holding) {
+        return holding;
+      }
+
+      const weightPercent = findFieldValue(item.fields, '비중(%)');
+      return {
+        label: item.label || item.stockName || item.name || item.ticker || '종목',
+        weightPercent: Number.isFinite(weightPercent) ? weightPercent : null,
+        returnRate: null,
+      };
+    })
+    .sort((a, b) => (b.weightPercent ?? -Infinity) - (a.weightPercent ?? -Infinity));
+}
+
 function renderSummaryHolding(holding) {
   const returnValue = Number.isFinite(holding.returnRate) ? holding.returnRate : null;
   return el('div', 'summary-holding', [
@@ -532,7 +600,7 @@ function renderSummaryHoldings(state) {
   }
 
   page.append(el('div', 'section-label', ['보유 종목']));
-  const holdings = Array.isArray(state.holdings) ? state.holdings : [];
+  const holdings = buildDisplayHoldings(state);
   if (!holdings.length) {
     page.append(el('div', 'empty-state', ['보유 종목이 없습니다.']));
   } else {
