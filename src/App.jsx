@@ -3697,6 +3697,12 @@ function ToolSideDrawer({
   // dependency array while still being read synchronously by all three auto-fill sites below.
   const manualAssetClassTouchedRef = useRef(false);
   const manualSuggestionRef = useRef(null);
+  // Bumped on every loadMarketData() call below (the initial lookup and each 30s background
+  // refresh tick share one AbortController for the whole effect lifetime, so controller.signal
+  // .aborted alone can't tell two *different* ticks apart) — a response only gets applied if its
+  // own token still matches the latest one issued, so a slow tick's response arriving after a
+  // faster, later tick's can't clobber the newer data with stale numbers.
+  const manualMarketRequestTokenRef = useRef(0);
   const manualDraftRef = useRef({
     stockName: '',
     ticker: '',
@@ -3895,6 +3901,13 @@ function ToolSideDrawer({
     let intervalId = 0;
 
     const loadMarketData = async (silent = false) => {
+      // One AbortController covers the whole effect lifetime (both this call and every 30s
+      // background refresh tick below share it), so controller.signal.aborted alone only ever
+      // tells us the *effect* ended — it can't tell two different ticks apart. A request token
+      // per call is what stops a slow tick's response from landing after (and clobbering) a
+      // faster, later tick's — same pattern as loadNews's own requestIdRef.
+      const requestId = ++manualMarketRequestTokenRef.current;
+
       if (!silent) {
         setManualMarketStatus('loading');
         setManualMarketError('');
@@ -3908,7 +3921,7 @@ function ToolSideDrawer({
           signal: controller.signal,
         });
 
-        if (controller.signal.aborted) {
+        if (manualMarketRequestTokenRef.current !== requestId || controller.signal.aborted) {
           return;
         }
 
@@ -3929,7 +3942,7 @@ function ToolSideDrawer({
           setManualAssetClass(nextData.assetClass);
         }
       } catch {
-        if (controller.signal.aborted) {
+        if (manualMarketRequestTokenRef.current !== requestId || controller.signal.aborted) {
           return;
         }
 
@@ -5702,6 +5715,14 @@ export default function App() {
   const restoredPortfolioStateRef = useRef(null);
   const portfolioSyncTimerRef = useRef(0);
   const portfolioAutoEnrichmentRef = useRef(new Set());
+  // Latest request token issued per entryId by scheduleLiveQuoteEnrichment below — the 90s
+  // background refresh interval fires again regardless of whether the previous round's fetch
+  // has resolved yet, and enrichPortfolioItemsWithLiveQuotes has no cancellation of its own, so a
+  // slow round finishing after a faster, later one would otherwise silently overwrite fresher
+  // quotes with stale ones for the rest of that 90s window. Keyed by entryId (not a single ref)
+  // since more than one portfolio's items can be scheduled for enrichment around the same time
+  // (import, hydration, and the live-refresh tick all call this for whichever entry is theirs).
+  const liveQuoteEnrichmentTokenRef = useRef(new Map());
   if (restoredPortfolioStateRef.current === null) {
     restoredPortfolioStateRef.current = readStoredPortfolioState();
   }
@@ -6044,9 +6065,20 @@ export default function App() {
       return;
     }
 
+    const tokens = liveQuoteEnrichmentTokenRef.current;
+    const requestId = (tokens.get(entryId) ?? 0) + 1;
+    tokens.set(entryId, requestId);
+
     void (async () => {
       try {
         const enrichedItems = await enrichPortfolioItemsWithLiveQuotes(seedItems);
+
+        if (tokens.get(entryId) !== requestId) {
+          // A newer enrichment for this same entry was scheduled (and possibly already
+          // resolved) while this one was in flight — apply nothing so its stale quotes can't
+          // clobber whatever the newer round already wrote.
+          return;
+        }
 
         setPortfolioEntries((current) =>
           current.map((entry) => {
