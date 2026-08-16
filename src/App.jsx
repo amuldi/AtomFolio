@@ -137,15 +137,22 @@ const LARGE_SCENE_ATOM_THRESHOLD = 12;
 const DRAG_ROTATION_RESPONSE = 30;
 const IDLE_ROTATION_RESPONSE = 10;
 const DRAG_ROTATION_SENSITIVITY = 0.68;
-const DRAG_SPIN_DECAY = 7.4;
+// Step 2/2 of the drag-inertia fix (see MAX_DRAG_SPIN_VELOCITY's own comment for step 1 and the
+// ceiling formula both constants share): lowered 7.4 -> 3.0 on top of the raised velocity cap
+// below. Simulated: a moderate flick that continued ~22° over ~770ms with the cap alone now
+// continues ~53° over ~1.9s — long enough to actually read as a decaying glide rather than a
+// slightly-longer snap. Left untouched in step 1 on its own (holding this at 7.4) specifically to
+// verify the velocity-cap raise's effect in isolation first, per changing one tuning value at a
+// time; low decay alone (without the higher cap) can't reach a useful distance without an
+// unreasonably long duration, since both distance and duration scale with 1/decay together.
+const DRAG_SPIN_DECAY = 3.0;
 // The total angle the atom keeps spinning after release, integrated over the whole decay curve,
 // works out to exactly MAX_DRAG_SPIN_VELOCITY / DRAG_SPIN_DECAY radians — a hard ceiling no
-// gesture can exceed, regardless of how hard it's flicked. At the old 0.58, that ceiling was
-// 0.58/7.4 ≈ 0.078 rad ≈ 4.5°: even a flick that instantly saturated the velocity cap on release
-// produced under 5° of continued rotation over ~0.5s, which is why the "spins hard, then eases to
-// a stop" effect this was meant to have read as "doesn't spin at all" — the numbers were never
-// zero, just below the threshold anyone would actually notice. Raised on its own first (this
-// constant only) to confirm the ceiling math above before touching DRAG_SPIN_DECAY too.
+// gesture can exceed, regardless of how hard it's flicked. At the old 0.58/7.4, that ceiling was
+// ~0.078 rad ≈ 4.5°: even a flick that instantly saturated the velocity cap on release produced
+// under 5° of continued rotation over ~0.5s, which is why the "spins hard, then eases to a stop"
+// effect this was meant to have read as "doesn't spin at all" — the numbers were never zero, just
+// below the threshold anyone would actually notice.
 const MAX_DRAG_SPIN_VELOCITY = 3.2;
 const SECURITY_ENRICHMENT_RETRY_DELAYS_MS = [0, 1500, 5000, 14000];
 const ACTIVE_FLOATING_TOOL_Z_INDEX = 80;

@@ -29,7 +29,7 @@ import {
 // on why these two specifically (not just "match by convention" like the others) have to move
 // together: their ratio is the hard ceiling on how far the atom can keep spinning after release.
 const DRAG_ROTATION_SENSITIVITY = 0.68;
-const DRAG_SPIN_DECAY = 7.4;
+const DRAG_SPIN_DECAY = 3.0;
 const MAX_DRAG_SPIN_VELOCITY = 3.2;
 const DRAG_ROTATION_RESPONSE = 30;
 const IDLE_ROTATION_RESPONSE = 10;
