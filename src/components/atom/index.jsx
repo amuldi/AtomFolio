@@ -124,9 +124,17 @@ export function SketchAura({ atom, phase }) {
     <path
       className="aura-line"
       d={buildBondPath(atom, 0, phase)}
+      // Base offsets doubled (0.03/0.04/0.05 -> 0.06/0.08/0.1), .aura-line's own CSS alpha raised
+      // to match (see styles.css) — the same two-layer opacity mechanism as SketchAtom's
+      // stroke-soft/shadow/main above, just never caught for this element: the old pairing put
+      // the effective (JS x CSS) alpha at ~0.003-0.015 across the whole depth range, below any
+      // visible threshold, so the aura rendered as nothing at all rather than the soft halo it
+      // was meant to be. Still meant to read as distinctly softer than the structural bond lines
+      // above it (their own floor is 0.22-0.6+), not as bright — this raise gets it into an
+      // actually-visible ~0.02-0.09 effective range, not parity with them.
       opacity={Math.min(
-        0.22,
-        (0.03 + atom.depth * 0.04 + atom.dragMix * 0.05) * dimFactor * focusBoost,
+        0.4,
+        (0.06 + atom.depth * 0.08 + atom.dragMix * 0.1) * dimFactor * focusBoost,
       )}
       strokeWidth={5.4 + atom.scale * 2.5}
     />

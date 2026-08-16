@@ -12,14 +12,16 @@
    widget; the web app never sets data-theme at all, so :root's plain warm-cream default is the
    *only* value that ever applies there, unchanged from before this became a variable).
 
-   .stroke-soft/.stroke-shadow/.node-soft/.label-detail's own alpha values must match
-   src/styles.css's — SketchAtom/AtomLabel (src/components/atom/index.jsx) compute a per-depth JS
-   opacity that multiplies against these CSS alphas, and that JS is genuinely shared (imported, not
-   copied) by both the web app and this widget. src/styles.css's own alphas were raised alongside
-   that JS (see "Atom stage: fix clipping and low contrast on short (MacBook) viewports") to fix
-   furthest-back atoms landing near-invisible — this file's copy had drifted out of sync with that
-   raise (still the pre-fix 0.31/0.54/0.67/0.62) until this comment was updated, silently
-   reintroducing the same low-contrast bug here even though the web app's own copy was fixed. */
+   .stroke-soft/.stroke-shadow/.node-soft/.label-detail/.aura-line's own alpha values must match
+   src/styles.css's — SketchAtom/AtomLabel/SketchAura (src/components/atom/index.jsx) compute a
+   per-depth JS opacity that multiplies against these CSS alphas, and that JS is genuinely shared
+   (imported, not copied) by both the web app and this widget. src/styles.css's own alphas were
+   raised alongside that JS (see "Atom stage: fix clipping and low contrast on short (MacBook)
+   viewports" for the first four, and the .aura-line follow-up after it) to fix furthest-back
+   atoms — and separately, the aura halo itself — landing near-invisible. This file's copy drifted
+   out of sync with the first raise once already (still the pre-fix 0.31/0.54/0.67/0.62 for a
+   while); .aura-line's own 0.11 -> 0.22 was ported over in the same change that raised it in
+   src/styles.css, specifically to not repeat that. */
 :root {
   --atom-ink: 250, 240, 220;
 }
@@ -72,7 +74,8 @@
 
 .aura-line {
   fill: none;
-  stroke: rgba(var(--atom-ink), 0.11);
+  /* Kept in sync with src/styles.css's own 0.11 -> 0.22 raise — see that file's comment. */
+  stroke: rgba(var(--atom-ink), 0.22);
   stroke-width: 8;
   stroke-linecap: round;
   stroke-linejoin: round;

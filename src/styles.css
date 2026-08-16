@@ -7280,7 +7280,10 @@ body::after {
 
 .aura-line {
   fill: none;
-  stroke: rgba(var(--atom-ink), calc(0.11 * var(--atom-ink-alpha-boost)));
+  /* 0.11 -> 0.22: paired with SketchAura's own doubled JS opacity floors (see atom/index.jsx),
+     the old pairing landed at ~0.003-0.015 effective alpha across the whole depth range — the
+     aura rendered as nothing, not the soft halo it was meant to be. */
+  stroke: rgba(var(--atom-ink), calc(0.22 * var(--atom-ink-alpha-boost)));
   stroke-width: 8;
   stroke-linecap: round;
   stroke-linejoin: round;
