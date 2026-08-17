@@ -587,55 +587,6 @@ function bucketLabel(key) {
   return labels[key] ?? key;
 }
 
-export function generateTwinInsights(result) {
-  const twin = result?.twin ?? result;
-  const positions = result?.positions ?? twin?.positions ?? [];
-  const insights = [];
-  const totalWeight = (predicate) =>
-    positions.reduce((sum, position) => sum + (predicate(position) ? position.weight : 0), 0);
-  const techWeight = totalWeight(isTechAsset);
-  const usWeight = totalWeight(isUsAsset);
-  const defensiveWeight = totalWeight((position) => isGoldCashAsset(position) || isDividendAsset(position));
-  const reitWeight = totalWeight(isReitAsset);
-  const topPosition = [...positions].sort((left, right) => right.weight - left.weight)[0];
-
-  if (techWeight >= 0.32) {
-    insights.push('현재 포트폴리오는 기술주 충격에 민감합니다.');
-  }
-
-  if (usWeight >= 0.5) {
-    insights.push('미국 자산 비중이 높아 환율과 미국 증시 변동에 영향을 크게 받을 수 있습니다.');
-  }
-
-  if (defensiveWeight >= 0.18) {
-    insights.push('금, 현금성 또는 배당 자산이 하락장 방어에 기여합니다.');
-  } else {
-    insights.push('방어형 자산 비중이 낮아 급락장에서 완충력이 제한될 수 있습니다.');
-  }
-
-  if (reitWeight >= 0.2) {
-    insights.push('리츠 비중이 있어 금리 상승 시 평가 변동성이 커질 수 있습니다.');
-  }
-
-  if (topPosition && topPosition.weight >= 0.3) {
-    insights.push(`${topPosition.label} 비중이 높아 단일 종목 또는 단일 ETF 영향이 크게 나타납니다.`);
-  }
-
-  if (result?.largestLossContributor) {
-    insights.push(`${result.largestLossContributor.label}이 이번 시나리오의 가장 큰 손실 기여 종목입니다.`);
-  }
-
-  if (result?.defensiveAsset && result.defensiveAsset.changeValue >= 0) {
-    insights.push(`${result.defensiveAsset.label}이 방어적인 자산으로 작동합니다.`);
-  }
-
-  if (Array.isArray(result?.warnings) && result.warnings.length) {
-    insights.push(result.warnings[0]);
-  }
-
-  return insights.slice(0, 5);
-}
-
 export const digitalTwinFormatters = {
   bucketLabel,
   formatPercent,
