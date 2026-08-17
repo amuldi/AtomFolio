@@ -6,6 +6,15 @@ export const CAMERA_DISTANCE = 470;
 export const CAMERA_NEAR_CLIP = 136;
 export const TRACKBALL_RADIUS = 208;
 export const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+// Multiplies the base `node:` radius generateAtomLayout (utils/scene.js) assigns each atom
+// (7.8-8.7 depending on layout branch) — one shared lever for "make every atom's visible ring
+// bigger/smaller" instead of hand-editing three separate literals. Tried raising this repeatedly
+// (1 -> 1.3 -> 1.7 -> 2.1) chasing "atom too small" feedback that actually meant the whole stage
+// (see .stage-frame's own width formula in styles.css, which is the real lever for that — it
+// scales the whole SVG, nodes included, uniformly via viewBox scaling). Scaling *just* node
+// radius on top of that made individual stock-nodes look oversized relative to the center/lines
+// instead of the whole thing reading as bigger — back to 1, the original proportions.
+export const NODE_BASE_RADIUS_SCALE = 1;
 // Desktop-widget-only: src/App.jsx (the web app) keeps its own separate, hardcoded
 // AUTO_ROTATE_SPEED = 0.018 rather than importing this one, so raising this value only speeds up
 // the menu bar widget's idle auto-rotate (desktop/src/renderer/atom-view.jsx imports it directly)

@@ -141,7 +141,23 @@ export function SketchAura({ atom, phase }) {
   );
 }
 
-export function AtomLabel({ atom }) {
+// atom.label runs at full length with no clamp when maxLength is null (the desktop default —
+// see App.jsx's atomLabelMaxLength for why: the stage has wide margins there, nothing to overflow
+// into). A holding name longer than maxLength gets a trailing "…" the same way compactLabel/
+// compactFileName elsewhere in this app shorten long names — just inlined here rather than
+// imported, since this is the one place in the whole app doing it inside raw SVG <text> rather
+// than an HTML element, and the two existing compactLabel implementations already disagree with
+// each other on edge-case behavior (see lib/toolDrawerShared.js's own comment on that) — a third,
+// again-slightly-different copy would only make that worse.
+function truncateLabelText(value, maxLength) {
+  const text = String(value ?? '');
+  if (!maxLength || text.length <= maxLength) {
+    return text;
+  }
+  return `${text.slice(0, Math.max(1, maxLength - 1))}…`;
+}
+
+export function AtomLabel({ atom, maxLength = null }) {
   const length = Math.hypot(atom.x, atom.y) || 1;
   const direction = {
     x: atom.x / length,
@@ -155,6 +171,10 @@ export function AtomLabel({ atom }) {
   const opacity =
     (0.58 + atom.depth * 0.32 + atom.hoverMix * 0.08) *
     (atom.dimmed ? 0.24 : atom.isSelected ? 1.06 : atom.isGroupMatch ? 1.03 : 1);
+  // Only the name gets clamped, not the detail (return %) line below it — that's already short
+  // ("+12.3%") and truncating it could hide the sign, which matters a lot more than a few extra
+  // characters of a company name do.
+  const labelText = truncateLabelText(atom.label, maxLength);
 
   return (
     <g
@@ -165,7 +185,7 @@ export function AtomLabel({ atom }) {
       opacity={opacity}
     >
       <text className="label-main" textAnchor={anchor} x={baseX} y="-2">
-        {atom.label}
+        {labelText}
       </text>
       {atom.detail ? (
         <text className="label-detail" textAnchor={anchor} x={baseX} y="13">
@@ -301,6 +321,7 @@ export function AtomSketch({
   standalone,
   svgRef,
   ariaLabel,
+  maxLabelLength = null,
   highlightActive,
   onCenterClick,
   onCenterPointerDown,
@@ -557,7 +578,7 @@ export function AtomSketch({
 
       <g className="label-layer">
         {atoms.map((atom) => (
-          <AtomLabel key={`label-${atom.id}`} atom={atom} />
+          <AtomLabel key={`label-${atom.id}`} atom={atom} maxLength={maxLabelLength} />
         ))}
       </g>
     </svg>

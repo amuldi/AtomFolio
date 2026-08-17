@@ -9,6 +9,7 @@ import {
   MIN_ATOMS,
   LOW_COUNT_LAYOUTS,
   DEFAULT_SCENE_CAMERA,
+  NODE_BASE_RADIUS_SCALE,
 } from '../constants/scene.js';
 import { filterPortfolioItemsForAtomScene } from './portfolioItems.js';
 
@@ -192,19 +193,6 @@ export function buildScoreAxisPath(start, end, seed) {
   )}`;
 }
 
-export function buildSketchBoxPath(x, y, width, height, seed, wobble = 1.4) {
-  return buildScoreSketchPolygon(
-    [
-      { x, y },
-      { x: x + width, y: y + jitter(seed + 1.2, wobble * 0.18) },
-      { x: x + width + jitter(seed + 2.4, wobble * 0.18), y: y + height },
-      { x: x + jitter(seed + 3.6, wobble * 0.18), y: y + height + jitter(seed + 4.8, wobble * 0.18) },
-    ],
-    seed,
-    wobble,
-  );
-}
-
 export function createAtomState(config) {
   return {
     ...config,
@@ -320,7 +308,7 @@ export function generateAtomLayout(items, options = {}) {
       {
         id: 'a1',
         direction: [0.86, 0.22, 0.46],
-        node: 8.7,
+        node: 8.7 * NODE_BASE_RADIUS_SCALE,
         seed: 11,
         ...buildAtomLayoutFields(visibleItems[0], 'Stock', resolveLabel),
       },
@@ -343,7 +331,7 @@ export function generateAtomLayout(items, options = {}) {
       return {
         id: `a${index + 1}`,
         direction: [direction.x, direction.y, direction.z],
-        node: 7.9 + noise(1800 + index * 31) * 1.6,
+        node: (7.9 + noise(1800 + index * 31) * 1.6) * NODE_BASE_RADIUS_SCALE,
         seed: 11 + index * 23,
         ...buildAtomLayoutFields(visibleItems[index], `Stock ${index + 1}`, resolveLabel),
       };
@@ -364,7 +352,7 @@ export function generateAtomLayout(items, options = {}) {
     return {
       id: `a${index + 1}`,
       direction: [direction.x, direction.y, direction.z],
-      node: 7.8 + noise(1800 + index * 31) * 1.7,
+      node: (7.8 + noise(1800 + index * 31) * 1.7) * NODE_BASE_RADIUS_SCALE,
       seed: 11 + index * 23,
       ...buildAtomLayoutFields(visibleItems[index], `Stock ${index + 1}`, resolveLabel),
     };
