@@ -1,0 +1,197 @@
+/* Standalone legal pages — reuses the main app's own tokens (--frame-ink-a, --ui-font,
+   --ease-spring/--ease-expo — all global from styles.css, loaded before this file via main.jsx)
+   AND its visual signatures, not just its palette: the asymmetric "sketch" card radius every
+   floating panel in the app uses (.command-palette, .atom-detail-panel), and a self-contained
+   vignette+grain background matching body::before/::after's own recipe (kept here rather than
+   relying on those pseudo-elements showing through, since this page's own opaque background
+   would need to stay transparent for that to work, and that's a fragile thing for a future edit
+   to accidentally break — self-contained is one fewer cross-file assumption).
+   Deliberately plain cream/white throughout, no amber/gold accent and no atom mark — both were
+   tried here and asked to come back out; see the plain "no glow" comment on --glow-highlight in
+   styles.css for the color half of that, this file just never reaches for that token at all. */
+
+/* height (not min-height) + its own overflow-y — body itself has overflow: hidden globally (see
+   styles.css), tuned for the atom app's fixed single-viewport stage, which has no reason to
+   scroll. That rule doesn't know or care that a legal page's actual content is often taller than
+   one screen — with only min-height here, the excess had nowhere to go: not visible, and not
+   reachable by scrolling either, since the ancestor that would normally provide the scrollbar
+   was the exact one refusing to scroll. Making .legal-page its own fixed-height scroll container
+   sidesteps that without touching body's own rule, which the main app still needs unchanged. */
+.legal-page {
+  position: relative;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  background: var(--app-bg, #000);
+  color: rgba(var(--frame-ink-a, 255, 248, 233), 0.92);
+  font-family: var(--ui-font);
+  padding: clamp(2.4rem, 6vw, 5.5rem) 1.5rem 6rem;
+}
+
+.legal-page::before,
+.legal-page::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.legal-page::before {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(var(--frame-ink-a, 255, 248, 233), 0.09), transparent 42%),
+    radial-gradient(circle at 50% 0%, rgba(var(--frame-ink-a, 255, 248, 233), 0.045), transparent 62%);
+}
+
+.legal-page::after {
+  opacity: 0.1;
+  background:
+    radial-gradient(circle at 18% 22%, rgba(var(--frame-ink-a, 255, 248, 233), 0.14) 0 0.8px, transparent 1px),
+    radial-gradient(circle at 76% 64%, rgba(var(--frame-ink-a, 255, 248, 233), 0.1) 0 0.7px, transparent 0.95px),
+    radial-gradient(circle at 42% 86%, rgba(var(--frame-ink-a, 255, 248, 233), 0.08) 0 0.6px, transparent 0.9px);
+  background-size: 180px 180px, 210px 210px, 240px 240px;
+}
+
+.legal-page__inner {
+  position: relative;
+  max-width: 640px;
+  margin: 0 auto;
+  animation: legal-page-in 420ms var(--ease-expo, ease) backwards;
+}
+
+@keyframes legal-page-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.legal-page__header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-bottom: 2.2rem;
+}
+
+.legal-page__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: rgba(var(--frame-ink-c, 250, 240, 220), 0.6);
+  text-decoration: none;
+  margin-bottom: 1.6rem;
+  transition: color 180ms var(--ease-smooth, ease);
+}
+
+.legal-page__back-arrow {
+  display: inline-block;
+  transition: transform 180ms var(--ease-spring, ease);
+}
+
+.legal-page__back:hover {
+  color: rgba(var(--frame-ink-a, 255, 248, 233), 0.95);
+}
+
+.legal-page__back:hover .legal-page__back-arrow {
+  transform: translateX(-3px);
+}
+
+.legal-page__title {
+  font-family: 'Iowan Old Style', 'Baskerville', 'Times New Roman', serif;
+  font-style: italic;
+  font-weight: 600;
+  font-size: clamp(1.7rem, 4.4vw, 2.3rem);
+  margin: 0 0 0.5rem;
+}
+
+.legal-page__updated {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: rgba(var(--frame-ink-c, 250, 240, 220), 0.5);
+  margin: 0;
+}
+
+/* Same asymmetric-radius recipe .command-palette/.atom-detail-panel use (see styles.css) — the
+   one small detail that most reads as "hand-sketched" rather than "default rounded-rect card",
+   which is what ties this page to the rest of the app at a glance before a single word is read. */
+.legal-page__card {
+  border: 1px solid rgba(var(--frame-hairline, 255, 242, 216), 0.13);
+  border-radius: 20px 24px 18px 22px / 22px 18px 22px 20px;
+  background: rgba(var(--frame-surface, 5, 5, 5), 0.62);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 0 0 1px rgba(var(--frame-ink-a, 255, 248, 233), 0.03) inset,
+    0 30px 80px rgba(var(--frame-void, 0, 0, 0), 0.5);
+  padding: clamp(1.6rem, 4vw, 2.6rem);
+}
+
+.legal-page__body h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  font-size: 1.02rem;
+  font-weight: 700;
+  margin: 2.2rem 0 0.7rem;
+  color: rgba(var(--frame-ink-a, 255, 248, 233), 0.95);
+}
+
+.legal-page__body h2::before {
+  content: '';
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 999px;
+  background: rgba(var(--frame-ink-a, 255, 248, 233), 0.5);
+  flex: none;
+}
+
+.legal-page__body h2:first-child {
+  margin-top: 0;
+}
+
+.legal-page__body p {
+  font-size: 0.9rem;
+  line-height: 1.75;
+  color: rgba(var(--frame-ink-c, 250, 240, 220), 0.78);
+  margin: 0 0 1rem;
+}
+
+.legal-page__body ul {
+  margin: 0 0 1rem;
+  padding-left: 1.3rem;
+}
+
+.legal-page__body li {
+  font-size: 0.9rem;
+  line-height: 1.75;
+  color: rgba(var(--frame-ink-c, 250, 240, 220), 0.78);
+  margin-bottom: 0.4rem;
+}
+
+.legal-page__body strong {
+  color: rgba(var(--frame-ink-a, 255, 248, 233), 0.95);
+  font-weight: 700;
+}
+
+.legal-page__body a {
+  color: rgba(var(--frame-ink-a, 255, 248, 233), 0.95);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(var(--frame-ink-a, 255, 248, 233), 0.35);
+  transition: border-color 180ms var(--ease-smooth, ease);
+}
+
+.legal-page__body a:hover {
+  border-bottom-color: rgba(var(--frame-ink-a, 255, 248, 233), 0.8);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .legal-page__inner {
+    animation: none;
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "AtomFolio",
+  "short_name": "AtomFolio",
+  "description": "투자 CSV, 실시간 시세, 뉴스, 투자 시뮬레이션을 하나의 포트폴리오 화면으로 묶어 보여주는 투자 데이터 대시보드",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
