@@ -277,21 +277,6 @@ function importRecordFromRow(row) {
   };
 }
 
-function aiAnalysisFromRow(row) {
-  return {
-    id: String(row.id),
-    portfolioId: row.portfolio_id ? String(row.portfolio_id) : null,
-    analysisType: String(row.analysis_type ?? 'portfolio-summary'),
-    inputHash: String(row.input_hash ?? ''),
-    model: row.model ? String(row.model) : null,
-    status: String(row.status ?? 'ready'),
-    inputSummary: parseJsonValue(row.input_summary, {}),
-    result: parseJsonValue(row.result, {}),
-    createdAt: toIsoString(row.created_at),
-    updatedAt: toIsoString(row.updated_at),
-  };
-}
-
 function cleanNullableText(value) {
   const text = String(value ?? '').trim();
   return text || null;
@@ -673,106 +658,6 @@ export async function upsertPostgresImportHistory(workspaceId, importRecord) {
   return {
     workspaceId,
     importRecord: importRecordFromRow(rows[0]),
-  };
-}
-
-export async function listPostgresAiAnalyses(
-  workspaceId,
-  { portfolioId = '', analysisType = '', inputHash = '', limit = 20 } = {},
-) {
-  const clauses = ['workspace_id = $1'];
-  const params = [workspaceId];
-
-  if (portfolioId) {
-    params.push(portfolioId);
-    clauses.push(`portfolio_id = $${params.length}`);
-  }
-
-  if (analysisType) {
-    params.push(analysisType);
-    clauses.push(`analysis_type = $${params.length}`);
-  }
-
-  if (inputHash) {
-    params.push(inputHash);
-    clauses.push(`input_hash = $${params.length}`);
-  }
-
-  params.push(Math.min(100, Math.max(1, Number(limit) || 20)));
-
-  const rows = await query(
-    `SELECT *
-     FROM atomfolio_ai_analyses
-     WHERE ${clauses.join(' AND ')}
-     ORDER BY created_at DESC, id ASC
-     LIMIT $${params.length}`,
-    params,
-  );
-
-  return {
-    workspaceId,
-    analyses: rows.map(aiAnalysisFromRow),
-  };
-}
-
-export async function upsertPostgresAiAnalysis(workspaceId, analysis) {
-  await touchWorkspace(workspaceId);
-
-  const rows = await query(
-    `INSERT INTO atomfolio_ai_analyses (
-       workspace_id,
-       id,
-       portfolio_id,
-       analysis_type,
-       input_hash,
-       model,
-       status,
-       input_summary,
-       result,
-       created_at,
-       updated_at
-     )
-     VALUES (
-       $1,
-       $2,
-       $3,
-       $4,
-       $5,
-       $6,
-       $7,
-       $8::jsonb,
-       $9::jsonb,
-       $10::timestamptz,
-       $11::timestamptz
-     )
-     ON CONFLICT (workspace_id, id) DO UPDATE SET
-       portfolio_id = EXCLUDED.portfolio_id,
-       analysis_type = EXCLUDED.analysis_type,
-       input_hash = EXCLUDED.input_hash,
-       model = EXCLUDED.model,
-       status = EXCLUDED.status,
-       input_summary = EXCLUDED.input_summary,
-       result = EXCLUDED.result,
-       updated_at = EXCLUDED.updated_at
-     RETURNING *`,
-    [
-      workspaceId,
-      analysis.id,
-      analysis.portfolioId,
-      analysis.analysisType,
-      analysis.inputHash,
-      analysis.model,
-      analysis.status,
-      JSON.stringify(analysis.inputSummary ?? {}),
-      JSON.stringify(analysis.result ?? {}),
-      analysis.createdAt,
-      analysis.updatedAt,
-    ],
-  );
-
-  return {
-    workspaceId,
-    analysis: aiAnalysisFromRow(rows[0]),
   };
 }
 

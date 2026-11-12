@@ -113,35 +113,6 @@ function registerContractSuite(label, store) {
     assert.equal(imports[1].id, first.importRecord.id);
   });
 
-  test(`${label}: AI analyses upsert on matching portfolio/type/inputHash`, async () => {
-    const workspaceId = uniqueId('guest:contract');
-    const portfolioId = uniqueId('portfolio');
-
-    await store.saveAiAnalysis(workspaceId, {
-      portfolioId,
-      analysisType: 'portfolio-summary',
-      inputHash: 'hash-a',
-      status: 'ready',
-      result: { headline: 'first' },
-    });
-    await store.saveAiAnalysis(workspaceId, {
-      portfolioId,
-      analysisType: 'portfolio-summary',
-      inputHash: 'hash-a',
-      status: 'ready',
-      result: { headline: 'second' },
-    });
-
-    const { analyses } = await store.listAiAnalyses(workspaceId, {
-      portfolioId,
-      analysisType: 'portfolio-summary',
-      inputHash: 'hash-a',
-    });
-
-    assert.equal(analyses.length, 1);
-    assert.equal(analyses[0].result.headline, 'second');
-  });
-
   test(`${label}: guest workspaces are accessible without authentication`, async () => {
     const workspaceId = uniqueId('guest:contract');
     const access = await store.ensureWorkspaceAccess(workspaceId, null);

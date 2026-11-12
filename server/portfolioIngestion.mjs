@@ -3,20 +3,18 @@ import {
   parsePortfolioTextDetailed,
 } from '../src/lib/portfolioIngestionCore.js';
 import { enrichSecurityItems } from './securityEnrichment.mjs';
-import { orchestratePortfolioReview } from './agents/orchestrator.mjs';
+import { reviewPortfolioImport } from './portfolioReview.mjs';
 
 export async function ingestPortfolioText(fileName, text) {
   const { items: parsedItems, diagnostics: parserDiagnostics } = parsePortfolioTextDetailed(text);
   const securityEnrichment = await enrichSecurityItems(parsedItems);
   const timelineItems = securityEnrichment.items;
   const items = collapsePortfolioItemsForDisplay(timelineItems);
-  const agentReview = await orchestratePortfolioReview({
+  const agentReview = reviewPortfolioImport({
     fileName,
     parserDiagnostics,
-    parsedItems,
     timelineItems,
     items,
-    securityEnrichment,
   });
 
   return {

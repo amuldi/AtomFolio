@@ -11,10 +11,8 @@ import {
   getPostgresStoreStatus,
   getPostgresWorkspaceVersion,
   isPostgresStoreEnabled,
-  listPostgresAiAnalyses,
   listPostgresImportHistory,
   listPostgresPortfolios,
-  upsertPostgresAiAnalysis,
   upsertPostgresImportHistory,
   upsertPostgresPortfolio,
 } from './postgresPortfolioStore.mjs';
@@ -187,31 +185,6 @@ function sanitizeImportRecord(input, existing = null) {
   };
 }
 
-function sanitizeAiAnalysis(input, existing = null) {
-  const timestamp = nowIso();
-  const id = String(input?.id ?? existing?.id ?? '').trim() || makeId('analysis');
-
-  return {
-    id,
-    portfolioId: input?.portfolioId ? String(input.portfolioId) : existing?.portfolioId ?? null,
-    analysisType:
-      String(input?.analysisType ?? existing?.analysisType ?? 'portfolio-summary').trim() ||
-      'portfolio-summary',
-    inputHash: String(input?.inputHash ?? existing?.inputHash ?? '').trim(),
-    model: input?.model ? String(input.model) : existing?.model ?? null,
-    status: ['ready', 'fallback', 'failed'].includes(input?.status)
-      ? input.status
-      : existing?.status ?? 'ready',
-    inputSummary:
-      input?.inputSummary && typeof input.inputSummary === 'object'
-        ? input.inputSummary
-        : existing?.inputSummary ?? {},
-    result:
-      input?.result && typeof input.result === 'object' ? input.result : existing?.result ?? {},
-    createdAt: existing?.createdAt ?? timestamp,
-    updatedAt: timestamp,
-  };
-}
 
 function createEmptyStore() {
   return {
@@ -831,70 +804,3 @@ export async function saveImportHistory(workspaceId, input) {
   });
 }
 
-export async function listAiAnalyses(workspaceId, filters = {}) {
-  const safeWorkspaceId = cleanWorkspaceId(workspaceId);
-
-  if (isPostgresStoreEnabled()) {
-    return listPostgresAiAnalyses(safeWorkspaceId, filters);
-  }
-
-  const store = await readStore();
-  const resolved = ensureWorkspace(store, safeWorkspaceId);
-  const analyses = safeArray(resolved.workspace.analyses)
-    .filter((analysis) => {
-      if (filters.portfolioId && analysis.portfolioId !== filters.portfolioId) {
-        return false;
-      }
-      if (filters.analysisType && analysis.analysisType !== filters.analysisType) {
-        return false;
-      }
-      if (filters.inputHash && analysis.inputHash !== filters.inputHash) {
-        return false;
-      }
-      return true;
-    })
-    .slice(0, Math.min(100, Math.max(1, Number(filters.limit) || 20)));
-
-  return {
-    workspaceId: resolved.workspaceId,
-    analyses,
-  };
-}
-
-export async function saveAiAnalysis(workspaceId, input) {
-  const safeWorkspaceId = cleanWorkspaceId(workspaceId);
-  let analysis = sanitizeAiAnalysis(input);
-
-  if (isPostgresStoreEnabled()) {
-    const { analyses } = await listPostgresAiAnalyses(safeWorkspaceId, {
-      portfolioId: analysis.portfolioId,
-      analysisType: analysis.analysisType,
-      inputHash: analysis.inputHash,
-      limit: 1,
-    });
-    analysis = sanitizeAiAnalysis(input, analyses[0] ?? null);
-    return upsertPostgresAiAnalysis(safeWorkspaceId, analysis);
-  }
-
-  return withLocalStoreWrite((store) => {
-    const resolved = ensureWorkspace(store, safeWorkspaceId);
-    const existing = safeArray(resolved.workspace.analyses).find(
-      (entry) =>
-        entry.portfolioId === analysis.portfolioId &&
-        entry.analysisType === analysis.analysisType &&
-        entry.inputHash === analysis.inputHash,
-    );
-
-    analysis = sanitizeAiAnalysis(input, existing);
-    resolved.workspace.analyses = [
-      analysis,
-      ...safeArray(resolved.workspace.analyses).filter((entry) => entry.id !== analysis.id),
-    ].slice(0, 200);
-    resolved.workspace.updatedAt = nowIso();
-
-    return {
-      workspaceId: resolved.workspaceId,
-      analysis,
-    };
-  });
-}
