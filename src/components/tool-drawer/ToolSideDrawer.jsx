@@ -529,6 +529,13 @@ export function ToolSideDrawer({
       setManualMarketStatus('idle');
       setManualMarketError('');
       setManualMarketData(null);
+      // The security was cleared: drop a price that was only auto-filled for it. Left in place,
+      // a USD price like 51.77 stayed in the field while the currency toggle fell back to 원.
+      if (open && manualBuyPriceAutoKeyRef.current !== null) {
+        manualBuyPriceAutoKeyRef.current = null;
+        setManualBuyPrice('');
+        setManualReturnRate('');
+      }
       return undefined;
     }
 

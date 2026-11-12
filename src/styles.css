@@ -8667,3 +8667,45 @@ body::after {
     filter: drop-shadow(0 0 18px rgba(var(--frame-ink-e), 0.08));
   }
 }
+
+/* Undo bar shown for a few seconds after deleting a holding or portfolio (App.jsx offerUndo). */
+.undo-bar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: calc(100vw - 32px);
+  padding: 10px 10px 10px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(18, 18, 18, 0.94);
+  color: #f1ede4;
+  font-size: 13px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+.undo-bar__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.undo-bar__button {
+  flex: none;
+  padding: 6px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.undo-bar__button:hover,
+.undo-bar__button:focus-visible {
+  background: rgba(255, 255, 255, 0.18);
+  outline: none;
+}

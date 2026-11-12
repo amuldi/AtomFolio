@@ -177,6 +177,7 @@ const FLOATING_TOOL_Z_INDEX = {
 // support a third axis the way the old clip-path box could.
 const TOOL_DRAWER_DOCK_OPTIONS = ['left', 'right'];
 const SERVER_SYNC_DEBOUNCE_MS = 850;
+const UNDO_VISIBLE_MS = 8000;
 const DAILY_SNAPSHOT_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 const TOOLTIP_WIDTH = 320;
 const TOOLTIP_HEIGHT = 260;
@@ -2374,6 +2375,33 @@ export default function App() {
 
   portfolioEntriesRef.current = portfolioEntries;
 
+  // Deleting a holding or a whole portfolio is one click and syncs to the server right away, with
+  // no confirmation. Keep the pre-delete state for a few seconds so it can be undone.
+  const [undoAction, setUndoAction] = useState(null);
+  const undoTimerRef = useRef(0);
+  const offerUndo = (label) => {
+    window.clearTimeout(undoTimerRef.current);
+    setUndoAction({ label, entries: portfolioEntriesRef.current, activeId: activePortfolioId });
+    undoTimerRef.current = window.setTimeout(() => setUndoAction(null), UNDO_VISIBLE_MS);
+  };
+  const handleUndo = () => {
+    if (!undoAction) {
+      return;
+    }
+    window.clearTimeout(undoTimerRef.current);
+    // A restored portfolio was deleted server-side; forget its synced snapshot so autosave
+    // uploads it again.
+    const workspaceId = getPortfolioWorkspaceId();
+    const currentIds = new Set(portfolioEntriesRef.current.map((entry) => entry.id));
+    undoAction.entries
+      .filter((entry) => !currentIds.has(entry.id))
+      .forEach((entry) => portfolioSyncedJsonRef.current.delete(`${workspaceId}|${entry.id}`));
+    setPortfolioEntries(undoAction.entries);
+    setActivePortfolioId(undoAction.activeId);
+    setUndoAction(null);
+  };
+  useEffect(() => () => window.clearTimeout(undoTimerRef.current), []);
+
   const noteInteraction = () => {
     interactionRef.current.lastInputAt = performance.now();
   };
@@ -4077,6 +4105,12 @@ export default function App() {
   const handleClearPortfolio = (entryId) => {
     noteInteraction();
     clearHoveredFileTooltip();
+    const removedEntry = portfolioEntries.find((entry) => entry.id === entryId);
+    offerUndo(
+      language === 'en'
+        ? `Deleted "${removedEntry?.fileName ?? 'portfolio'}"`
+        : `'${removedEntry?.fileName ?? '포트폴리오'}' 삭제됨`,
+    );
     const nextEntries = portfolioEntries.filter((entry) => entry.id !== entryId);
     const nextActiveId =
       activePortfolioId === entryId ? (nextEntries[0]?.id ?? null) : activePortfolioId;
@@ -4326,6 +4360,7 @@ export default function App() {
 
     noteInteraction();
     clearPortfolioError();
+    offerUndo(language === 'en' ? 'Holding deleted' : '종목 삭제됨');
 
     // Plain setActivePortfolioId, not switchToPortfolio — same reasoning as
     // handleUpdatePortfolioHolding just above: a single-holding delete isn't a portfolio switch,
@@ -5397,6 +5432,14 @@ export default function App() {
             setSelectedAtomId(null);
           }}
         />
+      ) : null}
+      {undoAction ? (
+        <div className="undo-bar" role="status" aria-live="polite">
+          <span className="undo-bar__label">{undoAction.label}</span>
+          <button type="button" className="undo-bar__button" onClick={handleUndo}>
+            {language === 'en' ? 'Undo' : '되돌리기'}
+          </button>
+        </div>
       ) : null}
     </main>
   );
