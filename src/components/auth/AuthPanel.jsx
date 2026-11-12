@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useAuth, useSignIn, useSignUp, useUser } from '@clerk/clerk-react';
-import { setClerkTokenGetter } from '../../lib/clerkAuthBridge.js';
 
 const SUPPORT_EMAIL = String(import.meta.env.VITE_ATOMFOLIO_SUPPORT_EMAIL ?? '').trim();
 
@@ -20,7 +19,7 @@ function sanitizeErrorMessage(message) {
 }
 
 export function AuthPanel({ text, onAuthenticated, workspaceId }) {
-  const { isLoaded: authLoaded, isSignedIn, signOut, getToken } = useAuth();
+  const { isLoaded: authLoaded, isSignedIn, signOut } = useAuth();
   const { isLoaded: signInLoaded, signIn, setActive: setActiveSignIn } = useSignIn();
   const { isLoaded: signUpLoaded, signUp, setActive: setActiveSignUp } = useSignUp();
   const { user } = useUser();
@@ -36,8 +35,9 @@ export function AuthPanel({ text, onAuthenticated, workspaceId }) {
   const [resetRequestSent, setResetRequestSent] = useState(false);
 
   useEffect(() => {
+    // The token getter itself is registered app-wide by ClerkTokenBridge (main.jsx); this panel
+    // only mounts while settings is open, so it must not own (or clear) it.
     if (authLoaded && isSignedIn) {
-      setClerkTokenGetter(getToken);
       // Covers the case handleSignIn/handleVerify's own onAuthenticated() call doesn't: a page
       // load where Clerk restores an already-signed-in session from its persisted cookie. Without
       // this, the parent's workspace-session check (App.jsx's loadWorkspaceSession) only ever runs
@@ -48,16 +48,12 @@ export function AuthPanel({ text, onAuthenticated, workspaceId }) {
       // already-claimed or non-guest workspace is a no-op), so firing this on every mount where
       // Clerk resolves to signed-in — not just right after a fresh sign-in submission — is safe.
       onAuthenticated?.();
-    } else {
-      setClerkTokenGetter(null);
     }
-
-    return () => setClerkTokenGetter(null);
     // onAuthenticated is intentionally excluded from the dependency array: it's a fresh
     // useCallback identity on every App.jsx render, and including it would re-fire this effect
     // (and re-POST the guest claim) far more often than the auth state it's meant to track
     // actually changes.
-  }, [authLoaded, isSignedIn, getToken]);
+  }, [authLoaded, isSignedIn]);
 
   const resetTransientFields = () => {
     setPassword('');
@@ -239,7 +235,6 @@ export function AuthPanel({ text, onAuthenticated, workspaceId }) {
 
   const handleSignOut = async () => {
     await signOut();
-    setClerkTokenGetter(null);
   };
 
   const switchMode = (nextMode) => {

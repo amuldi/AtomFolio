@@ -5,9 +5,14 @@ import App from './App';
 import { TermsOfService } from './legal/TermsOfService.jsx';
 import { PrivacyPolicy } from './legal/PrivacyPolicy.jsx';
 import { initAnalytics } from './lib/analytics.js';
+import { markClerkEnabled } from './lib/clerkAuthBridge.js';
+import { ClerkTokenBridge } from './components/auth/ClerkTokenBridge.jsx';
 import './styles.css';
 
 const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? '';
+if (clerkPublishableKey) {
+  markClerkEnabled();
+}
 
 // No router in this app — for two static pages, adding react-router would be a heavier dependency
 // than the problem calls for. Both / (and every other unmatched path — see vercel.json's SPA
@@ -27,6 +32,7 @@ const pageView =
 const rootView = pageView ?? (
   clerkPublishableKey ? (
     <ClerkProvider publishableKey={clerkPublishableKey}>
+      <ClerkTokenBridge />
       <App />
     </ClerkProvider>
   ) : (

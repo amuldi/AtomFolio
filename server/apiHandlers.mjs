@@ -436,10 +436,31 @@ export async function handleMarketNewsRequest({ method, query, clientKey, sendJs
     // The cache holds one big pool per (language, mode, query, tickers) — see newsCache.mjs's key,
     // which deliberately excludes page/pageSize — so paging through it past page 1 costs nothing
     // beyond an array slice until the whole pool ages out of the 2.5 min cache.
-    const payload = await getMarketNewsWithCache(
-      { query: newsQuery, tickers, language, mode, refreshKey },
-      { fetcher: fetchMarketNewsWithFinnhubPromotion },
-    );
+    const isDefaultFeed = mode === 'today' && !newsQuery && !tickers.length;
+    let payload;
+    try {
+      payload = await getMarketNewsWithCache(
+        { query: newsQuery, tickers, language, mode, refreshKey },
+        { fetcher: fetchMarketNewsWithFinnhubPromotion },
+      );
+    } catch (fetchError) {
+      // Every live provider failed (cold instance, scrape blocked). The default feed can still
+      // show archived articles instead of an empty panel with an error.
+      const archived = isDefaultFeed ? await readArchivedNews({ language }) : [];
+      if (!archived.length) {
+        throw fetchError;
+      }
+      payload = {
+        query: language === 'en' ? 'stock market news' : '주식 뉴스',
+        items: archived,
+        source: language === 'en' ? 'Saved news' : '저장된 뉴스',
+        mode: 'today',
+        fetchedAt: Date.now(),
+        stale: true,
+        archiveOnly: true,
+        cache: { hit: true },
+      };
+    }
     const liveItems = Array.isArray(payload?.items) ? payload.items : [];
     let allItems = liveItems;
 
@@ -449,7 +470,7 @@ export async function handleMarketNewsRequest({ method, query, clientKey, sendJs
     if (!payload?.cache?.hit) {
       await archiveNewsItems(liveItems, { language });
     }
-    if (mode === 'today' && !newsQuery && !tickers.length) {
+    if (isDefaultFeed && !payload.archiveOnly) {
       allItems = mergeLiveAndArchivedNews(liveItems, await readArchivedNews({ language }));
     }
 
