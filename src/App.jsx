@@ -2201,6 +2201,10 @@ export default function App() {
   const pendingHoverInfoRef = useRef(null);
   const restoredPortfolioStateRef = useRef(null);
   const portfolioSyncTimerRef = useRef(0);
+  // `${workspaceId}|${portfolioId}` -> serialized JSON last known to match the server. Autosave
+  // only uploads entries whose serialization differs; it used to re-POST every portfolio on each
+  // page load, bumping every updatedAt (which also made the desktop app refetch everything).
+  const portfolioSyncedJsonRef = useRef(new Map());
   const portfolioAutoEnrichmentRef = useRef(new Set());
   // Latest request token issued per entryId by scheduleLiveQuoteEnrichment below — the 90s
   // background refresh interval fires again regardless of whether the previous round's fetch
@@ -3209,6 +3213,12 @@ export default function App() {
               .slice(0, MAX_PORTFOLIOS)
               .map((portfolio) => {
                 const entry = createPortfolioEntryFromPayload(portfolio, portfolio?.id);
+                if (entry.id) {
+                  portfolioSyncedJsonRef.current.set(
+                    `${getPortfolioWorkspaceId()}|${entry.id}`,
+                    JSON.stringify(serializePortfolioEntryForStorage(entry)),
+                  );
+                }
                 return dailySnapshotMode === 'on'
                   ? rollForwardPortfolioEntry(
                       entry,
@@ -3289,10 +3299,31 @@ export default function App() {
       return undefined;
     }
 
+    const syncWorkspaceId = getPortfolioWorkspaceId();
+    const changedEntries = safeEntries
+      .map((entry) => ({
+        entry,
+        key: `${syncWorkspaceId}|${entry.id}`,
+        json: JSON.stringify(entry),
+      }))
+      .filter(({ key, json }) => portfolioSyncedJsonRef.current.get(key) !== json);
+
+    if (!changedEntries.length) {
+      setPortfolioSyncStatus(localPersistFailed ? 'local-failed' : 'saved');
+      return undefined;
+    }
+
     setPortfolioSyncStatus(localPersistFailed ? 'local-failed' : 'pending');
     portfolioSyncTimerRef.current = window.setTimeout(() => {
-      void Promise.allSettled(safeEntries.map((entry) => createServerPortfolio(entry)))
+      void Promise.allSettled(changedEntries.map(({ entry }) => createServerPortfolio(entry)))
         .then((results) => {
+          results.forEach((result, index) => {
+            if (result.status === 'fulfilled') {
+              const { key, json } = changedEntries[index];
+              portfolioSyncedJsonRef.current.set(key, json);
+            }
+          });
+
           if (cancelled) {
             return;
           }
