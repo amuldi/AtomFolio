@@ -2,6 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "crons": [
+    { "path": "/api/market/news?language=ko&mode=today&_ts=cron", "schedule": "0 22 * * *" },
+    { "path": "/api/market/news?language=en&mode=today&_ts=cron", "schedule": "30 22 * * *" }
+  ],
   "rewrites": [
     {
       "source": "/api/workspace/device-token",

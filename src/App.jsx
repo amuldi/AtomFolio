@@ -8,7 +8,7 @@ import {
   shouldFallbackToLocalTimeline as shouldFallbackToLocalTimelineShared,
 } from './lib/portfolioIngestionCore.js';
 import { createPortfolioScorecard } from './lib/portfolioScoring.js';
-import { createPortfolioAnalyticsSummary } from './lib/portfolioAnalyticsSummary.js';
+import { createPortfolioAnalyticsSummary, resolveHoldingPosition } from './lib/portfolioAnalyticsSummary.js';
 import { enrichPortfolioItem, resolveExactSecurityReferenceCode } from './lib/securityKnowledge.js';
 import { useAtomTransition } from './utils/useAtomTransition.js';
 import { useViewportWidth } from './utils/useViewportWidth.js';
@@ -482,6 +482,25 @@ function getDailySnapshotSourceItems(entry) {
   return collapsePortfolioItemsForDisplayShared(timelineItems);
 }
 
+// Daily snapshots accumulate one row per holding per elapsed day forever unless capped — the
+// heatmap only ever renders a 24-week window (see the `weeks: 24` call site), so anything older
+// than that is invisible in the UI today. 370 days keeps a full year of headroom (in case the
+// heatmap's window grows later) while still bounding growth to a constant instead of letting it
+// grow with account age. Only synthetic rows (tagged with dailySnapshotDate) are pruned — rows
+// that came from an actually-uploaded CSV timeline are left alone regardless of age.
+const DAILY_SNAPSHOT_RETENTION_DAYS = 370;
+
+function pruneStaleDailySnapshots(items, today = new Date(), dateBasis = 'kst') {
+  const todayDateKey = formatDateKeyForBasis(today, dateBasis);
+  const cutoffDateKey = addDaysToDateKey(todayDateKey, -DAILY_SNAPSHOT_RETENTION_DAYS);
+
+  if (!cutoffDateKey) {
+    return items;
+  }
+
+  return items.filter((item) => !item?.dailySnapshotDate || item.dailySnapshotDate >= cutoffDateKey);
+}
+
 function rollForwardPortfolioEntry(entry, savedAt, dateBasis = 'kst') {
   const elapsedDateKeys = buildElapsedDateKeysSince(savedAt, new Date(), dateBasis);
   if (!elapsedDateKeys.length) {
@@ -532,7 +551,11 @@ function rollForwardPortfolioEntry(entry, savedAt, dateBasis = 'kst') {
     return entry;
   }
 
-  const nextTimelineItems = [...timelineItems, ...appendedItems];
+  const nextTimelineItems = pruneStaleDailySnapshots(
+    [...timelineItems, ...appendedItems],
+    new Date(),
+    dateBasis,
+  );
   const lastSnapshotDate = appendedItems.at(-1)?.dailySnapshotDate ?? elapsedDateKeys.at(-1);
 
   return {
@@ -701,6 +724,9 @@ function buildImportRecordFromPortfolioEntry(entry) {
         : [];
   const displayItems = Array.isArray(entry?.items) ? entry.items : [];
 
+  // parserDiagnostics/agentReview are intentionally left out here (null) — this record is keyed
+  // to portfolioId, and the portfolio itself already stores both in full. Duplicating them into
+  // import history just doubles storage for data nothing currently reads back through this API.
   return {
     id: 'import-' + String(entry?.id ?? Date.now()),
     portfolioId: String(entry?.id ?? ''),
@@ -708,8 +734,8 @@ function buildImportRecordFromPortfolioEntry(entry) {
     status: resolveEntryReviewStatus(entry),
     itemCount: timelineItems.length,
     securityCount: displayItems.length || timelineItems.length,
-    parserDiagnostics: entry?.parserDiagnostics ?? null,
-    agentReview: entry?.agentReview ?? null,
+    parserDiagnostics: null,
+    agentReview: null,
     ingestSource: entry?.ingestSource ?? 'client-local',
   };
 }
@@ -4841,8 +4867,11 @@ export default function App() {
       createPortfolioAllocation(deferredPortfolioItems, {
         classificationMode: assetClassMode,
         weightMode: allocationWeightMode,
+        marketValues: deferredPortfolioItems.map(
+          (item) => resolveHoldingPosition(item, { baseCurrency: 'KRW', fxRates: displayFxRates }).marketValue,
+        ),
       }),
-    [allocationWeightMode, assetClassMode, deferredPortfolioItems],
+    [allocationWeightMode, assetClassMode, deferredPortfolioItems, displayFxRates],
   );
   const portfolioAnalyticsSummary = useMemo(() => {
     if (!hasPortfolio) {

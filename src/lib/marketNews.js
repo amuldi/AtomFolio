@@ -11,6 +11,7 @@ const DEFAULT_KOREAN_STOCK_NEWS_QUERY = '증시 오늘';
 // pages merged, deduped, filtered) — sized well past one page (20) so /api/market/news can serve
 // several pages straight out of the cached pool with no new network calls.
 const TODAY_POOL_LIMIT = 60;
+const MIN_HEALTHY_TODAY_POOL = 12;
 
 function withTimeout(signal, timeoutMs = NEWS_TIMEOUT_MS) {
   const controller = new AbortController();
@@ -731,7 +732,12 @@ async function fetchMarketNewsPayload({ query, tickers = [], language = 'ko', mo
             mode: 'today',
             fetchedAt: Date.now(),
           };
-          return primaryPayload;
+          // A thin Naver result (blocked IP, changed markup) used to be returned as-is, leaving
+          // the panel with 1-4 articles. Only short-circuit on a healthy pool; otherwise fall
+          // through to the Bing KR feed below and merge the two.
+          if (items.length >= MIN_HEALTHY_TODAY_POOL) {
+            return primaryPayload;
+          }
         }
       } catch {
         // Fall back to RSS below if both Naver providers are temporarily unavailable.
@@ -784,7 +790,13 @@ async function fetchMarketNewsPayload({ query, tickers = [], language = 'ko', mo
   try {
     const xml = await fetchText(applyCacheBust(url, cacheBust), { signal });
     const rawItems = uniqueNewsItems(parseRssItems(xml, 20), 20);
-    const items = isDefaultFallbackMode ? todayNewsItems(rawItems, 20) : rawItems;
+    const fallbackItems = isDefaultFallbackMode ? todayNewsItems(rawItems, 20) : rawItems;
+    const items = primaryPayload?.items?.length
+      ? uniqueNewsItems(
+          sortByPublishedAtDesc([...primaryPayload.items, ...fallbackItems]),
+          TODAY_POOL_LIMIT,
+        )
+      : fallbackItems;
 
     if (items.length || !primaryPayload) {
       return {
@@ -875,6 +887,7 @@ export async function fetchMarketNewsFromProviders(options = {}) {
   const isDefaultTodayView =
     normalizedLanguage === 'ko' && !normalizeQuery(options.query) && options.mode !== 'search';
   let items = payload.items;
+  let source = payload.source;
 
   if (isDefaultTodayView) {
     try {
@@ -885,6 +898,8 @@ export async function fetchMarketNewsFromProviders(options = {}) {
 
       if (worldItems.length) {
         items = uniqueNewsItems(sortByPublishedAtDesc([...items, ...worldItems]), WORLD_NEWS_COMBINED_LIMIT);
+        // The header used to say "네이버 증시뉴스" even when most rows came from Bing.
+        source = '국내·해외 증시뉴스';
       }
     } catch {
       // Domestic-only is still a perfectly valid response — the foreign blend is best-effort.
@@ -893,6 +908,7 @@ export async function fetchMarketNewsFromProviders(options = {}) {
 
   return {
     ...payload,
+    source,
     items: await enrichWithOgImages(items, { signal: options.signal }),
   };
 }

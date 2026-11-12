@@ -82,11 +82,54 @@ export function AuthPanel({ text, onAuthenticated, workspaceId }) {
         await setActiveSignIn({ session: attempt.createdSessionId });
         setPassword('');
         onAuthenticated?.();
+      } else if (attempt.status === 'needs_second_factor' || attempt.status === 'needs_client_trust') {
+        // Clerk asks for an email code on a new device (client trust) or when MFA is on. Without
+        // this branch the flow dead-ended in a generic error even with a correct password.
+        const factors = attempt.supportedSecondFactors ?? [];
+        const emailFactor = factors.find((factor) => factor.strategy === 'email_code');
+
+        if (emailFactor) {
+          await signIn.prepareSecondFactor({
+            strategy: 'email_code',
+            emailAddressId: emailFactor.emailAddressId,
+          });
+          setCode('');
+          setMode('verifySignIn');
+        } else {
+          setError(text.authGenericError);
+        }
       } else {
         setError(text.authGenericError);
       }
     } catch (signInError) {
       setError(sanitizeErrorMessage(extractClerkErrorMessage(signInError, text.authGenericError)));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const handleVerifySignIn = async (event) => {
+    event.preventDefault();
+    if (!signInLoaded || pending) {
+      return;
+    }
+
+    setPending(true);
+    setError('');
+
+    try {
+      const attempt = await signIn.attemptSecondFactor({ strategy: 'email_code', code });
+
+      if (attempt.status === 'complete') {
+        await setActiveSignIn({ session: attempt.createdSessionId });
+        resetTransientFields();
+        setMode('signIn');
+        onAuthenticated?.();
+      } else {
+        setError(text.authGenericError);
+      }
+    } catch (verifyError) {
+      setError(sanitizeErrorMessage(extractClerkErrorMessage(verifyError, text.authGenericError)));
     } finally {
       setPending(false);
     }
@@ -256,9 +299,9 @@ export function AuthPanel({ text, onAuthenticated, workspaceId }) {
     );
   }
 
-  if (mode === 'verify') {
+  if (mode === 'verify' || mode === 'verifySignIn') {
     return (
-      <form className="auth-panel" onSubmit={handleVerify}>
+      <form className="auth-panel" onSubmit={mode === 'verifySignIn' ? handleVerifySignIn : handleVerify}>
         <p className="auth-panel__hint">{text.authVerifyHint}</p>
         <input
           className="auth-panel__input"

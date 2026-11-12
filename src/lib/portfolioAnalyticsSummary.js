@@ -599,8 +599,15 @@ function extractTimelinePoint(item, currencyOptions) {
     return null;
   }
 
+  const holdingKey = String(
+    item?.code ?? item?.ticker ?? findFieldValue(item?.fields, ['종목 티커', 'ticker']) ?? item?.label ?? '',
+  )
+    .trim()
+    .toUpperCase();
+
   return {
     date,
+    holdingKey,
     returnRate,
     profitAmount,
     marketValue: position.marketValue,
@@ -608,10 +615,36 @@ function extractTimelinePoint(item, currencyOptions) {
   };
 }
 
+// A timeline holds snapshots, not trades: the same holding can appear several times in one period
+// (re-saves, duplicate rows). Summing every snapshot double-counted those holdings — one duplicated
+// QQQI row turned a -28.9% portfolio into a -47.3% month. Keep only each holding's latest snapshot
+// per period; rows without any holding identity are kept as-is.
+function latestSnapshotPerHolding(points, period) {
+  const latest = new Map();
+  const anonymous = [];
+
+  points.forEach((point, index) => {
+    if (!point.holdingKey) {
+      anonymous.push(point);
+      return;
+    }
+    const key = `${periodKey(point.date, period)}|${point.holdingKey}`;
+    const previous = latest.get(key);
+    if (!previous || point.date >= previous.point.date) {
+      latest.set(key, { point, index });
+    }
+  });
+
+  return [...anonymous, ...[...latest.values()].map((entry) => entry.point)];
+}
+
 function createProfitFlow(timelineItems, period = 'month', currencyOptions) {
-  const points = (Array.isArray(timelineItems) ? timelineItems : [])
-    .map((item) => extractTimelinePoint(item, currencyOptions))
-    .filter(Boolean);
+  const points = latestSnapshotPerHolding(
+    (Array.isArray(timelineItems) ? timelineItems : [])
+      .map((item) => extractTimelinePoint(item, currencyOptions))
+      .filter(Boolean),
+    period,
+  );
   const groups = new Map();
 
   points.forEach((point) => {

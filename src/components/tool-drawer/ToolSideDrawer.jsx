@@ -302,6 +302,9 @@ export function ToolSideDrawer({
   const [manualAssetClass, setManualAssetClass] = useState('주식');
   const [manualRows, setManualRows] = useState([]);
   const [manualMarketData, setManualMarketData] = useState(null);
+  // queryKey (`ticker|name`) the current 매수가 was auto-filled for, or null when the user typed it
+  // (or it came from an existing holding being edited).
+  const manualBuyPriceAutoKeyRef = useRef(null);
   const [manualMarketStatus, setManualMarketStatus] = useState('idle');
   const [manualMarketError, setManualMarketError] = useState('');
   const [manualMarketSuggestions, setManualMarketSuggestions] = useState([]);
@@ -563,10 +566,17 @@ export function ToolSideDrawer({
         setManualMarketError('');
 
         const currentDraft = manualDraftRef.current;
-        const nextBuyPrice =
-          currentDraft.buyPrice.trim() || formatMarketInputPrice(nextData.latestPrice);
-        if (!currentDraft.buyPrice.trim() && nextBuyPrice) {
-          setManualBuyPrice(nextBuyPrice);
+        // Refill when the field is empty, or when its value was auto-filled for a *different*
+        // security. Previously only an empty field was refilled, so picking QQQ (auto 690.38)
+        // and then switching to QQQI kept QQQ's price as QQQI's cost basis (-92.5% return).
+        const autoFilledForOtherSecurity =
+          manualBuyPriceAutoKeyRef.current !== null && manualBuyPriceAutoKeyRef.current !== queryKey;
+        const shouldAutoFill = !currentDraft.buyPrice.trim() || autoFilledForOtherSecurity;
+        const autoBuyPrice = formatMarketInputPrice(nextData.latestPrice);
+        const nextBuyPrice = shouldAutoFill ? autoBuyPrice : currentDraft.buyPrice.trim();
+        if (shouldAutoFill && autoBuyPrice) {
+          manualBuyPriceAutoKeyRef.current = queryKey;
+          setManualBuyPrice(autoBuyPrice);
         }
         const nextReturnRate = calculateReturnRateFromBuyPrice(nextBuyPrice, nextData.latestPrice);
         if (nextReturnRate) {
@@ -882,6 +892,7 @@ export function ToolSideDrawer({
     manualTicker,
   ]);
   const clearManualStockFields = useCallback(() => {
+    manualBuyPriceAutoKeyRef.current = null;
     setManualStockName('');
     setManualTicker('');
     setManualBuyPrice('');
@@ -1048,6 +1059,7 @@ export function ToolSideDrawer({
           normalizeCurrencyCode(resolveHoldingMetric(item, ['매수통화', 'purchaseCurrency'])) ||
           null,
       );
+      manualBuyPriceAutoKeyRef.current = null;
       setManualBuyPrice(resolveHoldingMetric(item, ['매수가', 'buyPrice', 'purchasePrice']));
       setManualShares(resolveHoldingMetric(item, ['보유수량', 'shares', 'quantity']));
       setManualReturnRate(
@@ -1220,6 +1232,7 @@ export function ToolSideDrawer({
       }
 
       onInteract?.();
+      manualBuyPriceAutoKeyRef.current = null;
       setManualBuyPriceCurrencyOverride(nextCurrency);
 
       const typed = parseManualPriceValue(manualBuyPrice);
@@ -1242,6 +1255,8 @@ export function ToolSideDrawer({
   const handleManualBuyPriceChange = useCallback(
     (event) => {
       const nextBuyPrice = event.target.value;
+      // A hand-typed price is the user's own number: never overwrite it on a later ticker change.
+      manualBuyPriceAutoKeyRef.current = null;
       setManualBuyPrice(nextBuyPrice);
 
       const nextReturnRate = calculateManualReturnRate(
@@ -2249,6 +2264,9 @@ export function ToolSideDrawer({
         <DigitalTwinPanel
           items={items}
           timelineItems={timelineItems}
+          positionValues={items.map(
+            (item) => resolveHoldingPosition(item, { baseCurrency: 'KRW', fxRates }).marketValue,
+          )}
           className="twin-panel--drawer"
         />
       );

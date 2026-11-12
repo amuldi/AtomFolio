@@ -13,6 +13,7 @@ import {
   fetchFinnhubCompanyNewsForSymbols,
 } from './finnhubNews.mjs';
 import { getMarketNewsWithCache } from './newsCache.mjs';
+import { archiveNewsItems, mergeLiveAndArchivedNews, readArchivedNews } from './newsArchive.mjs';
 import {
   claimGuestWorkspaceForUser,
   createPortfolio,
@@ -439,7 +440,19 @@ export async function handleMarketNewsRequest({ method, query, clientKey, sendJs
       { query: newsQuery, tickers, language, mode, refreshKey },
       { fetcher: fetchMarketNewsWithFinnhubPromotion },
     );
-    const allItems = Array.isArray(payload?.items) ? payload.items : [];
+    const liveItems = Array.isArray(payload?.items) ? payload.items : [];
+    let allItems = liveItems;
+
+    // Archive every fresh (non-cached) fetch, and for the default feed append past articles from
+    // the archive so the panel isn't limited to whatever the providers return right now. Search
+    // results stay live-only: the archive has no full-text index, and a search is about relevance.
+    if (!payload?.cache?.hit) {
+      await archiveNewsItems(liveItems, { language });
+    }
+    if (mode === 'today' && !newsQuery && !tickers.length) {
+      allItems = mergeLiveAndArchivedNews(liveItems, await readArchivedNews({ language }));
+    }
+
     const start = (page - 1) * pageSize;
     const pageItems = allItems.slice(start, start + pageSize);
 

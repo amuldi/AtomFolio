@@ -317,7 +317,21 @@ function formatWon(value) {
 
 export function createPortfolioTwin(items = [], timelineItems = [], options = {}) {
   const sourceItems = Array.isArray(items) ? items : [];
-  const basis = resolveValueBasis(sourceItems);
+  // options.positionValues: per-item market values already converted to one base currency (the
+  // same resolveHoldingPosition figures the 요약 panel totals use). Without them, a USD holding's
+  // price was summed with KRW holdings as if both were won, so this panel disagreed with 요약.
+  const overrideValues = Array.isArray(options.positionValues) ? options.positionValues : null;
+  const overrideTotal = overrideValues
+    ? overrideValues.reduce((sum, value) => sum + (Number.isFinite(value) ? Math.max(0, value) : 0), 0)
+    : 0;
+  const basis =
+    overrideValues && overrideValues.length === sourceItems.length && overrideTotal > 0
+      ? {
+          source: 'marketValue',
+          totalValue: overrideTotal,
+          values: overrideValues.map((value) => (Number.isFinite(value) ? Math.max(0, value) : 0)),
+        }
+      : resolveValueBasis(sourceItems);
   const totalValue = basis.totalValue || sourceItems.length || 0;
   const positions = sourceItems.map((item, index) => {
     const value = Math.max(0, basis.values[index] ?? 0);

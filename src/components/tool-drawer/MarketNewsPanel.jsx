@@ -99,7 +99,9 @@ export const MarketNewsPanel = memo(function MarketNewsPanel({ language, dateBas
           silent && seenIds.size > 0
             ? new Set(
                 (payload.items ?? [])
-                  .filter((article) => article.id && !seenIds.has(article.id))
+                  // Archived rows are past articles by definition (and carry a different id than
+                  // the live copy they were saved from), so they never count as "new".
+                  .filter((article) => article.id && !article.archived && !seenIds.has(article.id))
                   .map((article) => article.id),
               )
             : new Set();

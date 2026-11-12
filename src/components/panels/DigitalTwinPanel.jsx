@@ -181,7 +181,7 @@ function TwinOverview({ twin, activeResult }) {
       <div className="twin-overview-card">
         <span>예상 변화</span>
         <strong className={activeResult ? toneClassForValue(expectedReturn) : ''}>
-          {activeResult ? formatPercentValue(expectedReturn) : '-'}
+          {activeResult ? formatPercentValue(expectedReturn) : '시나리오 실행 전'}
         </strong>
       </div>
       <div className="twin-overview-card">
@@ -205,12 +205,13 @@ function TwinOverview({ twin, activeResult }) {
 function DigitalTwinPanel({
   items = [],
   timelineItems = [],
+  positionValues = null,
   className = '',
   onPointerDown,
 }) {
   const twin = useMemo(
-    () => createPortfolioTwin(items, timelineItems),
-    [items, timelineItems],
+    () => createPortfolioTwin(items, timelineItems, { positionValues }),
+    [items, timelineItems, positionValues],
   );
   const investmentTwin = useMemo(() => createInvestmentTwin(twin), [twin]);
   const [scenario, setScenario] = useState({

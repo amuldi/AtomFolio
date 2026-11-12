@@ -301,26 +301,34 @@ function normalizeWeights(values, source) {
   };
 }
 
-function extractAutoWeights(items) {
+function extractAutoWeights(items, marketValues = null) {
   const explicitWeights = items.map(parseExplicitWeight);
   const positionValues = items.map(parsePositionValue);
   const equalWeight = items.length ? 1 / items.length : 0;
   const equalWeights = items.map(() => equalWeight);
+  // Market values already converted to one currency (same figures as the 요약 totals). Cost basis
+  // (buyPrice x shares) stays only as a fallback: using it first made the donut disagree with
+  // 요약's 상위종목, and a stale buy price could make a small holding look like the largest one.
+  const marketWeights =
+    Array.isArray(marketValues) && marketValues.length === items.length
+      ? normalizeWeights(marketValues, 'marketValue')
+      : null;
 
   return (
     normalizeWeights(explicitWeights, 'explicit') ??
+    marketWeights ??
     normalizeWeights(positionValues, 'position') ??
     normalizeWeights(equalWeights, 'equal')
   );
 }
 
-function extractWeights(items, mode = 'auto') {
+function extractWeights(items, mode = 'auto', marketValues = null) {
   if (mode === 'stockQuantity') {
     const quantityValues = items.map(parseQuantityValue);
-    return normalizeWeights(quantityValues, 'shares') ?? extractAutoWeights(items);
+    return normalizeWeights(quantityValues, 'shares') ?? extractAutoWeights(items, marketValues);
   }
 
-  return extractAutoWeights(items);
+  return extractAutoWeights(items, marketValues);
 }
 
 function resolveSecurityLabel(item) {
@@ -459,8 +467,8 @@ export function createPortfolioAllocation(items, options = {}) {
     return null;
   }
 
-  const { classificationMode = 'auto', weightMode = 'auto' } = options;
-  const { weights, source } = extractWeights(items, weightMode);
+  const { classificationMode = 'auto', weightMode = 'auto', marketValues = null } = options;
+  const { weights, source } = extractWeights(items, weightMode, marketValues);
   const groupingMode = resolveGroupingMode(items, weightMode, classificationMode);
   const grouped = new Map();
 
