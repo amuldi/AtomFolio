@@ -4867,9 +4867,15 @@ export default function App() {
       createPortfolioAllocation(deferredPortfolioItems, {
         classificationMode: assetClassMode,
         weightMode: allocationWeightMode,
-        marketValues: deferredPortfolioItems.map(
-          (item) => resolveHoldingPosition(item, { baseCurrency: 'KRW', fxRates: displayFxRates }).marketValue,
-        ),
+        ...(() => {
+          const positions = deferredPortfolioItems.map((item) =>
+            resolveHoldingPosition(item, { baseCurrency: 'KRW', fxRates: displayFxRates }),
+          );
+          return {
+            marketValues: positions.map((position) => position.marketValue),
+            costValues: positions.map((position) => position.buyAmount),
+          };
+        })(),
       }),
     [allocationWeightMode, assetClassMode, deferredPortfolioItems, displayFxRates],
   );

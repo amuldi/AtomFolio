@@ -467,7 +467,12 @@ export function createPortfolioAllocation(items, options = {}) {
     return null;
   }
 
-  const { classificationMode = 'auto', weightMode = 'auto', marketValues = null } = options;
+  const {
+    classificationMode = 'auto',
+    weightMode = 'auto',
+    marketValues = null,
+    costValues = null,
+  } = options;
   const { weights, source } = extractWeights(items, weightMode, marketValues);
   const groupingMode = resolveGroupingMode(items, weightMode, classificationMode);
   const grouped = new Map();
@@ -498,10 +503,19 @@ export function createPortfolioAllocation(items, options = {}) {
 
   let returnWeight = 0;
   let returnTotal = 0;
+  // Portfolio return = Σ profit / Σ cost, i.e. per-holding returns averaged by *cost* weight.
+  // Averaging them by market-value weight (the display weights above) inflates winners: a +1840%
+  // holding is 11% of market value but under 1% of cost, which showed +213.6% for a -28.9%
+  // portfolio. Use the cost basis when the caller provides it.
+  const costWeights =
+    Array.isArray(costValues) && costValues.length === items.length
+      ? normalizeWeights(costValues, 'cost')?.weights
+      : null;
+  const returnWeights = costWeights ?? weights;
 
   items.forEach((item, index) => {
     const parsedReturn = parseItemReturn(item);
-    const weight = weights[index] ?? 0;
+    const weight = returnWeights[index] ?? 0;
 
     if (!Number.isFinite(parsedReturn) || weight <= 0) {
       return;
