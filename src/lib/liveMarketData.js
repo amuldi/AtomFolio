@@ -1732,6 +1732,19 @@ function recordProviderSuccess(provider) {
   providerHealth.delete(provider);
 }
 
+export function isProviderHealthFailure(error) {
+  const name = String(error?.name ?? '');
+  const message = String(error?.message ?? error ?? '');
+
+  if (/^(AbortError|TimeoutError|TypeError)$/.test(name)) {
+    return true; // network failure or our own request timeout
+  }
+  if (/:(429|5\d\d)$/.test(message)) {
+    return true; // rate limited or provider-side error
+  }
+  return /timeout|timed out|network|fetch failed|ECONN|ENOTFOUND|EAI_AGAIN|not-configured/i.test(message);
+}
+
 function recordProviderFailure(provider) {
   const health = providerHealth.get(provider) ?? { consecutiveFailures: 0, skipUntil: 0 };
   health.consecutiveFailures += 1;
@@ -1818,7 +1831,13 @@ export async function fetchLiveMarketDataFromProviders({
   onProviderError,
 } = {}) {
   const reportProviderError = (provider, symbol, error) => {
-    recordProviderFailure(provider);
+    // Only count failures that say the provider itself is unhealthy. A ticker it simply doesn't
+    // know (404, empty quote, "No data found") used to count too, so a portfolio with a few
+    // unresolvable tickers tripped every breaker and blocked quotes for *all* symbols, AAPL
+    // included, for 30s at a time (repeating with each 30s refresh).
+    if (!signal?.aborted && isProviderHealthFailure(error)) {
+      recordProviderFailure(provider);
+    }
     try {
       onProviderError?.({ provider, symbol, error });
     } catch {
