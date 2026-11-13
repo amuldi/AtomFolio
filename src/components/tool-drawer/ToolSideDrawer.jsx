@@ -2,7 +2,7 @@
 // largest piece of what used to be App.jsx, split out on its own since nothing outside this
 // file renders any of it.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { formatAllocationPercent, textFor } from '../../utils/format.js';
+import { formatAllocationPercent, formatKoreanWonShort, textFor } from '../../utils/format.js';
 import { clamp } from '../../utils/math.js';
 import { convertCurrencyAmount, formatCurrencyAmount } from '../../utils/currency.js';
 import { detectHoldingIssues } from '../../lib/holdingIssues.js';
@@ -142,6 +142,44 @@ function formatAnalyticsCompactValue(value, language = 'ko') {
   });
 
   return formatter.format(value);
+}
+
+// Money with its currency symbol, compact: ₩7,412만 / $5,084. The summary used to print bare
+// numbers ("7412.2만") while the atom's name tag showed "₩7,412만" for the same value.
+function formatAnalyticsMoney(value, currency = 'KRW', { signed = false } = {}) {
+  if (!Number.isFinite(value)) {
+    return '-';
+  }
+  const sign = value < 0 ? '-' : signed && value > 0 ? '+' : '';
+  const magnitude = Math.abs(value);
+  if (currency === 'USD') {
+    return `${sign}$${magnitude.toLocaleString('en-US', {
+      maximumFractionDigits: magnitude >= 1000 ? 0 : 2,
+    })}`;
+  }
+  return `${sign}₩${formatKoreanWonShort(magnitude)}`;
+}
+
+const REBALANCE_BUCKET_LABELS = {
+  ko: { stock: '주식', dividend: '배당', goldCash: '금·현금', reit: '리츠', other: '기타' },
+  en: { stock: 'Stocks', dividend: 'Dividend', goldCash: 'Gold/cash', reit: 'REITs', other: 'Other' },
+};
+
+// gapWeightPercent = target - current. "stock -40%" read as a 40% loss; say what it means.
+function formatRebalanceGap(gap, language = 'ko') {
+  if (!gap || !Number.isFinite(gap.gapWeightPercent)) {
+    return '-';
+  }
+  const labels = REBALANCE_BUCKET_LABELS[language === 'en' ? 'en' : 'ko'];
+  const name = labels[gap.label] ?? gap.label;
+  const amount = Math.abs(gap.gapWeightPercent).toFixed(0);
+  if (Math.abs(gap.gapWeightPercent) < 1) {
+    return language === 'en' ? 'On target' : '목표와 일치';
+  }
+  if (language === 'en') {
+    return `${name} ${amount}pp ${gap.gapWeightPercent < 0 ? 'over' : 'under'}`;
+  }
+  return `${name} ${amount}%p ${gap.gapWeightPercent < 0 ? '초과' : '부족'}`;
 }
 
 function formatAnalyticsSignedValue(value, language = 'ko') {
@@ -1119,12 +1157,14 @@ export function ToolSideDrawer({
         {
           key: 'market-value',
           label: language === 'en' ? 'Market value' : '평가금액',
-          value: formatAnalyticsCompactValue(analyticsTotals?.totalMarketValue, language),
+          value: formatAnalyticsMoney(analyticsTotals?.totalMarketValue, baseCurrency),
         },
         {
           key: 'profit',
           label: language === 'en' ? 'P/L' : '누적손익',
-          value: formatAnalyticsSignedValue(analyticsTotals?.totalProfitAmount, language),
+          value: formatAnalyticsMoney(analyticsTotals?.totalProfitAmount, baseCurrency, {
+            signed: true,
+          }),
           tone: getSignedValueToneClass(analyticsTotals?.totalProfitAmount, 'positive', 'negative'),
         },
         {
@@ -2158,20 +2198,16 @@ export function ToolSideDrawer({
                       language,
                     )}
                     {' · '}
-                    {formatAnalyticsCompactValue(
-                      analyticsSummary.concentration?.effectiveHoldings,
-                      language,
-                    )}
+                    {/* Effective number of holdings (1/Σweight²): "2.72" alone meant nothing. */}
+                    {language === 'en'
+                      ? `${(analyticsSummary.concentration?.effectiveHoldings ?? 0).toFixed(1)} effective`
+                      : `실질 ${(analyticsSummary.concentration?.effectiveHoldings ?? 0).toFixed(1)}종목`}
                   </strong>
                 </span>
                 <span>
                   <em>{language === 'en' ? 'Rebalance' : '리밸런싱'}</em>
                   <strong>
-                    {analyticsGap
-                      ? analyticsGap.label +
-                        ' ' +
-                        formatAnalyticsPercentValue(analyticsGap.gapWeightPercent)
-                      : '-'}
+                    {formatRebalanceGap(analyticsGap, language)}
                   </strong>
                 </span>
               </div>
@@ -2207,7 +2243,7 @@ export function ToolSideDrawer({
                     },
                     {
                       key: 'longTermReturnFocus',
-                      label: language === 'en' ? 'Future' : '미래지향',
+                      label: language === 'en' ? 'Growth' : '성장형',
                     },
                     {
                       key: 'stabilityFocus',
