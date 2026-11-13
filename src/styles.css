@@ -8709,3 +8709,11 @@ body::after {
   background: rgba(255, 255, 255, 0.18);
   outline: none;
 }
+
+/* On a phone the open tool drawer covers the whole width, and the fixed ⌘K hint floated over its
+   content. The palette is still reachable from the keyboard; hide the hint while the drawer is open. */
+@media (max-width: 720px) {
+  .app-shell.is-tool-drawer-open .command-palette-hint {
+    display: none;
+  }
+}

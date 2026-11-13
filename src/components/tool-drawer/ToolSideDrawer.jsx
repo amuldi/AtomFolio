@@ -2301,7 +2301,9 @@ export function ToolSideDrawer({
         // for how the closed state is conveyed instead (a clip-path). Both vars are always set
         // (not just the one the current dock uses) since dock can change while open/mid-drag —
         // no reason the unused axis' value should ever be stale.
-        '--tool-drawer-width': `${drawerWidth}px`,
+        // Capped at the viewport: the stored width (default 522px) only gets clamped while
+        // dragging, so on a 390px phone the panel content kept its desktop width and was clipped.
+        '--tool-drawer-width': `min(${drawerWidth}px, calc(100vw - 0.35rem))`,
       }}
     >
       <div className="tool-drawer__window">
