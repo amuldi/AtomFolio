@@ -632,6 +632,7 @@ function extractTimelinePoint(item, currencyOptions) {
   return {
     date,
     holdingKey,
+    label: String(item?.label ?? holdingKey ?? '').trim(),
     returnRate,
     profitAmount,
     marketValue: position.marketValue,
@@ -683,6 +684,7 @@ function createProfitFlow(timelineItems, period = 'month', currencyOptions) {
       returnTotal: 0,
       returnCount: 0,
       entriesCount: 0,
+      holdings: [],
     };
 
     previous.startDate = point.date < previous.startDate ? point.date : previous.startDate;
@@ -695,6 +697,14 @@ function createProfitFlow(timelineItems, period = 'month', currencyOptions) {
       previous.returnCount += 1;
     }
     previous.entriesCount += 1;
+    if (point.holdingKey) {
+      previous.holdings.push({
+        key: point.holdingKey,
+        label: point.label || point.holdingKey,
+        profitAmount: Number.isFinite(point.profitAmount) ? point.profitAmount : null,
+        marketValue: Number.isFinite(point.marketValue) ? point.marketValue : null,
+      });
+    }
     groups.set(key, previous);
   });
 
@@ -714,6 +724,9 @@ function createProfitFlow(timelineItems, period = 'month', currencyOptions) {
       marketValue: group.marketValue || null,
       buyAmount: group.buyAmount || null,
       entriesCount: group.entriesCount,
+      // Each holding's own snapshot in this period, so a month can be compared with the one
+      // before it holding by holding (see buildMonthlyDigest).
+      holdings: group.holdings,
     }));
 }
 

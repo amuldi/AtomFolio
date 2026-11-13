@@ -266,42 +266,53 @@ const SCORECARD_COPY = {
   },
 };
 
+export const SCORE_WEIGHT_PRESETS = {
+  balanced: {
+    profitability: 0.2,
+    diversification: 0.22,
+    riskManagement: 0.2,
+    composition: 0.16,
+    timing: 0.08,
+    stability: 0.14,
+  },
+  returnFocus: {
+    profitability: 0.28,
+    diversification: 0.24,
+    riskManagement: 0.16,
+    composition: 0.12,
+    timing: 0.08,
+    stability: 0.12,
+  },
+  longTermReturnFocus: {
+    profitability: 0.24,
+    diversification: 0.22,
+    riskManagement: 0.12,
+    composition: 0.12,
+    timing: 0.04,
+    stability: 0.26,
+  },
+  stabilityFocus: {
+    profitability: 0.12,
+    diversification: 0.18,
+    riskManagement: 0.24,
+    composition: 0.18,
+    timing: 0.08,
+    stability: 0.2,
+  },
+};
+
+// One overall number per weighting style. The six axis scores never change with the style — only
+// how they are added up does — so the drawer shows all four results side by side instead of
+// making the user click through buttons that redraw an identical radar.
+export function overallScoreFor(metrics, preset = 'balanced') {
+  const weights = SCORE_WEIGHT_PRESETS[preset] ?? SCORE_WEIGHT_PRESETS.balanced;
+  return Math.round(
+    Object.entries(weights).reduce((sum, [key, weight]) => sum + (Number(metrics?.[key]) || 0) * weight, 0),
+  );
+}
+
 export function createPortfolioScorecard(items, language = 'ko', options = {}) {
   const { weightPreset = 'balanced' } = options;
-  const overallWeightsByPreset = {
-    balanced: {
-      profitability: 0.2,
-      diversification: 0.22,
-      riskManagement: 0.2,
-      composition: 0.16,
-      timing: 0.08,
-      stability: 0.14,
-    },
-    returnFocus: {
-      profitability: 0.28,
-      diversification: 0.24,
-      riskManagement: 0.16,
-      composition: 0.12,
-      timing: 0.08,
-      stability: 0.12,
-    },
-    longTermReturnFocus: {
-      profitability: 0.24,
-      diversification: 0.22,
-      riskManagement: 0.12,
-      composition: 0.12,
-      timing: 0.04,
-      stability: 0.26,
-    },
-    stabilityFocus: {
-      profitability: 0.12,
-      diversification: 0.18,
-      riskManagement: 0.24,
-      composition: 0.18,
-      timing: 0.08,
-      stability: 0.2,
-    },
-  };
   const count = Math.max(items.length, 1);
   const weights = extractWeights(items);
   const returns = items
@@ -416,15 +427,7 @@ export function createPortfolioScorecard(items, language = 'ko', options = {}) {
     timing: Math.round(timing),
     stability: Math.round(stability),
   };
-  const overallWeights = overallWeightsByPreset[weightPreset] ?? overallWeightsByPreset.balanced;
-  const overall = Math.round(
-    metrics.profitability * overallWeights.profitability +
-      metrics.diversification * overallWeights.diversification +
-      metrics.riskManagement * overallWeights.riskManagement +
-      metrics.composition * overallWeights.composition +
-      metrics.timing * overallWeights.timing +
-      metrics.stability * overallWeights.stability,
-  );
+  const overall = overallScoreFor(metrics, weightPreset);
 
   const copy = SCORECARD_COPY[language] ?? SCORECARD_COPY.ko;
   const explanations = {

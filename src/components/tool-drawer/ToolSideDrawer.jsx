@@ -26,7 +26,8 @@ import {
   createPortfolioAnalyticsSummary,
   resolveHoldingPosition,
 } from '../../lib/portfolioAnalyticsSummary.js';
-import { createPortfolioScorecard } from '../../lib/portfolioScoring.js';
+import { createPortfolioScorecard, overallScoreFor } from '../../lib/portfolioScoring.js';
+import { buildMonthlyDigest } from '../../lib/monthlyDigest.js';
 import {
   SketchGearIcon,
   SketchBurstIcon,
@@ -159,6 +160,38 @@ function formatAnalyticsMoney(value, currency = 'KRW', { signed = false } = {}) 
   }
   return `${sign}₩${formatKoreanWonShort(magnitude)}`;
 }
+
+// Investing styles for the portfolio score: same six axes, different weights (SCORE_WEIGHT_PRESETS).
+const SCORE_STYLE_OPTIONS = [
+  {
+    key: 'balanced',
+    labelKo: '균형형',
+    labelEn: 'Balanced',
+    hintKo: '균형형: 여섯 항목을 고르게 반영해요.',
+    hintEn: 'Balanced: all six axes count about equally.',
+  },
+  {
+    key: 'longTermReturnFocus',
+    labelKo: '성장형',
+    labelEn: 'Growth',
+    hintKo: '성장형: 수익성과 안정성을 크게 봐요. 오래 들고 갈 사람에게 맞아요.',
+    hintEn: 'Growth: weighs profitability and stability most, for long holding periods.',
+  },
+  {
+    key: 'stabilityFocus',
+    labelKo: '안정형',
+    labelEn: 'Stable',
+    hintKo: '안정형: 위험 관리와 구성을 크게 봐요. 손실을 피하고 싶은 사람에게 맞아요.',
+    hintEn: 'Stable: weighs risk management and composition most, for avoiding losses.',
+  },
+  {
+    key: 'returnFocus',
+    labelKo: '공격형',
+    labelEn: 'Aggressive',
+    hintKo: '공격형: 수익성을 가장 크게 봐요. 변동을 감수하는 사람에게 맞아요.',
+    hintEn: 'Aggressive: weighs profitability most, accepting bigger swings.',
+  },
+];
 
 const REBALANCE_BUCKET_LABELS = {
   ko: { stock: '주식', dividend: '배당', goldCash: '금·현금', reit: '리츠', other: '기타' },
@@ -1210,7 +1243,7 @@ export function ToolSideDrawer({
       }),
     [language, portfolioEntries, scoreWeightPreset],
   );
-  const latestMonthlyReport = analyticsSummary?.profitFlow?.at(-1) ?? null;
+  const monthlyDigest = useMemo(() => buildMonthlyDigest(analyticsSummary), [analyticsSummary]);
 
   useEffect(() => {
     if (!selectedHolding) {
@@ -1711,98 +1744,121 @@ export function ToolSideDrawer({
     </div>
   );
 
-  const renderMonthlyReportPanel = () => (
-    <div className="tool-drawer__report-panel">
-      <section className="tool-drawer__overview-card tool-drawer__overview-card--wide">
-        <p>{language === 'en' ? 'Monthly Report Draft' : '월간 리포트 초안'}</p>
-        {latestMonthlyReport ? (
-          <div className="tool-drawer__report-summary">
-            <div className="tool-drawer__analytics-grid">
-              <div className="tool-drawer__analytics-metric">
-                <span>{language === 'en' ? 'Month' : '월'}</span>
-                <strong>{latestMonthlyReport.periodKey}</strong>
-              </div>
-              <div className="tool-drawer__analytics-metric">
-                <span>{language === 'en' ? 'Return' : '수익률'}</span>
-                <strong
-                  className={getSignedValueToneClass(
-                    latestMonthlyReport.returnRate,
-                    'positive',
-                    'negative',
-                  )}
-                >
-                  {formatAnalyticsPercentValue(latestMonthlyReport.returnRate)}
-                </strong>
-              </div>
-              <div className="tool-drawer__analytics-metric">
-                <span>{language === 'en' ? 'Rows' : '기록'}</span>
-                <strong>
-                  {formatAnalyticsCompactValue(latestMonthlyReport.entriesCount, language)}
-                </strong>
-              </div>
-              <div className="tool-drawer__analytics-metric">
-                <span>{language === 'en' ? 'P/L' : '손익'}</span>
-                <strong
-                  className={getSignedValueToneClass(
-                    latestMonthlyReport.profitAmount,
-                    'positive',
-                    'negative',
-                  )}
-                >
-                  {formatAnalyticsMoney(latestMonthlyReport.profitAmount, baseCurrency, { signed: true })}
-                </strong>
-              </div>
-            </div>
+  // "This month" card: what changed since last month. The summary above already shows where the
+  // portfolio stands; repeating its return/P&L/top holding here added nothing.
+  const renderMonthlyReportPanel = () => {
+    const digest = monthlyDigest;
+    const en = language === 'en';
+    const money = (value) => formatAnalyticsMoney(value, baseCurrency, { signed: true });
+    const historyMax = Math.max(
+      1,
+      ...(digest?.history ?? []).map((point) => Math.abs(point.returnRate ?? 0)),
+    );
+    const renderMovers = (rows, tone) =>
+      rows.length ? (
+        <ul className="tool-drawer__digest-movers">
+          {rows.map((row) => (
+            <li key={row.key}>
+              <span title={row.label}>{compactLabel(row.label, 14)}</span>
+              <strong className={tone}>{money(row.change)}</strong>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="tool-drawer__digest-none">{en ? 'None' : '없음'}</p>
+      );
 
-            <div className="tool-drawer__report-lines">
-              <p>
-                {language === 'en'
-                  ? 'This draft uses uploaded or manually entered values and existing portfolio calculations.'
-                  : '이 초안은 업로드 또는 직접 입력한 값과 기존 포트폴리오 계산을 기준으로 합니다.'}
-              </p>
-              <ul>
-                <li>
-                  {language === 'en'
-                    ? `Largest visible holding: ${
-                        analyticsTopHolding
-                          ? `${analyticsTopHolding.label} (${formatAllocationPercent(analyticsTopHolding.weight)})`
-                          : '-'
-                      }`
-                    : `가장 큰 표시 비중: ${
-                        analyticsTopHolding
-                          ? `${analyticsTopHolding.label} (${formatAllocationPercent(analyticsTopHolding.weight)})`
-                          : '-'
-                      }`}
-                </li>
-                <li>
-                  {language === 'en'
-                    ? `Concentration: ${concentrationLevelLabel(
-                        analyticsSummary?.concentration?.concentrationLevel,
-                        language,
-                      )}`
-                    : `집중도: ${concentrationLevelLabel(
-                        analyticsSummary?.concentration?.concentrationLevel,
-                        language,
-                      )}`}
-                </li>
-                <li>
-                  {language === 'en'
-                    ? 'Next check: confirm data freshness, missing prices, and large allocation gaps.'
-                    : '다음 점검: 데이터 최신성, 누락 시세, 큰 비중 차이를 확인하세요.'}
-                </li>
-              </ul>
-            </div>
-          </div>
-        ) : (
-          <p className="tool-drawer__empty">
-            {language === 'en'
-              ? 'Monthly timeline data is not available yet.'
-              : '월간 시계열 데이터가 아직 없습니다.'}
+    return (
+      <div className="tool-drawer__report-panel">
+        <section className="tool-drawer__overview-card tool-drawer__overview-card--wide">
+          <p>
+            {en ? 'This month' : '이번 달 변화'}
+            {digest ? (
+              <span className="tool-drawer__digest-period">
+                {' · '}
+                {digest.periodKey}
+                {digest.previousPeriodKey
+                  ? en
+                    ? ` vs ${digest.previousPeriodKey}`
+                    : ` (${digest.previousPeriodKey} 대비)`
+                  : ''}
+              </span>
+            ) : null}
           </p>
-        )}
-      </section>
-    </div>
-  );
+          {digest ? (
+            <div className="tool-drawer__report-summary">
+              {digest.previousPeriodKey ? (
+                <div className="tool-drawer__analytics-grid tool-drawer__digest-grid">
+                  <div className="tool-drawer__analytics-metric">
+                    <span>{en ? 'Value' : '평가금액'}</span>
+                    <strong className={getSignedValueToneClass(digest.marketValueChange, 'positive', 'negative')}>
+                      {money(digest.marketValueChange)}
+                    </strong>
+                  </div>
+                  <div className="tool-drawer__analytics-metric">
+                    <span>{en ? 'P/L' : '손익'}</span>
+                    <strong className={getSignedValueToneClass(digest.profitChange, 'positive', 'negative')}>
+                      {money(digest.profitChange)}
+                    </strong>
+                  </div>
+                  <div className="tool-drawer__analytics-metric">
+                    <span>{en ? 'Return' : '수익률'}</span>
+                    <strong className={getSignedValueToneClass(digest.returnRateChange, 'positive', 'negative')}>
+                      {Number.isFinite(digest.returnRateChange)
+                        ? `${digest.returnRateChange > 0 ? '+' : ''}${digest.returnRateChange.toFixed(1)}%p`
+                        : '-'}
+                    </strong>
+                  </div>
+                </div>
+              ) : (
+                <p className="tool-drawer__digest-note">
+                  {en
+                    ? 'Only one month is recorded, so there is nothing to compare yet. Movers below are cumulative.'
+                    : '기록된 달이 하나뿐이라 아직 비교할 수 없어요. 아래 종목은 누적 손익 기준이에요.'}
+                </p>
+              )}
+
+              {digest.history.length > 1 ? (
+                <div className="tool-drawer__digest-history">
+                  <span>{en ? 'Month-end return' : '월말 수익률 추이'}</span>
+                  <div className="tool-drawer__digest-bars" role="img" aria-label={en ? 'Month-end return by month' : '월별 월말 수익률'}>
+                    {digest.history.map((point) => {
+                      const value = point.returnRate ?? 0;
+                      return (
+                        <div key={point.periodKey} className="tool-drawer__digest-bar">
+                          <em>{Number.isFinite(point.returnRate) ? `${value > 0 ? '+' : ''}${value.toFixed(1)}%` : '-'}</em>
+                          <i
+                            className={value >= 0 ? 'is-up' : 'is-down'}
+                            style={{ height: `${Math.max(4, (Math.abs(value) / historyMax) * 100)}%` }}
+                          />
+                          <small>{point.periodKey.slice(5) || point.periodKey}</small>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="tool-drawer__digest-columns">
+                <div>
+                  <span>{en ? 'Gained most' : '많이 번 종목'}</span>
+                  {renderMovers(digest.gainers, 'positive')}
+                </div>
+                <div>
+                  <span>{en ? 'Lost most' : '많이 잃은 종목'}</span>
+                  {renderMovers(digest.losers, 'negative')}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="tool-drawer__empty">
+              {en ? 'Monthly timeline data is not available yet.' : '월간 시계열 데이터가 아직 없습니다.'}
+            </p>
+          )}
+        </section>
+      </div>
+    );
+  };
 
   const renderActivePanel = () => {
     if (!resolvedTool) {
@@ -2221,74 +2277,64 @@ export function ToolSideDrawer({
             {scorecard || overallScorecard ? (
               <section className="tool-drawer__overview-card tool-drawer__overview-card--score">
                 <div className="tool-drawer__overview-card-head">
-                  <p>{language === 'en' ? 'Portfolio Scores' : '포트폴리오 점수'}</p>
+                  <p>{language === 'en' ? 'Portfolio Score' : '포트폴리오 점수'}</p>
                 </div>
 
+                {/* The six axis scores don't depend on the style — only how they're added up does.
+                    Show every style's total at once; clicking one just picks the number in the
+                    middle of the radar. Previously four buttons redrew an identical shape. */}
                 <div
                   className="tool-drawer__score-mode-grid"
-                  aria-label={language === 'en' ? 'Score weighting mode' : '점수 가중치 선택'}
+                  aria-label={language === 'en' ? 'Score by investing style' : '투자 성향별 점수'}
                 >
-                  {[
-                    {
-                      key: 'balanced',
-                      label: language === 'en' ? 'Balanced' : '균형형',
-                    },
-                    {
-                      key: 'longTermReturnFocus',
-                      label: language === 'en' ? 'Growth' : '성장형',
-                    },
-                    {
-                      key: 'stabilityFocus',
-                      label: language === 'en' ? 'Stable' : '안정형',
-                    },
-                    {
-                      key: 'returnFocus',
-                      label: language === 'en' ? 'Aggressive' : '공격형',
-                    },
-                  ].map((option) => (
-                    <button
-                      key={option.key}
-                      type="button"
-                      className={`tool-drawer__score-mode${scoreWeightPreset === option.key ? ' is-active' : ''}`}
-                      onClick={() => {
-                        onInteract?.();
-                        onScoreWeightPresetChange?.(option.key);
-                      }}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
+                  {SCORE_STYLE_OPTIONS.map((option) => {
+                    const value = overallScoreFor((scorecard ?? overallScorecard).metrics, option.key);
+                    return (
+                      <button
+                        key={option.key}
+                        type="button"
+                        className={`tool-drawer__score-mode${scoreWeightPreset === option.key ? ' is-active' : ''}`}
+                        title={language === 'en' ? option.hintEn : option.hintKo}
+                        onClick={() => {
+                          onInteract?.();
+                          onScoreWeightPresetChange?.(option.key);
+                        }}
+                      >
+                        <span>{language === 'en' ? option.labelEn : option.labelKo}</span>
+                        <strong>{value}</strong>
+                      </button>
+                    );
+                  })}
                 </div>
+                <p className="tool-drawer__score-mode-hint">
+                  {(() => {
+                    const option =
+                      SCORE_STYLE_OPTIONS.find((candidate) => candidate.key === scoreWeightPreset) ??
+                      SCORE_STYLE_OPTIONS[0];
+                    return language === 'en' ? option.hintEn : option.hintKo;
+                  })()}
+                </p>
 
-                <div className="tool-drawer__score-chart-stack">
-                  {scorecard ? (
-                    <div className="tool-drawer__score-chart-block">
-                      <span>
-                        {language === 'en' ? 'Current portfolio score' : '현재 포트폴리오 점수'}
-                      </span>
-                      <PortfolioScoreCardView
-                        scorecard={scorecard}
-                        axes={scoreAxes}
-                        language={language}
-                        className="score-panel score-panel--drawer"
-                      />
-                    </div>
-                  ) : null}
-
-                  {overallScorecard ? (
-                    <div className="tool-drawer__score-chart-block">
-                      <span>
-                        {language === 'en' ? 'Total portfolio score' : '전체 포트폴리오 점수'}
-                      </span>
-                      <PortfolioScoreCardView
-                        scorecard={overallScorecard}
-                        axes={scoreAxes}
-                        language={language}
-                        className="score-panel score-panel--drawer"
-                      />
-                    </div>
-                  ) : null}
-                </div>
+                <PortfolioScoreCardView
+                  scorecard={scorecard ?? overallScorecard}
+                  compareScorecard={scorecard && overallScorecard && portfolioEntries.length > 1 ? overallScorecard : null}
+                  axes={scoreAxes}
+                  language={language}
+                  className="score-panel score-panel--drawer"
+                />
+                {scorecard && overallScorecard && portfolioEntries.length > 1 ? (
+                  <p className="tool-drawer__score-legend">
+                    <span className="is-current">
+                      {language === 'en' ? 'This portfolio' : '이 포트폴리오'} {scorecard.overall}
+                    </span>
+                    <span className="is-compare">
+                      {language === 'en'
+                        ? `All ${portfolioEntries.length} combined`
+                        : `전체 ${portfolioEntries.length}개 합산`}{' '}
+                      {overallScorecard.overall}
+                    </span>
+                  </p>
+                ) : null}
               </section>
             ) : null}
 

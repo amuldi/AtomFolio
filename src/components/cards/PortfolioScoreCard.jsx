@@ -12,6 +12,9 @@ const SCORE_HINT_EDGE_MARGIN_PX = 8;
 
 export function PortfolioScoreCard({
   scorecard,
+  // Optional second shape drawn dashed underneath (e.g. all portfolios combined), so the two
+  // can be compared on one radar instead of two near-identical radars stacked in a column.
+  compareScorecard = null,
   axes,
   language,
   className = 'score-panel',
@@ -90,6 +93,19 @@ export function PortfolioScoreCard({
     1459,
     1.08,
   );
+  const comparePath = compareScorecard
+    ? buildScoreSketchPolygon(
+        axisPoints.map((axis) => {
+          const scaledRadius = radius * ((compareScorecard.metrics?.[axis.key] ?? 0) / 100);
+          return {
+            x: center + Math.cos(axis.angle) * scaledRadius,
+            y: center + Math.sin(axis.angle) * scaledRadius,
+          };
+        }),
+        1523,
+        0.9,
+      )
+    : null;
   const hoveredAxis = axisPoints.find((axis) => axis.key === hoveredMetricKey) ?? null;
   // Direction must be decided from the same point the hint is actually anchored to (outerX/outerY,
   // used below in the `left`/`top` style) — deciding from labelX/labelY instead (a different point,
@@ -191,6 +207,7 @@ export function PortfolioScoreCard({
             ))}
           </g>
 
+          {comparePath ? <path className="score-shape-compare" d={comparePath} /> : null}
           <path className="score-shape-soft" d={radarPathSoft} />
           <path className="score-shape-main" d={radarPathMain} />
           <path className="score-shape-ghost" d={radarPathSoft} />
@@ -250,6 +267,11 @@ export function PortfolioScoreCard({
             <strong className="score-hint__title">
               {hoveredAxis.label} {hoveredAxis.value}
               {language === 'en' ? ` ${text.scorePointUnit}` : text.scorePointUnit}
+              {compareScorecard && Number.isFinite(compareScorecard.metrics?.[hoveredAxis.key])
+                ? language === 'en'
+                  ? ` (all ${compareScorecard.metrics[hoveredAxis.key]})`
+                  : ` (전체 ${compareScorecard.metrics[hoveredAxis.key]})`
+                : null}
             </strong>
             <p className="score-hint__body">{scorecard.explanations?.[hoveredAxis.key]}</p>
           </div>

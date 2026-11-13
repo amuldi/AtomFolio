@@ -83,7 +83,8 @@
       "returnRate": null,
       "marketValue": null,
       "buyAmount": null,
-      "entriesCount": 2
+      "entriesCount": 2,
+      "holdings": []
     },
     {
       "periodKey": "2026-02",
@@ -93,7 +94,8 @@
       "returnRate": null,
       "marketValue": null,
       "buyAmount": null,
-      "entriesCount": 1
+      "entriesCount": 1,
+      "holdings": []
     }
   ],
   "concentration": {
