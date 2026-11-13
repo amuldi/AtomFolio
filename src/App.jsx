@@ -1796,6 +1796,7 @@ function liveQuoteMatchesLookup(quote, lookup) {
 
 const LIVE_QUOTE_FETCH_CONCURRENCY = 6;
 const LIVE_QUOTE_REFRESH_MS = 90 * 1000;
+const LIVE_QUOTE_INITIAL_DELAY_MS = 2500;
 // Bounds each background refresh burst well under the server's 30-requests/60s market-live rate
 // limit (see server/apiHandlers.mjs RATE_LIMITS) even with the concurrency above, leaving headroom
 // for whatever else (manual ticker search, financials lookups) shares that same per-user budget.
@@ -3563,8 +3564,14 @@ export default function App() {
       scheduleLiveQuoteEnrichment(portfolioId, sourceItems);
     };
 
+    // First refresh shortly after opening/switching, not 90s later — until then the atom showed
+    // whatever return was stored with the holding.
+    const initialTimerId = window.setTimeout(tick, LIVE_QUOTE_INITIAL_DELAY_MS);
     const intervalId = window.setInterval(tick, LIVE_QUOTE_REFRESH_MS);
-    return () => window.clearInterval(intervalId);
+    return () => {
+      window.clearTimeout(initialTimerId);
+      window.clearInterval(intervalId);
+    };
   }, [activePortfolio?.id, scheduleLiveQuoteEnrichment]);
 
   const allPortfolioItems = useMemo(
