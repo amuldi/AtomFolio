@@ -182,14 +182,6 @@ function formatRebalanceGap(gap, language = 'ko') {
   return `${name} ${amount}%p ${gap.gapWeightPercent < 0 ? '초과' : '부족'}`;
 }
 
-function formatAnalyticsSignedValue(value, language = 'ko') {
-  if (!Number.isFinite(value)) {
-    return '-';
-  }
-
-  return (value > 0 ? '+' : '') + formatAnalyticsCompactValue(value, language);
-}
-
 function formatAnalyticsPercentValue(value) {
   if (!Number.isFinite(value)) {
     return '-';
@@ -1757,7 +1749,7 @@ export function ToolSideDrawer({
                     'negative',
                   )}
                 >
-                  {formatAnalyticsSignedValue(latestMonthlyReport.profitAmount, language)}
+                  {formatAnalyticsMoney(latestMonthlyReport.profitAmount, baseCurrency, { signed: true })}
                 </strong>
               </div>
             </div>
