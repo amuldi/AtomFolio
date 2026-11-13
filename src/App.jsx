@@ -1685,6 +1685,15 @@ function withLiveReturnDetail(item) {
   return { ...item, detail: formatReturnDetail(String(position.returnRate.toFixed(4)), '수익률') };
 }
 
+// Live return % (from current price vs cost), used to tint each electron.
+function atomReturnFor(item) {
+  const value = resolveHoldingPosition(item, {
+    baseCurrency: 'KRW',
+    fxRates: latestFxRatesForQuotes,
+  }).returnRate;
+  return Number.isFinite(value) ? value : null;
+}
+
 // Market value in KRW, used to size each electron by its share of the portfolio.
 function atomWeightFor(item) {
   const value = resolveHoldingPosition(item, {
@@ -2347,6 +2356,7 @@ export default function App() {
         atoms: generateAtomLayout(targetEntry?.items ?? [], {
           resolveLabel: resolveAtomStockDisplayName,
           weightFor: atomWeightFor,
+          returnFor: atomReturnFor,
         }).map(createAtomState),
       };
       await dissolveAtom();
@@ -3639,6 +3649,7 @@ export default function App() {
         : generateAtomLayout(portfolioItems, {
             resolveLabel: resolveAtomStockDisplayName,
             weightFor: atomWeightFor,
+            returnFor: atomReturnFor,
           }).map(createAtomState);
 
     // A live quote refresh on the still-active portfolio (see the interval a few effects below)
@@ -5399,8 +5410,24 @@ export default function App() {
           role="status"
           aria-label={`${atomTag.totalText} ${atomTag.returnText} ${atomTag.note}`}
         >
-          <span className="atom-tag__string" aria-hidden="true" />
           <span className="atom-tag__card">
+            {/* Hand-drawn frame: two slightly different wobbly outlines, like a pen going round
+                twice. Stretched to the card with non-scaling strokes so the line stays crisp. */}
+            <svg
+              className="atom-tag__frame"
+              viewBox="0 0 200 60"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <path
+                className="atom-tag__frame-main"
+                d="M9 4.5 C52 2.6 118 5.2 190.5 3.4 C196.8 4.1 197.6 9 197.1 15 C196.2 27 198.4 41 196.6 53.2 C195.4 57 191 57.4 184 56.6 C130 55.1 70 58.2 10.2 56.4 C4.4 56.2 2.6 52.6 3.1 46 C3.8 33 2.2 20 3.6 9.6 C4 6 6 4.6 9 4.5 Z"
+              />
+              <path
+                className="atom-tag__frame-soft"
+                d="M7.4 6.2 C60 4.1 130 7.4 192.2 5.1 C195.4 6.3 195.9 12 195.6 18 C194.8 30 196.7 44 195 54.4 C193.6 56.2 188 55.1 180 55.4 C120 57 62 54.6 8.6 55.1 C5.6 54.3 4.4 50 4.9 43 C5.6 30 4.1 18 5.2 10.8 C5.6 7.6 6 6.4 7.4 6.2"
+              />
+            </svg>
             <span className="atom-tag__line">
               <span className="atom-tag__total">{atomTag.totalText}</span>
               {atomTag.returnText ? (
@@ -5610,6 +5637,7 @@ export default function App() {
                           entry={entry}
                           slot={PORTFOLIO_PREVIEW_SLOTS[index]}
                           onSelect={switchToPortfolio}
+                          returnFor={atomReturnFor}
                         />
                       ))}
                   </div>

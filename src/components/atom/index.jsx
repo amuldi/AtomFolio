@@ -275,11 +275,16 @@ function buildLabelDetail(atom) {
   const share = Number.isFinite(atom.weightShare) ? atom.weightShare * 100 : null;
   const shareText =
     share === null ? '' : share >= 10 ? `${Math.round(share)}%` : share >= 1 ? `${share.toFixed(1)}%` : '<1%';
-  const returnValue = parseLabelReturn(atom.detail);
+  const returnValue = Number.isFinite(atom.returnRate)
+    ? atom.returnRate
+    : parseLabelReturn(atom.detail);
+  const magnitude = returnValue === null ? '' : Math.abs(returnValue);
   const returnText =
     returnValue === null
       ? String(atom.detail ?? '')
-      : `${returnValue > 0.005 ? '▲' : returnValue < -0.005 ? '▼' : ''}${String(atom.detail).replace(/^[+-]/, '')}`;
+      : `${returnValue > 0.005 ? '▲' : returnValue < -0.005 ? '▼' : ''}${
+          magnitude >= 100 ? magnitude.toFixed(0) : magnitude >= 10 ? magnitude.toFixed(1) : magnitude.toFixed(2)
+        }%`;
   return [shareText, returnText].filter(Boolean).join(' · ');
 }
 
@@ -290,10 +295,17 @@ function parseLabelReturn(detail) {
 
 // Watercolor wash inside each hand-drawn electron: red for gains, blue for losses (Korean market
 // convention), stronger for bigger moves. Flat ink for ~0%.
-function resolveWashTone(atom) {
-  const value = parseLabelReturn(atom.detail);
-  if (value === null || Math.abs(value) < 0.05) {
-    return null;
+export function resolveWashTone(atomOrReturn) {
+  const value =
+    typeof atomOrReturn === 'number'
+      ? atomOrReturn
+      : Number.isFinite(atomOrReturn?.returnRate)
+        ? atomOrReturn.returnRate
+        : parseLabelReturn(atomOrReturn?.detail);
+  // Every electron gets paint: unknown or ~0% returns get a faint ink wash instead of nothing,
+  // so an unpainted electron never reads as "missing".
+  if (value === null || !Number.isFinite(value) || Math.abs(value) < 0.05) {
+    return { className: 'node-wash is-flat', strength: 0 };
   }
   return {
     className: value > 0 ? 'node-wash is-up' : 'node-wash is-down',
@@ -301,8 +313,8 @@ function resolveWashTone(atom) {
   };
 }
 
-export function PortfolioPreviewAtom({ entry, slot, onSelect }) {
-  const atoms = generateAtomLayout(entry.items).slice(0, 9);
+export function PortfolioPreviewAtom({ entry, slot, onSelect, returnFor }) {
+  const atoms = generateAtomLayout(entry.items, { returnFor }).slice(0, 9);
   const previewNodes = atoms.map((atom, index) => {
     const direction = new THREE.Vector3(...atom.direction).normalize();
     const radius = 34 + direction.z * 12 + noise(atom.seed + 71) * 9;
@@ -324,6 +336,7 @@ export function PortfolioPreviewAtom({ entry, slot, onSelect }) {
       mid: loopMid,
       inner: loopInner,
       label,
+      wash: resolveWashTone(atom),
     };
   });
 
@@ -372,6 +385,11 @@ export function PortfolioPreviewAtom({ entry, slot, onSelect }) {
                 <path className="portfolio-preview__bond-soft" d={path} />
                 <path className="portfolio-preview__bond-main" d={path} />
                 <g transform={`translate(${format(node.x)} ${format(node.y)}) rotate(${format(jitter(node.seed + 88, 18))})`}>
+                  <path
+                    className={node.wash.className}
+                    d={node.mid}
+                    opacity={0.3 + node.wash.strength * 0.45}
+                  />
                   <path className="portfolio-preview__node-soft" d={node.outer} />
                   <path className="portfolio-preview__node-mid" d={node.mid} />
                   <path className="portfolio-preview__node-main" d={node.inner} />

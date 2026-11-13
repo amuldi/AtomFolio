@@ -313,15 +313,23 @@ export function generateAtomLayout(items, options = {}) {
   });
   const maxWeight = Math.max(0, ...rawWeights);
   const weightTotal = rawWeights.reduce((sum, value) => sum + value, 0);
+  // Live return per holding (computed from price, not the entry-time `detail` text) so every
+  // electron can be tinted, including holdings whose stored detail is empty.
+  const returnOf = (index) => {
+    const value =
+      typeof options.returnFor === 'function' ? Number(options.returnFor(visibleItems[index])) : NaN;
+    return Number.isFinite(value) ? value : null;
+  };
   const sizeFor = (index, fallback) => {
     if (!(maxWeight > 0)) {
-      return { node: fallback, weightShare: null, weightRatio: null };
+      return { node: fallback, weightShare: null, weightRatio: null, returnRate: returnOf(index) };
     }
     const ratio = (rawWeights[index] ?? 0) / maxWeight;
     return {
       node: (3.2 + 13 * Math.sqrt(ratio)) * NODE_BASE_RADIUS_SCALE,
       weightShare: weightTotal > 0 ? (rawWeights[index] ?? 0) / weightTotal : null,
       weightRatio: ratio,
+      returnRate: returnOf(index),
     };
   };
 
