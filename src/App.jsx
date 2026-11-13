@@ -3455,8 +3455,26 @@ export default function App() {
     };
   }, [dailySnapshotMode, dateBasis]);
 
+  // Reopen the last viewed portfolio once it shows up in the loaded list (local restore and the
+  // server merge arrive at different times, and either can pick a default first). Only once per
+  // page load, and only until the user picks something themselves.
+  const rememberedPortfolioRef = useRef(readRememberedActivePortfolioId());
   useEffect(() => {
-    if (!activePortfolioId) {
+    const remembered = rememberedPortfolioRef.current;
+    if (!remembered) {
+      return;
+    }
+    if (portfolioEntries.some((entry) => entry.id === remembered)) {
+      rememberedPortfolioRef.current = '';
+      if (activePortfolioId !== remembered) {
+        setActivePortfolioId(remembered);
+      }
+    }
+  }, [portfolioEntries, activePortfolioId]);
+
+  useEffect(() => {
+    if (!activePortfolioId || rememberedPortfolioRef.current) {
+      // Don't overwrite the remembered id with a default before it has had a chance to apply.
       return;
     }
     try {
