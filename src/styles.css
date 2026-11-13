@@ -8728,3 +8728,102 @@ body::after {
     display: none;
   }
 }
+
+/* Watercolor wash inside a hand-drawn electron (SketchAtom): red = up, blue = down. */
+.node-wash {
+  stroke: none;
+  pointer-events: none;
+}
+.node-wash.is-up {
+  fill: rgb(255, 98, 84);
+}
+.node-wash.is-down {
+  fill: rgb(86, 150, 255);
+}
+
+/* Hanging name tag under the atom (App.jsx atomTag): a paper tag on a thread, in the same
+   hand-drawn voice as the atom, carrying total / direction / concentration. Not part of the
+   rotating SVG, so it reads the same at every moment of the spin. */
+.atom-tag {
+  position: absolute;
+  left: 50%;
+  bottom: 7%;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  transform: translateX(-50%) rotate(-1.2deg);
+  transform-origin: 50% 0;
+  animation: atom-tag-sway 7s ease-in-out infinite;
+}
+.atom-tag.has-hint {
+  bottom: 13%;
+}
+.atom-tag__string {
+  width: 1px;
+  height: 26px;
+  background: linear-gradient(to bottom, rgba(var(--atom-ink), 0), rgba(var(--atom-ink), 0.38));
+}
+.atom-tag__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.42rem 0.95rem 0.5rem;
+  border: 1px solid rgba(var(--atom-ink), 0.26);
+  border-radius: 0.6rem 0.75rem 0.55rem 0.7rem;
+  background: rgba(10, 10, 9, 0.62);
+  backdrop-filter: blur(6px);
+  font-family: 'Bradley Hand', 'Marker Felt', 'Noteworthy', 'Comic Sans MS', cursive;
+  color: rgba(var(--atom-ink), 0.92);
+  white-space: nowrap;
+}
+.atom-tag__line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+.atom-tag__total {
+  font-size: 1.32rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.atom-tag__return {
+  font-size: 1.02rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.atom-tag__return.is-up {
+  color: rgb(255, 112, 98);
+}
+.atom-tag__return.is-down {
+  color: rgb(110, 165, 255);
+}
+.atom-tag__note {
+  font-size: 0.86rem;
+  opacity: 0.78;
+}
+@keyframes atom-tag-sway {
+  0%,
+  100% {
+    transform: translateX(-50%) rotate(-1.2deg);
+  }
+  50% {
+    transform: translateX(-50%) rotate(1.1deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .atom-tag {
+    animation: none;
+  }
+}
+@media (max-width: 640px) {
+  .atom-tag {
+    bottom: 11%;
+  }
+  .atom-tag__total {
+    font-size: 1.12rem;
+  }
+}

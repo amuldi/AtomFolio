@@ -42,7 +42,7 @@ import {
   setPortfolioWorkspaceId,
   saveServerImportHistory,
 } from './utils/storage.js';
-import { textFor } from './utils/format.js';
+import { formatKoreanWonShort, textFor } from './utils/format.js';
 import { ToolSideDrawer } from './components/tool-drawer/ToolSideDrawer.jsx';
 import {
   DEFAULT_REBALANCE_TARGET_WEIGHTS,
@@ -1685,6 +1685,15 @@ function withLiveReturnDetail(item) {
   return { ...item, detail: formatReturnDetail(String(position.returnRate.toFixed(4)), '수익률') };
 }
 
+// Market value in KRW, used to size each electron by its share of the portfolio.
+function atomWeightFor(item) {
+  const value = resolveHoldingPosition(item, {
+    baseCurrency: 'KRW',
+    fxRates: latestFxRatesForQuotes,
+  }).marketValue;
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
 function applyLiveQuoteToPortfolioItem(item, quote) {
   if (!quote || !Number.isFinite(quote.latestPrice)) {
     return item;
@@ -1871,6 +1880,13 @@ function mergePortfolioItemUpdates(baseItems, updatedItems) {
   }
 
   return baseItems.map((item, index) => updatedItems[index] ?? item);
+}
+
+function compactAtomTagName(value) {
+  const text = String(value ?? '')
+    .replace(/,?\s*(Inc\.?|Corporation|Corp\.?|Company|Platforms|Ltd\.?)$/i, '')
+    .trim();
+  return text.length > 14 ? `${text.slice(0, 13)}…` : text;
 }
 
 function resolveAtomStockDisplayName(item, fallback = 'Stock') {
@@ -2289,6 +2305,7 @@ export default function App() {
         entryId,
         atoms: generateAtomLayout(targetEntry?.items ?? [], {
           resolveLabel: resolveAtomStockDisplayName,
+          weightFor: atomWeightFor,
         }).map(createAtomState),
       };
       await dissolveAtom();
@@ -3590,9 +3607,10 @@ export default function App() {
     atomsRef.current =
       precomputed.entryId != null && precomputed.entryId === activePortfolioId
         ? precomputed.atoms
-        : generateAtomLayout(portfolioItems, { resolveLabel: resolveAtomStockDisplayName }).map(
-            createAtomState,
-          );
+        : generateAtomLayout(portfolioItems, {
+            resolveLabel: resolveAtomStockDisplayName,
+            weightFor: atomWeightFor,
+          }).map(createAtomState);
 
     // A live quote refresh on the still-active portfolio (see the interval a few effects below)
     // replaces portfolioItems with a new array of the *same* holdings — same entryId, same count
@@ -5069,6 +5087,42 @@ export default function App() {
     baseCurrency,
     displayFxRates,
   ]);
+  // The name tag that hangs under the atom like a mobile's label: the three things a glance
+  // should answer (how much, which way, how concentrated) without opening any panel. It sits
+  // outside the rotating scene, so it stays readable while the atom keeps turning.
+  const atomTag = useMemo(() => {
+    const totals = portfolioAnalyticsSummary?.totals;
+    const total = Number(totals?.totalMarketValue);
+    if (!Number.isFinite(total) || total <= 0) {
+      return null;
+    }
+    const returnRate = Number(totals?.totalReturnRate);
+    const top = portfolioAnalyticsSummary?.concentration?.topHoldings ?? [];
+    const topShare = top.slice(0, 3).reduce((sum, holding) => sum + (holding.weightPercent ?? 0), 0);
+    const totalText =
+      baseCurrency === 'USD'
+        ? `$${total.toLocaleString('en-US', { maximumFractionDigits: total >= 1000 ? 0 : 2 })}`
+        : `₩${formatKoreanWonShort(total)}`;
+    const hasReturn = Number.isFinite(returnRate);
+    const isEn = language === 'en';
+    const lead = top[0]
+      ? `${compactAtomTagName(top[0].label)} ${Math.round(top[0].weightPercent ?? 0)}%`
+      : '';
+    const spread =
+      top.length > 3
+        ? isEn
+          ? `top 3 hold ${Math.round(topShare)}%`
+          : `상위 3종목 ${Math.round(topShare)}%`
+        : '';
+    return {
+      totalText,
+      returnText: hasReturn
+        ? `${returnRate > 0.005 ? '▲' : returnRate < -0.005 ? '▼' : ''} ${Math.abs(returnRate).toFixed(Math.abs(returnRate) >= 10 ? 1 : 2)}%`
+        : '',
+      tone: !hasReturn || Math.abs(returnRate) < 0.005 ? 'flat' : returnRate > 0 ? 'up' : 'down',
+      note: [lead, spread].filter(Boolean).join(' · '),
+    };
+  }, [portfolioAnalyticsSummary, baseCurrency, language]);
   const portfolioHeatmap = useMemo(
     () =>
       createPortfolioHeatmap(deferredPortfolioTimelineItems, {
@@ -5462,6 +5516,25 @@ export default function App() {
                     onKeyboardSelect={handleNodeKeyboardSelect}
                   />
                 </div>
+                {hasPortfolioItems && atomTag ? (
+                  <div
+                    className={`atom-tag${atomHintVisible ? ' has-hint' : ''}`}
+                    aria-label={`${atomTag.totalText} ${atomTag.returnText} ${atomTag.note}`}
+                  >
+                    <span className="atom-tag__string" aria-hidden="true" />
+                    <span className="atom-tag__card">
+                      <span className="atom-tag__line">
+                        <span className="atom-tag__total">{atomTag.totalText}</span>
+                        {atomTag.returnText ? (
+                          <span className={`atom-tag__return is-${atomTag.tone}`}>
+                            {atomTag.returnText}
+                          </span>
+                        ) : null}
+                      </span>
+                      {atomTag.note ? <span className="atom-tag__note">{atomTag.note}</span> : null}
+                    </span>
+                  </div>
+                ) : null}
                 {atomHintVisible && hasPortfolioItems ? (
                   <div className="atom-hint" role="status">
                     {text.atomHint}

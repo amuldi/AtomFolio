@@ -202,7 +202,9 @@ export function createAtomState(config) {
     dragging: false,
     dragMix: 0,
     nodeTilt: jitter(config.seed + 401, 16),
-    labelTilt: jitter(config.seed + 509, 8),
+    // Kept slightly crooked for the hand-drawn feel, but much less than the old ±8°: tilted text
+    // reads markedly slower.
+    labelTilt: jitter(config.seed + 509, 3),
     labelOffset: 20 + noise(config.seed + 557) * 14,
     nodePaths: [
       buildLoopPath(config.node, config.seed + 201),
@@ -302,15 +304,35 @@ export function generateAtomLayout(items, options = {}) {
   }
 
   const total = Math.max(visibleItems.length, MIN_ATOMS);
+  // Node size used to be random (7.8-9.5), so a 52% holding and a 0.5% one looked the same.
+  // With weights, radius follows sqrt(weight / largest weight) so drawn *area* tracks weight,
+  // within a range that keeps the smallest holding visible and the hand-drawn look intact.
+  const rawWeights = visibleItems.map((item) => {
+    const value = typeof options.weightFor === 'function' ? Number(options.weightFor(item)) : NaN;
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  });
+  const maxWeight = Math.max(0, ...rawWeights);
+  const weightTotal = rawWeights.reduce((sum, value) => sum + value, 0);
+  const sizeFor = (index, fallback) => {
+    if (!(maxWeight > 0)) {
+      return { node: fallback, weightShare: null, weightRatio: null };
+    }
+    const ratio = (rawWeights[index] ?? 0) / maxWeight;
+    return {
+      node: (5.4 + 7.2 * Math.sqrt(ratio)) * NODE_BASE_RADIUS_SCALE,
+      weightShare: weightTotal > 0 ? (rawWeights[index] ?? 0) / weightTotal : null,
+      weightRatio: ratio,
+    };
+  };
 
   if (total === 1) {
     return [
       {
         id: 'a1',
         direction: [0.86, 0.22, 0.46],
-        node: 8.7 * NODE_BASE_RADIUS_SCALE,
         seed: 11,
         ...buildAtomLayoutFields(visibleItems[0], 'Stock', resolveLabel),
+        ...sizeFor(0, 8.7 * NODE_BASE_RADIUS_SCALE),
       },
     ];
   }
@@ -331,9 +353,9 @@ export function generateAtomLayout(items, options = {}) {
       return {
         id: `a${index + 1}`,
         direction: [direction.x, direction.y, direction.z],
-        node: (7.9 + noise(1800 + index * 31) * 1.6) * NODE_BASE_RADIUS_SCALE,
         seed: 11 + index * 23,
         ...buildAtomLayoutFields(visibleItems[index], `Stock ${index + 1}`, resolveLabel),
+        ...sizeFor(index, (7.9 + noise(1800 + index * 31) * 1.6) * NODE_BASE_RADIUS_SCALE),
       };
     });
   }
@@ -352,9 +374,9 @@ export function generateAtomLayout(items, options = {}) {
     return {
       id: `a${index + 1}`,
       direction: [direction.x, direction.y, direction.z],
-      node: (7.8 + noise(1800 + index * 31) * 1.7) * NODE_BASE_RADIUS_SCALE,
       seed: 11 + index * 23,
       ...buildAtomLayoutFields(visibleItems[index], `Stock ${index + 1}`, resolveLabel),
+      ...sizeFor(index, (7.8 + noise(1800 + index * 31) * 1.7) * NODE_BASE_RADIUS_SCALE),
     };
   });
 }

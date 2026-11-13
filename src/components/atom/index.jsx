@@ -42,6 +42,7 @@ export function SketchAtom({
   ];
   const dimFactor = atom.dimmed ? 0.18 : 1;
   const focusBoost = atom.isSelected ? 1.08 : atom.isGroupMatch ? 1.04 : 1;
+  const washTone = resolveWashTone(atom);
 
   return (
     <>
@@ -70,6 +71,16 @@ export function SketchAtom({
           nodeRotation,
         )}) scale(${format(nodeScale)})`}
       >
+        {washTone ? (
+          <path
+            className={washTone.className}
+            d={atom.nodePaths[1]}
+            opacity={Math.min(
+              1,
+              (0.22 + washTone.strength * 0.38) * (0.6 + atom.depth * 0.4) * dimFactor,
+            )}
+          />
+        ) : null}
         <path
           className="node-soft"
           d={atom.nodePaths[0]}
@@ -230,25 +241,60 @@ export function AtomLabel({ atom, maxLength = null, occluded = false }) {
   // ("+12.3%") and truncating it could hide the sign, which matters a lot more than a few extra
   // characters of a company name do.
   const labelText = truncateLabelText(atom.label, maxLength);
+  // Bigger holdings get bigger handwriting, so the label hierarchy matches the weight hierarchy.
+  const labelScale = Number.isFinite(atom.weightRatio) ? 0.86 + 0.34 * Math.sqrt(atom.weightRatio) : 1;
+  const detailText = buildLabelDetail(atom);
 
   return (
     <g
       className="label-note"
       transform={`translate(${format(noteX)} ${format(noteY)}) rotate(${format(
-        atom.labelTilt + direction.x * 4,
-      )})`}
+        atom.labelTilt + direction.x * 1.5,
+      )}) scale(${format(labelScale)})`}
       style={{ opacity }}
     >
       <text className="label-main" textAnchor={anchor} x={baseX} y="-2">
         {labelText}
       </text>
-      {atom.detail ? (
+      {detailText ? (
         <text className="label-detail" textAnchor={anchor} x={baseX} y="13">
-          {atom.detail}
+          {detailText}
         </text>
       ) : null}
     </g>
   );
+}
+
+// "52% · ▼0.2%": the holding's share of the portfolio first (what the atom's size shows), then
+// its return with an explicit arrow so the direction never depends on color alone.
+function buildLabelDetail(atom) {
+  const share = Number.isFinite(atom.weightShare) ? atom.weightShare * 100 : null;
+  const shareText =
+    share === null ? '' : share >= 10 ? `${Math.round(share)}%` : share >= 1 ? `${share.toFixed(1)}%` : '<1%';
+  const returnValue = parseLabelReturn(atom.detail);
+  const returnText =
+    returnValue === null
+      ? String(atom.detail ?? '')
+      : `${returnValue > 0.005 ? '▲' : returnValue < -0.005 ? '▼' : ''}${String(atom.detail).replace(/^[+-]/, '')}`;
+  return [shareText, returnText].filter(Boolean).join(' · ');
+}
+
+function parseLabelReturn(detail) {
+  const numeric = Number.parseFloat(String(detail ?? '').replace(/[,%\s]/g, ''));
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+// Watercolor wash inside each hand-drawn electron: red for gains, blue for losses (Korean market
+// convention), stronger for bigger moves. Flat ink for ~0%.
+function resolveWashTone(atom) {
+  const value = parseLabelReturn(atom.detail);
+  if (value === null || Math.abs(value) < 0.05) {
+    return null;
+  }
+  return {
+    className: value > 0 ? 'node-wash is-up' : 'node-wash is-down',
+    strength: Math.min(1, Math.abs(value) / 25),
+  };
 }
 
 export function PortfolioPreviewAtom({ entry, slot, onSelect }) {
