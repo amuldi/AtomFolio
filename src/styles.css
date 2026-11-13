@@ -8745,12 +8745,12 @@ body::after {
    hand-drawn voice as the atom, carrying total / direction / concentration. Not part of the
    rotating SVG, so it reads the same at every moment of the spin. */
 .atom-tag {
-  /* Hangs from the top edge like a mobile from the ceiling: the atom's lower half is where
-     rotating electrons pass, the band above it stays clear. */
-  position: absolute;
-  left: 50%;
+  /* Hangs from the top edge of the window like a mobile from the ceiling, in the band above the
+     atom that no electron reaches. Centered on the stage area right of the tool drawer. */
+  position: fixed;
+  left: calc(50% + var(--tool-drawer-current-width, 0px) / 2);
   top: 0;
-  z-index: 4;
+  z-index: var(--z-floating-ui);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -8761,7 +8761,7 @@ body::after {
 }
 .atom-tag__string {
   width: 1px;
-  height: clamp(28px, 6vh, 56px);
+  height: calc(env(safe-area-inset-top, 0px) + clamp(14px, 2.6vh, 26px));
   background: linear-gradient(to bottom, rgba(var(--atom-ink), 0.04), rgba(var(--atom-ink), 0.42));
 }
 .atom-tag__card {
@@ -8816,6 +8816,12 @@ body::after {
 @media (prefers-reduced-motion: reduce) {
   .atom-tag {
     animation: none;
+  }
+}
+@media (max-width: 720px) {
+  /* The drawer covers the whole width on a phone; the tag would sit on top of its content. */
+  .app-shell.is-tool-drawer-open .atom-tag {
+    display: none;
   }
 }
 @media (max-width: 640px) {

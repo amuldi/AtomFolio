@@ -5362,6 +5362,26 @@ export default function App() {
           deliberately small and out of the way (top-right corner) rather than a modal/tour: a
           persistent low-key reminder, not a one-time popup that can be missed or dismissed and
           then forgotten. */}
+      {/* Hangs from the top edge of the window, outside the rotating stage, so no electron can
+          ever pass in front of it. */}
+      {hasPortfolioItems && atomTag ? (
+        <div
+          className="atom-tag"
+          role="status"
+          aria-label={`${atomTag.totalText} ${atomTag.returnText} ${atomTag.note}`}
+        >
+          <span className="atom-tag__string" aria-hidden="true" />
+          <span className="atom-tag__card">
+            <span className="atom-tag__line">
+              <span className="atom-tag__total">{atomTag.totalText}</span>
+              {atomTag.returnText ? (
+                <span className={`atom-tag__return is-${atomTag.tone}`}>{atomTag.returnText}</span>
+              ) : null}
+            </span>
+            {atomTag.note ? <span className="atom-tag__note">{atomTag.note}</span> : null}
+          </span>
+        </div>
+      ) : null}
       <button
         type="button"
         className="command-palette-hint"
@@ -5516,25 +5536,6 @@ export default function App() {
                     onKeyboardSelect={handleNodeKeyboardSelect}
                   />
                 </div>
-                {hasPortfolioItems && atomTag ? (
-                  <div
-                    className={`atom-tag${atomHintVisible ? ' has-hint' : ''}`}
-                    aria-label={`${atomTag.totalText} ${atomTag.returnText} ${atomTag.note}`}
-                  >
-                    <span className="atom-tag__string" aria-hidden="true" />
-                    <span className="atom-tag__card">
-                      <span className="atom-tag__line">
-                        <span className="atom-tag__total">{atomTag.totalText}</span>
-                        {atomTag.returnText ? (
-                          <span className={`atom-tag__return is-${atomTag.tone}`}>
-                            {atomTag.returnText}
-                          </span>
-                        ) : null}
-                      </span>
-                      {atomTag.note ? <span className="atom-tag__note">{atomTag.note}</span> : null}
-                    </span>
-                  </div>
-                ) : null}
                 {atomHintVisible && hasPortfolioItems ? (
                   <div className="atom-hint" role="status">
                     {text.atomHint}
