@@ -1053,6 +1053,9 @@ function resolveFieldLabelKey(label) {
 function formatFieldLabel(label, language = 'ko') {
   const key = resolveFieldLabelKey(label);
   if (!key) {
+    if (language === 'en' && EXTRA_FIELD_LABELS_EN[String(label ?? '').trim()]) {
+      return EXTRA_FIELD_LABELS_EN[String(label).trim()];
+    }
     return normalizePortfolioVocabulary(label);
   }
 
@@ -1091,7 +1094,21 @@ const HIDDEN_ATOM_INFO_FIELD_LABELS = [
   '자산 유형',
   'assetClass',
   'assetType',
+  // Internal bookkeeping, not facts about the holding: the portfolio's own name (already shown
+  // everywhere around the card) and the buy-price currency (shown with the price itself).
+  '포트폴리오명',
+  '포트폴리오 유형',
+  'accountType',
+  '매수통화',
+  'purchaseCurrency',
 ].map(normalizeDisplayKey);
+
+// Field labels written by the live-quote updater that have no fieldLabels key of their own.
+const EXTRA_FIELD_LABELS_EN = {
+  현재가: 'Price',
+  '상장 시장': 'Exchange',
+  등락률: 'Day change',
+};
 
 function atomInfoFallbackValue(language = 'ko') {
   return language === 'en' ? 'Checking' : '확인 중';
@@ -1653,10 +1670,31 @@ function upsertQuoteField(fields, label, value) {
   return nextFields;
 }
 
+// Latest display FX rates, kept current by App (see the effect next to displayFxRates). Used to
+// recompute a holding's return when a live quote arrives — that runs outside React.
+let latestFxRatesForQuotes = buildDisplayFxRates();
+
+function withLiveReturnDetail(item) {
+  const position = resolveHoldingPosition(item, {
+    baseCurrency: 'KRW',
+    fxRates: latestFxRatesForQuotes,
+  });
+  if (!Number.isFinite(position.returnRate) || !Number.isFinite(position.buyAmount)) {
+    return item;
+  }
+  return { ...item, detail: formatReturnDetail(String(position.returnRate.toFixed(4)), '수익률') };
+}
+
 function applyLiveQuoteToPortfolioItem(item, quote) {
   if (!quote || !Number.isFinite(quote.latestPrice)) {
     return item;
   }
+  // The atom label and holding card read `detail`, which was only ever set at entry time, so a
+  // holding kept showing its entry-day return (0.00%) while 요약 showed the live one.
+  return withLiveReturnDetail(applyLiveQuoteFields(item, quote));
+}
+
+function applyLiveQuoteFields(item, quote) {
 
   const displayName =
     resolveMarketDisplayName(quote) || item?.stockName || item?.name || item?.label;
@@ -4514,6 +4552,9 @@ export default function App() {
     () => buildDisplayFxRates(usdKrwRate, extraKrwRates),
     [usdKrwRate, extraKrwRates],
   );
+  useEffect(() => {
+    latestFxRatesForQuotes = displayFxRates;
+  }, [displayFxRates]);
   // One flat list, rendered in this order, no sub-grouping — keeps the settings panel to a single
   // quick-glance list rather than reintroducing section headers for five items.
   const settingsSections = [
@@ -5202,10 +5243,18 @@ export default function App() {
     selectedAtomReturnRaw
       ? selectedAtomInfoFields.filter((field) => resolveFieldLabelKey(field.label) !== 'return')
       : selectedAtomInfoFields
-  ).map((field) => ({
-    label: formatFieldLabel(field.label, language),
-    value: translateDisplayValue(field.value, language),
-  }));
+  ).map((field) => {
+    const isBuyPrice = resolveFieldLabelKey(field.label) === 'buyPrice';
+    const numeric = Number(String(field.value ?? '').replace(/,/g, ''));
+    return {
+      label: formatFieldLabel(field.label, language),
+      // 매수가 is stored as typed ("25135") while 현재가 next to it is formatted ("₩25,135").
+      value:
+        isBuyPrice && String(field.value ?? '').trim() && Number.isFinite(numeric)
+          ? numeric.toLocaleString(language === 'en' ? 'en-US' : 'ko-KR', { maximumFractionDigits: 4 })
+          : translateDisplayValue(field.value, language),
+    };
+  });
 
   return (
     <main

@@ -135,7 +135,8 @@ function formatAnalyticsCompactValue(value, language = 'ko') {
 
   const absoluteValue = Math.abs(value);
   const formatter = new Intl.NumberFormat(language === 'en' ? 'en-US' : 'ko-KR', {
-    maximumFractionDigits: absoluteValue >= 100000 ? 1 : 0,
+    // Small amounts keep cents: with a USD base, a -$0.34 day used to print as "-0".
+    maximumFractionDigits: absoluteValue >= 100000 ? 1 : absoluteValue < 1000 ? 2 : 0,
     notation: absoluteValue >= 100000 ? 'compact' : 'standard',
   });
 

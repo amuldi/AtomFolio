@@ -450,7 +450,12 @@ export function applyMarketScenario(twin, scenario = {}) {
     assetClassWeightsAfter: projectedTwin.assetClassWeights,
     lossContributors,
     largestLossContributor: lossContributors[0] ?? null,
-    defensiveAsset: defensiveAssets[0] ?? null,
+    // Only a holding that actually held up (didn't lose) and isn't the biggest loser counts as
+    // "defensive" — a one-holding portfolio used to list the same asset as both.
+    defensiveAsset:
+      defensiveAssets.find(
+        (position) => position.changeValue >= 0 && position.id !== lossContributors[0]?.id,
+      ) ?? null,
     insights: [],
   };
 }

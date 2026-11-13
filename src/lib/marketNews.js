@@ -401,6 +401,15 @@ function dedupeKeyFor(link) {
   }
 }
 
+// Naver's markup carries hidden screen-reader text ("새 창 열림" = "opens in new window") inside
+// its links, which the scraper picked up as part of every title.
+function stripScreenReaderText(value) {
+  return String(value ?? '')
+    .replace(/\s*새\s*창\s*열림\s*/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 export function uniqueNewsItems(items, limit = 12) {
   const seen = new Set();
   const result = [];
@@ -416,6 +425,8 @@ export function uniqueNewsItems(items, limit = 12) {
     seen.add(dedupeKey);
     result.push({
       ...item,
+      title: stripScreenReaderText(item.title),
+      description: stripScreenReaderText(item.description),
       link,
       id: item.id || `${link}-${result.length}`,
       source: normalizeNewsSource(item.source),

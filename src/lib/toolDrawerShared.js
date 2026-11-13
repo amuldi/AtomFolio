@@ -133,8 +133,8 @@ export function summarizePortfolioEntryAccounts(entry, language) {
   const accountText = visibleLabels.length
     ? `${visibleLabels.join(', ')}${extraCount ? ` +${extraCount}` : ''}`
     : language === 'en'
-      ? 'Unclassified portfolio'
-      : '포트폴리오 정보 없음';
+      ? `${(entry?.items ?? []).length} holdings`
+      : `${(entry?.items ?? []).length}개 종목`;
   const rowCount = sourceItems.length;
   const items = entry?.items ?? [];
   const securityCount = items.length;

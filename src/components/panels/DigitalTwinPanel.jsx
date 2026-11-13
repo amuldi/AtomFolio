@@ -541,7 +541,7 @@ function DigitalTwinPanel({
             </div>
             <div>
               <span>방어 자산</span>
-              <strong>{defensiveAsset?.label ?? '-'}</strong>
+              <strong>{defensiveAsset?.label ?? '방어 자산 없음'}</strong>
             </div>
           </div>
         </section>

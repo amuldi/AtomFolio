@@ -157,7 +157,7 @@ export async function readArchivedNews({ language, limit = ARCHIVE_READ_LIMIT })
     return (Array.isArray(rows) ? rows : []).map((row) => ({
       id: `archive-${row.link_hash}`,
       linkHash: row.link_hash,
-      title: row.title,
+      title: String(row.title ?? '').replace(/\s*새\s*창\s*열림\s*/g, ' ').trim(),
       link: row.link,
       description: row.description,
       source: row.source,
