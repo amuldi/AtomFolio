@@ -124,6 +124,9 @@ const STORAGE_KEYS = {
   autoSave: 'atom-sketch-auto-save',
   dailySnapshots: 'atom-sketch-daily-snapshots',
   portfolioData: 'atom-sketch-portfolio-data-v1',
+  // Stored on its own: the portfolio blob above can't hold long CSV timelines (quota), so the
+  // active id inside it often pointed at a portfolio that wasn't stored and fell back to the first.
+  activePortfolio: 'atom-sketch-active-portfolio-id',
   toolTriggerPosition: 'atom-sketch-tool-trigger-position',
   groupDockPosition: 'atom-sketch-group-dock-position',
   heatmapDockPosition: 'atom-sketch-heatmap-dock-position',
@@ -657,6 +660,14 @@ function readStoredPortfolioState() {
     };
   } catch {
     return { entries: [], activePortfolioId: null, savedAt: null };
+  }
+}
+
+function readRememberedActivePortfolioId() {
+  try {
+    return window.localStorage.getItem(STORAGE_KEYS.activePortfolio) || '';
+  } catch {
+    return '';
   }
 }
 
@@ -3414,11 +3425,15 @@ export default function App() {
         if (hasServerUpdates) {
           portfolioEntriesRef.current = mergedEntries;
           setPortfolioEntries(mergedEntries);
-          setActivePortfolioId((current) =>
-            mergedEntries.some((entry) => entry.id === current)
+          setActivePortfolioId((current) => {
+            const remembered = readRememberedActivePortfolioId();
+            if (remembered && mergedEntries.some((entry) => entry.id === remembered)) {
+              return remembered;
+            }
+            return mergedEntries.some((entry) => entry.id === current)
               ? current
-              : (mergedEntries[0]?.id ?? null),
-          );
+              : (mergedEntries[0]?.id ?? null);
+          });
           setPortfolioSyncStatus('server-merged');
           setShowGroupDock(true);
           setShowScoreDock(true);
@@ -3439,6 +3454,17 @@ export default function App() {
       cancelled = true;
     };
   }, [dailySnapshotMode, dateBasis]);
+
+  useEffect(() => {
+    if (!activePortfolioId) {
+      return;
+    }
+    try {
+      window.localStorage.setItem(STORAGE_KEYS.activePortfolio, activePortfolioId);
+    } catch {
+      // Private mode / quota: falling back to the first portfolio is acceptable.
+    }
+  }, [activePortfolioId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
