@@ -28,8 +28,12 @@ export function SketchAtom({
   const shadowOpacity = 0.3 + atom.depth * 0.3 + atom.hoverMix * 0.08;
   const mainOpacity = 0.45 + atom.depth * 0.48 + atom.hoverMix * 0.08;
   const scale = atom.scale * (0.86 + atom.depth * 0.1);
+  // Electron size now encodes weight, so perspective is damped for the node itself: at full
+  // strength a 53% holding at the back drew smaller than an 18% one at the front. Depth still
+  // reads through bond strokes and opacity.
+  const sizeScale = (1 + (atom.scale - 1) * 0.3) * (0.92 + atom.depth * 0.06);
   const nodeScale =
-    scale *
+    sizeScale *
     ((atom.isSelected ? 0.92 : atom.isGroupMatch ? 0.91 : 0.9) +
       atom.hoverMix * 0.055 +
       atom.dragMix * 0.085);
