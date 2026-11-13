@@ -320,9 +320,17 @@ export function generateAtomLayout(items, options = {}) {
       typeof options.returnFor === 'function' ? Number(options.returnFor(visibleItems[index])) : NaN;
     return Number.isFinite(value) ? value : null;
   };
+  const issueOf = (index) =>
+    typeof options.issueFor === 'function' ? options.issueFor(visibleItems[index]) || null : null;
   const sizeFor = (index, fallback) => {
     if (!(maxWeight > 0)) {
-      return { node: fallback, weightShare: null, weightRatio: null, returnRate: returnOf(index) };
+      return {
+        node: fallback,
+        weightShare: null,
+        weightRatio: null,
+        returnRate: returnOf(index),
+        issue: issueOf(index),
+      };
     }
     const ratio = (rawWeights[index] ?? 0) / maxWeight;
     return {
@@ -330,6 +338,7 @@ export function generateAtomLayout(items, options = {}) {
       weightShare: weightTotal > 0 ? (rawWeights[index] ?? 0) / weightTotal : null,
       weightRatio: ratio,
       returnRate: returnOf(index),
+      issue: issueOf(index),
     };
   };
 

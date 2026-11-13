@@ -473,6 +473,13 @@ function resolvePosition(item, index, { fxRates, baseCurrency } = {}) {
     nativeBuyAmount: sameCurrencyPurchase ? buyAmountInPurchaseCurrency : null,
     nativeMarketValue: marketValueInNativeCurrency,
     nativeProfitAmount,
+    // Raw inputs, for data-quality checks (lib/holdingIssues.js).
+    shares: Number.isFinite(shares) ? shares : null,
+    buyPrice: Number.isFinite(buyPrice) ? buyPrice : null,
+    currentPrice: Number.isFinite(currentPrice) ? currentPrice : null,
+    buyPriceInNativeCurrency: Number.isFinite(buyPrice)
+      ? convertCurrencyAmount(buyPrice, purchaseCurrency, nativeCurrency, resolvedFxRates)
+      : null,
     buyAmount,
     marketValue,
     profitAmount,

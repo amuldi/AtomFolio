@@ -75,6 +75,11 @@ export function SketchAtom({
           nodeRotation,
         )}) scale(${format(nodeScale)})`}
       >
+        {atom.issue ? (
+          // Single attention feature for "check this holding's data": an amber dashed ring.
+          // Red already means "up", so it can't be used for warnings.
+          <circle className="node-issue" cx="0" cy="0" r={atom.node * 1.55} />
+        ) : null}
         {washTone ? (
           <path
             className={washTone.className}
@@ -263,6 +268,11 @@ export function AtomLabel({ atom, maxLength = null, occluded = false }) {
       {detailText ? (
         <text className="label-detail" textAnchor={anchor} x={baseX} y="13">
           {detailText}
+        </text>
+      ) : null}
+      {atom.issue ? (
+        <text className="label-issue" textAnchor={anchor} x={baseX} y="27">
+          {`⚠ ${atom.issue}`}
         </text>
       ) : null}
     </g>

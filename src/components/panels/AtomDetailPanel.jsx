@@ -9,7 +9,7 @@ import { useCallback, useRef, useState } from 'react';
 // doesn't snap it back.
 let lastDragOffset = { x: 0, y: 0 };
 
-export function AtomDetailPanel({ atom, fields, returnValue, returnToneClass, text, onClose }) {
+export function AtomDetailPanel({ atom, fields, returnValue, returnToneClass, issue, text, onClose }) {
   const [offset, setOffset] = useState(lastDragOffset);
   const [dragging, setDragging] = useState(false);
   const dragRef = useRef(null);
@@ -98,6 +98,12 @@ export function AtomDetailPanel({ atom, fields, returnValue, returnToneClass, te
         >
           {returnValue}
         </span>
+      ) : null}
+
+      {issue ? (
+        <p className="atom-detail-panel__issue" role="note">
+          ⚠ {issue}
+        </p>
       ) : null}
 
       {fields.length ? (

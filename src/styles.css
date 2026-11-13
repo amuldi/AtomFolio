@@ -8749,6 +8749,47 @@ body::after {
 .node-wash.is-down {
   fill: rgb(86, 150, 255);
 }
+/* Data-quality warnings (lib/holdingIssues.js). Amber, never red: red already means "up". */
+.node-issue {
+  fill: none;
+  stroke: rgb(242, 180, 64);
+  stroke-width: 1.3;
+  stroke-dasharray: 3 3;
+  opacity: 0.85;
+  pointer-events: none;
+}
+.label-issue {
+  fill: rgb(242, 180, 64);
+  font-family: var(--ui-font);
+  font-size: 10px;
+  font-weight: 600;
+}
+.atom-tag__issue {
+  font-family: var(--ui-font);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgb(242, 180, 64);
+}
+.tool-drawer__holding-issue {
+  display: inline-block;
+  margin-top: 0.15rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  font-style: normal;
+  color: rgb(242, 180, 64);
+}
+.atom-detail-panel__issue {
+  margin: 0.55rem 0 0;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid rgba(242, 180, 64, 0.4);
+  border-radius: 8px;
+  background: rgba(242, 180, 64, 0.08);
+  color: rgb(242, 180, 64);
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
 /* Unchanged or unknown return: a faint ink wash, so no electron is left unpainted. */
 .node-wash.is-flat {
   fill: rgb(var(--atom-ink));

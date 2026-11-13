@@ -8,6 +8,7 @@ import {
   shouldFallbackToLocalTimeline as shouldFallbackToLocalTimelineShared,
 } from './lib/portfolioIngestionCore.js';
 import { createPortfolioScorecard } from './lib/portfolioScoring.js';
+import { detectHoldingIssues } from './lib/holdingIssues.js';
 import {
   applyEnrichedRowsToEntry,
   selectChangedEntries,
@@ -1710,6 +1711,18 @@ function atomReturnFor(item) {
   return Number.isFinite(value) ? value : null;
 }
 
+// Language for issue labels drawn inside the atom (set by App alongside the FX rates).
+let latestAtomLanguage = 'ko';
+
+// First data-quality warning for a holding (lib/holdingIssues.js), or null.
+function atomIssueFor(item) {
+  const position = resolveHoldingPosition(item, {
+    baseCurrency: 'KRW',
+    fxRates: latestFxRatesForQuotes,
+  });
+  return detectHoldingIssues(position, { language: latestAtomLanguage })[0]?.label ?? null;
+}
+
 // Market value in KRW, used to size each electron by its share of the portfolio.
 function atomWeightFor(item) {
   const value = resolveHoldingPosition(item, {
@@ -2331,6 +2344,7 @@ export default function App() {
           resolveLabel: resolveAtomStockDisplayName,
           weightFor: atomWeightFor,
           returnFor: atomReturnFor,
+          issueFor: atomIssueFor,
         }).map(createAtomState),
       };
       await dissolveAtom();
@@ -3658,6 +3672,7 @@ export default function App() {
             resolveLabel: resolveAtomStockDisplayName,
             weightFor: atomWeightFor,
             returnFor: atomReturnFor,
+            issueFor: atomIssueFor,
           }).map(createAtomState);
 
     // A live quote refresh on the still-active portfolio (see the interval a few effects below)
@@ -4628,6 +4643,9 @@ export default function App() {
   useEffect(() => {
     latestFxRatesForQuotes = displayFxRates;
   }, [displayFxRates]);
+  useEffect(() => {
+    latestAtomLanguage = language;
+  }, [language]);
   // One flat list, rendered in this order, no sub-grouping — keeps the settings panel to a single
   // quick-glance list rather than reintroducing section headers for five items.
   const settingsSections = [
@@ -5169,8 +5187,13 @@ export default function App() {
         : '',
       tone: !hasReturn || Math.abs(returnRate) < 0.005 ? 'flat' : returnRate > 0 ? 'up' : 'down',
       note: [lead, spread].filter(Boolean).join(' · '),
+      issueCount: deferredPortfolioItems.filter(
+        (item) =>
+          detectHoldingIssues(resolveHoldingPosition(item, { baseCurrency, fxRates: displayFxRates }))
+            .length > 0,
+      ).length,
     };
-  }, [portfolioAnalyticsSummary, baseCurrency, language]);
+  }, [portfolioAnalyticsSummary, baseCurrency, language, deferredPortfolioItems, displayFxRates]);
   const portfolioHeatmap = useMemo(
     () =>
       createPortfolioHeatmap(deferredPortfolioTimelineItems, {
@@ -5443,6 +5466,13 @@ export default function App() {
               ) : null}
             </span>
             {atomTag.note ? <span className="atom-tag__note">{atomTag.note}</span> : null}
+            {atomTag.issueCount ? (
+              <span className="atom-tag__issue">
+                {language === 'en'
+                  ? `⚠ ${atomTag.issueCount} holding${atomTag.issueCount > 1 ? 's' : ''} to check`
+                  : `⚠ 확인 필요 ${atomTag.issueCount}종목`}
+              </span>
+            ) : null}
           </span>
         </div>
       ) : null}
@@ -5675,6 +5705,7 @@ export default function App() {
           fields={selectedAtomDisplayFields}
           returnValue={selectedAtomReturnRaw}
           returnToneClass={selectedAtomReturnToneClass}
+          issue={selectedAtomData.issue}
           text={text}
           onClose={() => {
             noteInteraction();

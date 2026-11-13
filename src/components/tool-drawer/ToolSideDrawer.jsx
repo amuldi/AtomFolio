@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatAllocationPercent, textFor } from '../../utils/format.js';
 import { clamp } from '../../utils/math.js';
 import { convertCurrencyAmount, formatCurrencyAmount } from '../../utils/currency.js';
+import { detectHoldingIssues } from '../../lib/holdingIssues.js';
 import {
   buildGroupedHoldingItems,
   formatHoldingListMeta,
@@ -1950,6 +1951,7 @@ export function ToolSideDrawer({
                     // not left as "-" the way this row used to render before it showed anything
                     // beyond the return percentage.
                     const position = resolveHoldingPosition(item, { baseCurrency, fxRates });
+                    const holdingIssues = detectHoldingIssues(position, { language });
                     const isForeignHolding = position.nativeCurrency !== baseCurrency;
                     const profitToneClass = getSignedValueToneClass(
                       position.profitAmount,
@@ -2011,8 +2013,20 @@ export function ToolSideDrawer({
                             <span className="tool-drawer__holding-main-name">
                               <strong>{compactLabel(resolveHoldingName(item), 18)}</strong>
                               <em>{formatHoldingListMeta(item, language)}</em>
+                              {holdingIssues.length ? (
+                                <span
+                                  className="tool-drawer__holding-issue"
+                                  title={holdingIssues.map((issue) => issue.label).join(', ')}
+                                >
+                                  ⚠ {holdingIssues[0].label}
+                                </span>
+                              ) : null}
                             </span>
-                            <small>{String(item.detail ?? item.return ?? '').trim() || '-'}</small>
+                            <small>
+                              {Number.isFinite(position.returnRate)
+                                ? formatAnalyticsPercentValue(position.returnRate)
+                                : String(item.detail ?? item.return ?? '').trim() || '-'}
+                            </small>
                           </span>
                           <span className="tool-drawer__holding-main-row tool-drawer__holding-main-row--metrics">
                             <span className="tool-drawer__holding-main-metric">
