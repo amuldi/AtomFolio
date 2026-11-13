@@ -319,7 +319,7 @@ export function generateAtomLayout(items, options = {}) {
     }
     const ratio = (rawWeights[index] ?? 0) / maxWeight;
     return {
-      node: (5.4 + 7.2 * Math.sqrt(ratio)) * NODE_BASE_RADIUS_SCALE,
+      node: (3.2 + 13 * Math.sqrt(ratio)) * NODE_BASE_RADIUS_SCALE,
       weightShare: weightTotal > 0 ? (rawWeights[index] ?? 0) / weightTotal : null,
       weightRatio: ratio,
     };

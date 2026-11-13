@@ -8747,7 +8747,7 @@ body::after {
 .atom-tag {
   position: absolute;
   left: 50%;
-  bottom: 7%;
+  bottom: 2.2%;
   z-index: 4;
   display: flex;
   flex-direction: column;
@@ -8758,7 +8758,7 @@ body::after {
   animation: atom-tag-sway 7s ease-in-out infinite;
 }
 .atom-tag.has-hint {
-  bottom: 13%;
+  bottom: 9%;
 }
 .atom-tag__string {
   width: 1px;
@@ -8821,7 +8821,7 @@ body::after {
 }
 @media (max-width: 640px) {
   .atom-tag {
-    bottom: 11%;
+    bottom: 4%;
   }
   .atom-tag__total {
     font-size: 1.12rem;
