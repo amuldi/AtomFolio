@@ -45,6 +45,16 @@ test('a won buy price for a dollar stock is compared after currency conversion',
   assert.deepEqual(codes(qqqm), []);
 });
 
+test('a long-held big winner (6.8x) is not flagged, a 19x gap is', () => {
+  const make = (buy, current) =>
+    holding(
+      [field('매수가', String(buy)), field('보유수량', '1'), field('현재가', `₩${current}`), field('통화', 'KRW')],
+      { ticker: '000660' },
+    );
+  assert.deepEqual(codes(make(100000, 680000)), []);
+  assert.deepEqual(codes(make(10000, 190000)), ['price-ratio']);
+});
+
 test('labels are localized', () => {
   const position = { shares: null, buyPrice: null, currentPrice: null, returnRate: null };
   assert.equal(detectHoldingIssues(position)[0].label, '수량 없음');

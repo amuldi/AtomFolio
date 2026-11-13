@@ -5,8 +5,12 @@
 // Works on a resolved position (resolveHoldingPosition), so currencies are already reconciled.
 // Returns a list of { code, label } — empty when nothing looks off.
 
-const PRICE_RATIO_LIMIT = 5; // buy price more than 5x off the current price (either direction)
-const RETURN_LIMIT = 500; // |return| above 500%
+// Losses: a buy price 5x the current price (-80%) is rare and is exactly the "copied another
+// security's price" mistake. Gains: long-held winners really do reach 5-8x (SK하이닉스 +577% in
+// the sample data), so only 10x and beyond is treated as suspicious.
+const LOSS_RATIO_LIMIT = 5;
+const GAIN_RATIO_LIMIT = 10;
+const RETURN_LIMIT = 1000; // |return| above 1000% when prices themselves aren't available
 
 function formatRatio(ratio) {
   return ratio >= 10 ? Math.round(ratio).toString() : ratio.toFixed(1).replace(/\.0$/, '');
@@ -27,8 +31,9 @@ export function detectHoldingIssues(position, { language = 'ko' } = {}) {
   const buy = Number(position.buyPriceInNativeCurrency ?? position.buyPrice);
   const current = Number(position.currentPrice);
   if (Number.isFinite(buy) && buy > 0 && Number.isFinite(current) && current > 0) {
-    const ratio = buy > current ? buy / current : current / buy;
-    if (ratio > PRICE_RATIO_LIMIT) {
+    const isLoss = buy > current;
+    const ratio = isLoss ? buy / current : current / buy;
+    if (ratio > (isLoss ? LOSS_RATIO_LIMIT : GAIN_RATIO_LIMIT)) {
       issues.push({
         code: 'price-ratio',
         label: en
