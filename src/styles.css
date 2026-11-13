@@ -5821,8 +5821,10 @@ body::after {
 }
 
 .heatmap-panel--drawer {
-  --heat-cell-size: clamp(0.53rem, calc((var(--tool-drawer-width) - 13rem) / 26), 0.9rem);
-  --heat-gap: clamp(0.18rem, calc(var(--tool-drawer-width) / 180), 0.28rem);
+  /* The lower bounds used to be 0.53rem / 0.18rem, which at a phone-width drawer (~384px) forced
+     the 26-week grid wider than the panel and clipped the newest weeks on the right. */
+  --heat-cell-size: clamp(0.34rem, calc((var(--tool-drawer-width) - 13rem) / 26), 0.9rem);
+  --heat-gap: clamp(0.12rem, calc(var(--tool-drawer-width) / 180), 0.28rem);
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -6925,6 +6927,15 @@ body::after {
 .label-layer,
 .label-note {
   pointer-events: none;
+  /* Labels fade out when they would overlap a nearer one (computeOccludedLabelIds); ease the
+     swap so a spinning atom doesn't flicker names on and off. */
+  transition: opacity 220ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .label-note {
+    transition: none;
+  }
 }
 
 .label-main,

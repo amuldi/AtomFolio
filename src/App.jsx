@@ -63,7 +63,7 @@ import {
   projectPoint,
   trackballVector,
 } from './utils/scene.js';
-import { DEFAULT_USD_KRW_RATE } from './utils/currency.js';
+import { DEFAULT_USD_KRW_RATE, collectExtraQuoteCurrencies } from './utils/currency.js';
 import {
   AtomSketch as AtomSketchView,
   PortfolioPreviewAtom as PortfolioPreviewAtomView,
@@ -2334,6 +2334,9 @@ export default function App() {
     readStoredOption(STORAGE_KEYS.baseCurrency, BASE_CURRENCY_OPTIONS, 'KRW'),
   );
   const [usdKrwRate, setUsdKrwRate] = useState(DEFAULT_USD_KRW_RATE);
+  // KRW per unit of any other currency a holding trades in (INR, JPY, ...). Without these, such a
+  // holding's price was treated as 원 (₹7.64 counted as ₩7.64).
+  const [extraKrwRates, setExtraKrwRates] = useState({});
   const [dateBasis, setDateBasis] = useState(() =>
     readStoredOption(STORAGE_KEYS.dateBasis, DATE_BASIS_OPTIONS, 'kst'),
   );
@@ -3082,6 +3085,54 @@ export default function App() {
       window.clearInterval(intervalId);
     };
   }, []);
+
+  const extraQuoteCurrencyKey = useMemo(
+    () =>
+      collectExtraQuoteCurrencies(
+        portfolioEntries.flatMap((entry) => [...(entry.items ?? []), ...(entry.timelineItems ?? [])]),
+      ).join(','),
+    [portfolioEntries],
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !extraQuoteCurrencyKey) {
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+    const currencies = extraQuoteCurrencyKey.split(',');
+
+    const loadExtraRates = async () => {
+      const results = await Promise.allSettled(
+        currencies.map((code) =>
+          fetchLiveMarketData({ ticker: `${code}KRW=X`, name: `${code}/KRW`, signal: controller.signal }),
+        ),
+      );
+      if (!active || controller.signal.aborted) {
+        return;
+      }
+      const next = {};
+      results.forEach((result, index) => {
+        const rate = Number(result.status === 'fulfilled' ? result.value?.latestPrice : NaN);
+        if (Number.isFinite(rate) && rate > 0) {
+          next[currencies[index]] = rate;
+        }
+      });
+      if (Object.keys(next).length) {
+        setExtraKrwRates((current) => ({ ...current, ...next }));
+      }
+    };
+
+    loadExtraRates();
+    const intervalId = window.setInterval(loadExtraRates, 15 * 60 * 1000);
+
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearInterval(intervalId);
+    };
+  }, [extraQuoteCurrencyKey]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -4459,7 +4510,10 @@ export default function App() {
   }, [clearHoveredFileTooltip, hoveredFileEntry, hoveredFileEntryId]);
   const groupOptions = useMemo(() => groupOptionsFor(language), [language]);
   const scoreAxes = useMemo(() => scoreAxesFor(language), [language]);
-  const displayFxRates = useMemo(() => buildDisplayFxRates(usdKrwRate), [usdKrwRate]);
+  const displayFxRates = useMemo(
+    () => buildDisplayFxRates(usdKrwRate, extraKrwRates),
+    [usdKrwRate, extraKrwRates],
+  );
   // One flat list, rendered in this order, no sub-grouping — keeps the settings panel to a single
   // quick-glance list rather than reintroducing section headers for five items.
   const settingsSections = [

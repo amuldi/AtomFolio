@@ -382,10 +382,27 @@ function resolvePosition(item, index, { fxRates, baseCurrency } = {}) {
   // won "loss". Keeping the user's actual entry currency separate from the security's quote
   // currency — and only ever comparing like-for-like amounts, never a raw number assumed to
   // already be in whichever currency happens to be convenient — is what prevents that.
-  const purchaseCurrency =
+  const recordedPurchaseCurrency =
     normalizeCurrencyCode(
       item?.purchaseCurrency ?? findFieldValue(item?.fields, FIELD_CANDIDATES.purchaseCurrency),
     ) || nativeCurrency;
+  // Legacy data: before INR/JPY/... were recognized, the entry form resolved such a holding's
+  // native currency to KRW and stored 매수통화=KRW next to a price typed in the security's own
+  // currency (₹7.64 saved as "7.64, KRW"). A real 원 cost basis for a ₹7.64 stock would be ~14x
+  // larger, so a KRW-tagged price on the same scale as the native quote is read as native.
+  const nativeScaleRatio =
+    Number.isFinite(buyPrice) && buyPrice > 0 && Number.isFinite(currentPrice) && currentPrice > 0
+      ? buyPrice / currentPrice
+      : null;
+  const purchaseCurrency =
+    recordedPurchaseCurrency === 'KRW' &&
+    nativeCurrency !== 'KRW' &&
+    nativeCurrency !== 'USD' &&
+    nativeScaleRatio !== null &&
+    nativeScaleRatio > 0.2 &&
+    nativeScaleRatio < 5
+      ? nativeCurrency
+      : recordedPurchaseCurrency;
   const convertTo = (value, fromCurrency) =>
     Number.isFinite(value)
       ? convertCurrencyAmount(value, fromCurrency, resolvedBaseCurrency, resolvedFxRates)

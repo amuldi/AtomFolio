@@ -1301,6 +1301,49 @@ async function fetchYahooSearchSuggestions(query, signal, limit = DEFAULT_SEARCH
     .filter(Boolean);
 }
 
+const NAVER_STOCK_AUTOCOMPLETE_URL = 'https://ac.stock.naver.com/ac';
+
+// Yahoo's search barely knows Korean names ("PLUS 고배당주" returned only unrelated US tickers),
+// so a holding with a wrong/stale 6-digit code could never be re-found by its name. Naver's stock
+// autocomplete resolves Korean names to KRX codes directly.
+async function fetchNaverSymbolSuggestions(query, signal, limit = DEFAULT_SEARCH_LIMIT) {
+  const normalizedQuery = String(query ?? '').trim();
+
+  if (!/[가-힣]/.test(normalizedQuery)) {
+    return [];
+  }
+
+  const url = new URL(NAVER_STOCK_AUTOCOMPLETE_URL);
+  url.searchParams.set('q', normalizedQuery);
+  url.searchParams.set('target', 'stock');
+
+  const response = await fetchWithTimeout(url.toString(), { signal, cache: 'no-store' });
+
+  if (!response.ok) {
+    throw new Error(`symbol-search-failed:${response.status}`);
+  }
+
+  const payload = await response.json();
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+
+  return items
+    .filter((item) => item?.nationCode === 'KOR' && /^[0-9A-Z]{6}$/.test(String(item?.code ?? '')))
+    .slice(0, limit)
+    .map((item) => {
+      const name = String(item.name ?? '').trim();
+      return {
+        symbol: String(item.code),
+        name,
+        rawName: name,
+        displayName: name,
+        exchangeName: String(item.typeName ?? item.typeCode ?? '').trim(),
+        quoteType: 'EQUITY',
+        typeDisp: /ETF|ETN/i.test(name) ? 'ETF' : 'Stock',
+        source: '네이버 증권',
+      };
+    });
+}
+
 export async function searchMarketSymbolSuggestions(query, { signal, limit = DEFAULT_SEARCH_LIMIT } = {}) {
   const variants = buildSearchQueryVariants(query);
   const localSuggestions = searchLocalSymbolSuggestions(query, limit);
@@ -1309,9 +1352,10 @@ export async function searchMarketSymbolSuggestions(query, { signal, limit = DEF
     return localSuggestions;
   }
 
-  const settled = await Promise.allSettled(
-    variants.map((variant) => fetchYahooSearchSuggestions(variant, signal, limit)),
-  );
+  const settled = await Promise.allSettled([
+    fetchNaverSymbolSuggestions(query, signal, limit),
+    ...variants.map((variant) => fetchYahooSearchSuggestions(variant, signal, limit)),
+  ]);
   const suggestions = uniqueBySymbol(
     [
       ...localSuggestions,

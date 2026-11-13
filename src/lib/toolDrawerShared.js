@@ -267,8 +267,8 @@ export function normalizeUsdKrwRate(value) {
   return Number.isFinite(numeric) && numeric > 0 ? numeric : DEFAULT_USD_KRW_RATE;
 }
 
-export function buildDisplayFxRates(usdKrwRate = DEFAULT_USD_KRW_RATE) {
-  return buildFxRates(normalizeUsdKrwRate(usdKrwRate));
+export function buildDisplayFxRates(usdKrwRate = DEFAULT_USD_KRW_RATE, krwRates = {}) {
+  return buildFxRates(normalizeUsdKrwRate(usdKrwRate), krwRates);
 }
 
 export function convertMarketValueForBase(

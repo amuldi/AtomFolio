@@ -8,13 +8,34 @@
 // ₩700,000 position as if both were the same unit. Every place in the app that needs to know "is
 // this KRW or USD" or "what is this worth in KRW" should import from here, not reimplement it.
 
+// Base (display) currencies the user can pick in settings.
 export const SUPPORTED_CURRENCIES = ['KRW', 'USD'];
+// Every currency a *holding* can be quoted in. Anything outside KRW/USD used to normalize to ''
+// and silently fall back to KRW — an Indian stock's ₹7.64 was summed as 7.64원.
+export const QUOTE_CURRENCIES = [
+  'KRW', 'USD', 'INR', 'JPY', 'EUR', 'GBP', 'CNY', 'HKD', 'CAD', 'AUD', 'TWD', 'SGD', 'CHF',
+];
 export const DEFAULT_USD_KRW_RATE = 1365;
 
 export function normalizeCurrencyCode(value) {
   const code = String(value ?? '').trim().toUpperCase();
-  return SUPPORTED_CURRENCIES.includes(code) ? code : '';
+  return QUOTE_CURRENCIES.includes(code) ? code : '';
 }
+
+// Exchange suffixes (Yahoo convention) whose listing currency isn't USD.
+const SUFFIX_CURRENCIES = [
+  [/\.(NS|BO)$/, 'INR'],
+  [/\.T$/, 'JPY'],
+  [/\.HK$/, 'HKD'],
+  [/\.L$/, 'GBP'],
+  [/\.(SS|SZ)$/, 'CNY'],
+  [/\.(TO|V)$/, 'CAD'],
+  [/\.AX$/, 'AUD'],
+  [/\.(TW|TWO)$/, 'TWD'],
+  [/\.SI$/, 'SGD'],
+  [/\.SW$/, 'CHF'],
+  [/\.(PA|DE|AS|MI|MC|BR|F)$/, 'EUR'],
+];
 
 // A US-style ticker (letters only, optional short suffix like ".TO"/"-B") reads as USD; a 5-6
 // digit KRX code (with or without a .KS/.KQ suffix) reads as KRW. This is only a fallback for
@@ -31,6 +52,10 @@ function inferCurrencyFromTicker(ticker) {
   }
   if (KR_STYLE_CODE_PATTERN.test(value)) {
     return 'KRW';
+  }
+  const suffixMatch = SUFFIX_CURRENCIES.find(([pattern]) => pattern.test(value));
+  if (suffixMatch) {
+    return suffixMatch[1];
   }
   if (US_STYLE_TICKER_PATTERN.test(value)) {
     return 'USD';
@@ -62,14 +87,29 @@ export function inferHoldingCurrency(item) {
   return inferred || 'KRW';
 }
 
-export function buildFxRates(usdKrwRate = DEFAULT_USD_KRW_RATE) {
+// krwRates: { INR: 14.15, JPY: 8.3, ... } — KRW per one unit of each extra currency (Yahoo's
+// `${CODE}KRW=X`). Every currency gets direct rates to/from KRW and USD; other pairs are crossed
+// through KRW in convertCurrencyAmount.
+export function buildFxRates(usdKrwRate = DEFAULT_USD_KRW_RATE, krwRates = {}) {
   const numeric = Number(usdKrwRate);
   const rate = Number.isFinite(numeric) && numeric > 0 ? numeric : DEFAULT_USD_KRW_RATE;
-
-  return {
+  const rates = {
     USD: { KRW: rate },
     KRW: { USD: 1 / rate },
   };
+
+  for (const [code, value] of Object.entries(krwRates ?? {})) {
+    const currency = normalizeCurrencyCode(code);
+    const toKrw = Number(value);
+    if (!currency || currency === 'KRW' || currency === 'USD' || !Number.isFinite(toKrw) || toKrw <= 0) {
+      continue;
+    }
+    rates[currency] = { KRW: toKrw, USD: toKrw / rate };
+    rates.KRW[currency] = 1 / toKrw;
+    rates.USD[currency] = rate / toKrw;
+  }
+
+  return rates;
 }
 
 // Converts a plain numeric amount from one currency to another. Returns the original value
@@ -89,9 +129,33 @@ export function convertCurrencyAmount(value, fromCurrency, toCurrency, fxRates =
     return numeric;
   }
 
-  const rate = fxRates?.[from]?.[to];
+  const direct = fxRates?.[from]?.[to];
+  if (Number.isFinite(direct)) {
+    return numeric * direct;
+  }
 
-  return Number.isFinite(rate) ? numeric * rate : numeric;
+  // Cross through KRW (e.g. INR -> JPY) when only each side's KRW rate is known.
+  const viaKrw = (fxRates?.[from]?.KRW ?? (from === 'KRW' ? 1 : NaN)) * (fxRates?.KRW?.[to] ?? (to === 'KRW' ? 1 : NaN));
+  return Number.isFinite(viaKrw) ? numeric * viaKrw : numeric;
+}
+
+// Currencies (other than KRW/USD, which are always fetched) whose KRW rate is needed to value the
+// given holdings.
+export function collectExtraQuoteCurrencies(items) {
+  const found = new Set();
+  for (const item of items ?? []) {
+    const native = inferHoldingCurrency(item);
+    const purchase = normalizeCurrencyCode(
+      item?.purchaseCurrency ??
+        item?.fields?.find?.((field) => /^(매수통화|purchasecurrency)$/i.test(String(field?.label ?? '').trim()))?.value,
+    );
+    for (const code of [native, purchase]) {
+      if (code && code !== 'KRW' && code !== 'USD') {
+        found.add(code);
+      }
+    }
+  }
+  return [...found].sort();
 }
 
 const KRW_FORMATTER = new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 0 });
@@ -113,6 +177,14 @@ export function formatCurrencyAmount(value, currency) {
 
   if (code === 'USD') {
     return `${sign}$${USD_FORMATTER.format(magnitude)}`;
+  }
+
+  if (code !== 'KRW') {
+    try {
+      return `${sign}${new Intl.NumberFormat('en-US', { style: 'currency', currency: code }).format(magnitude)}`;
+    } catch {
+      return `${sign}${magnitude.toLocaleString('en-US')} ${code}`;
+    }
   }
 
   return `${sign}₩${KRW_FORMATTER.format(magnitude)}`;

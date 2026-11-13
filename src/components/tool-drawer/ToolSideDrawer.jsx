@@ -1252,7 +1252,7 @@ export function ToolSideDrawer({
         );
         if (Number.isFinite(converted)) {
           setManualBuyPrice(
-            nextCurrency === 'USD' ? converted.toFixed(2) : String(Math.round(converted)),
+            nextCurrency !== 'KRW' ? converted.toFixed(2) : String(Math.round(converted)),
           );
         }
       }
@@ -1456,7 +1456,7 @@ export function ToolSideDrawer({
               label. */}
           <span className="tool-drawer__manual-field-label-row">
             <span>{language === 'en' ? 'Buy Price' : '매수가'}</span>
-            {manualBuyPriceNativeCurrency === 'USD' ? (
+            {manualBuyPriceNativeCurrency !== 'KRW' ? (
               <span
                 className="tool-drawer__manual-field-currency-toggle"
                 role="group"
@@ -1471,10 +1471,10 @@ export function ToolSideDrawer({
                 </button>
                 <button
                   type="button"
-                  className={manualBuyPriceEntryCurrency === 'USD' ? 'is-active' : ''}
-                  onClick={() => handleManualBuyPriceCurrencyToggle('USD')}
+                  className={manualBuyPriceEntryCurrency === manualBuyPriceNativeCurrency ? 'is-active' : ''}
+                  onClick={() => handleManualBuyPriceCurrencyToggle(manualBuyPriceNativeCurrency)}
                 >
-                  USD
+                  {manualBuyPriceNativeCurrency}
                 </button>
               </span>
             ) : (
@@ -1488,9 +1488,9 @@ export function ToolSideDrawer({
             inputMode="decimal"
             value={manualBuyPrice}
             onChange={handleManualBuyPriceChange}
-            placeholder={manualBuyPriceEntryCurrency === 'USD' ? '0.00' : '0'}
+            placeholder={manualBuyPriceEntryCurrency !== 'KRW' ? '0.00' : '0'}
           />
-          {manualBuyPriceNativeCurrency === 'USD' &&
+          {manualBuyPriceNativeCurrency !== 'KRW' &&
           manualBuyPriceEntryCurrency === 'KRW' &&
           manualBuyPrice.trim() ? (
             <small className="tool-drawer__manual-field-hint">
@@ -1499,8 +1499,13 @@ export function ToolSideDrawer({
                   manualBuyPriceNativeCurrency's own comment for why that distinction matters. */}
               ≈{' '}
               {formatCurrencyAmount(
-                convertCurrencyAmount(parseManualPriceValue(manualBuyPrice), 'KRW', 'USD', fxRates),
-                'USD',
+                convertCurrencyAmount(
+                  parseManualPriceValue(manualBuyPrice),
+                  'KRW',
+                  manualBuyPriceNativeCurrency,
+                  fxRates,
+                ),
+                manualBuyPriceNativeCurrency,
               )}{' '}
               {language === 'en' ? "(at today's rate)" : '(오늘 환율 기준)'}
             </small>

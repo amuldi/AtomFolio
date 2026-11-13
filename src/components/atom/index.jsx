@@ -157,7 +157,7 @@ function truncateLabelText(value, maxLength) {
   return `${text.slice(0, Math.max(1, maxLength - 1))}…`;
 }
 
-export function AtomLabel({ atom, maxLength = null }) {
+function resolveLabelLayout(atom) {
   const length = Math.hypot(atom.x, atom.y) || 1;
   const direction = {
     x: atom.x / length,
@@ -168,9 +168,64 @@ export function AtomLabel({ atom, maxLength = null }) {
   const baseX = direction.x > 0.24 ? 10 : direction.x < -0.24 ? -10 : 0;
   const noteX = atom.x + direction.x * atom.labelOffset;
   const noteY = atom.y + direction.y * atom.labelOffset + jitter(atom.seed + 601, 4);
+  return { direction, anchor, baseX, noteX, noteY };
+}
+
+// Rough on-screen box of a label in SVG units (13.5px name line + 10.5px detail line). Hangul and
+// other wide glyphs take ~1.6x a Latin character.
+const LABEL_CHAR_WIDTH = 7.2;
+const LABEL_BOX_PADDING = 4;
+function estimateLabelBox(atom, layout, text) {
+  let units = 0;
+  for (const char of String(text ?? '')) {
+    units += /[\u3000-\u9fff\uac00-\ud7af]/.test(char) ? 1.6 : 1;
+  }
+  const width = units * LABEL_CHAR_WIDTH + LABEL_BOX_PADDING * 2;
+  const originX = layout.noteX + layout.baseX;
+  const left =
+    layout.anchor === 'start' ? originX : layout.anchor === 'end' ? originX - width : originX - width / 2;
+  return {
+    left,
+    right: left + width,
+    top: layout.noteY - 16,
+    bottom: layout.noteY + (atom.detail ? 18 : 4),
+  };
+}
+
+// While the atom spins, two nodes can project to nearly the same spot and their names print on
+// top of each other. Place labels greedily by priority (selected, hovered, then nearest to the
+// viewer) and fade any label whose box would overlap one already placed.
+export function computeOccludedLabelIds(atoms, maxLength = null) {
+  const ordered = [...atoms].sort((left, right) => {
+    const score = (atom) =>
+      (atom.isSelected ? 10 : 0) + (atom.hoverMix ?? 0) * 5 + (atom.dimmed ? -5 : 0) + (atom.depth ?? 0);
+    return score(right) - score(left);
+  });
+  const placed = [];
+  const occluded = new Set();
+
+  for (const atom of ordered) {
+    const box = estimateLabelBox(atom, resolveLabelLayout(atom), truncateLabelText(atom.label, maxLength));
+    const overlaps = placed.some(
+      (other) =>
+        box.left < other.right && box.right > other.left && box.top < other.bottom && box.bottom > other.top,
+    );
+    if (overlaps && !atom.isSelected && !(atom.hoverMix > 0.5)) {
+      occluded.add(atom.id);
+    } else {
+      placed.push(box);
+    }
+  }
+
+  return occluded;
+}
+
+export function AtomLabel({ atom, maxLength = null, occluded = false }) {
+  const { direction, anchor, baseX, noteX, noteY } = resolveLabelLayout(atom);
   const opacity =
     (0.58 + atom.depth * 0.32 + atom.hoverMix * 0.08) *
-    (atom.dimmed ? 0.24 : atom.isSelected ? 1.06 : atom.isGroupMatch ? 1.03 : 1);
+    (atom.dimmed ? 0.24 : atom.isSelected ? 1.06 : atom.isGroupMatch ? 1.03 : 1) *
+    (occluded ? 0.08 : 1);
   // Only the name gets clamped, not the detail (return %) line below it — that's already short
   // ("+12.3%") and truncating it could hide the sign, which matters a lot more than a few extra
   // characters of a company name do.
@@ -182,7 +237,7 @@ export function AtomLabel({ atom, maxLength = null }) {
       transform={`translate(${format(noteX)} ${format(noteY)}) rotate(${format(
         atom.labelTilt + direction.x * 4,
       )})`}
-      opacity={opacity}
+      style={{ opacity }}
     >
       <text className="label-main" textAnchor={anchor} x={baseX} y="-2">
         {labelText}
@@ -338,6 +393,7 @@ export function AtomSketch({
   const frontAtoms = atoms
     .filter((atom) => atom.position.z >= 0)
     .sort((left, right) => left.position.z - right.position.z);
+  const occludedLabelIds = computeOccludedLabelIds(atoms, maxLabelLength);
   const centerGlowDrift = standalone ? (Math.sin(centerMotion * 0.56 - 0.6) * 0.5 + 0.5) : 0;
   const centerBlinkWave = standalone ? (Math.sin(centerMotion * 1.74 - 0.85) * 0.5 + 0.5) : 0;
   const centerScale = standalone
@@ -578,7 +634,12 @@ export function AtomSketch({
 
       <g className="label-layer">
         {atoms.map((atom) => (
-          <AtomLabel key={`label-${atom.id}`} atom={atom} maxLength={maxLabelLength} />
+          <AtomLabel
+            key={`label-${atom.id}`}
+            atom={atom}
+            maxLength={maxLabelLength}
+            occluded={occludedLabelIds.has(atom.id)}
+          />
         ))}
       </g>
     </svg>

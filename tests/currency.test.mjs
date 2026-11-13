@@ -9,12 +9,22 @@ import {
   normalizeCurrencyCode,
 } from '../src/utils/currency.js';
 
-test('normalizeCurrencyCode only accepts KRW/USD, case-insensitively', () => {
+test('normalizeCurrencyCode accepts known quote currencies, case-insensitively', () => {
   assert.equal(normalizeCurrencyCode('usd'), 'USD');
   assert.equal(normalizeCurrencyCode('KRW'), 'KRW');
-  assert.equal(normalizeCurrencyCode('eur'), '');
+  assert.equal(normalizeCurrencyCode('inr'), 'INR');
+  assert.equal(normalizeCurrencyCode('eur'), 'EUR');
+  assert.equal(normalizeCurrencyCode('xyz'), '');
   assert.equal(normalizeCurrencyCode(''), '');
   assert.equal(normalizeCurrencyCode(undefined), '');
+});
+
+test('extra currencies convert through their KRW rate, including cross pairs', () => {
+  const fxRates = buildFxRates(1400, { INR: 14 });
+  assert.equal(fxRates.INR.KRW, 14);
+  assert.equal(fxRates.KRW.INR, 1 / 14);
+  assert.ok(Math.abs(fxRates.INR.USD - 14 / 1400) < 1e-12);
+  assert.ok(Math.abs(fxRates.USD.INR - 1400 / 14) < 1e-12);
 });
 
 test('buildFxRates is internally consistent (USD->KRW and KRW->USD are inverses)', () => {
