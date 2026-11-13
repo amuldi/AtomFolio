@@ -8,6 +8,11 @@ import {
   shouldFallbackToLocalTimeline as shouldFallbackToLocalTimelineShared,
 } from './lib/portfolioIngestionCore.js';
 import { createPortfolioScorecard } from './lib/portfolioScoring.js';
+import {
+  applyEnrichedRowsToEntry,
+  selectChangedEntries,
+  selectLatestRowPerHolding,
+} from './lib/portfolioSync.js';
 import { createPortfolioAnalyticsSummary, resolveHoldingPosition } from './lib/portfolioAnalyticsSummary.js';
 import { enrichPortfolioItem, resolveExactSecurityReferenceCode } from './lib/securityKnowledge.js';
 import { useAtomTransition } from './utils/useAtomTransition.js';
@@ -1901,48 +1906,6 @@ function holdingIdentityKey(item) {
   );
 }
 
-// Writes quote-enriched rows back into a portfolio entry. Rows are matched by *object identity*
-// with the rows that were sent for enrichment, never by position.
-//
-// The previous version merged by index: a refresh seeded with the first 20 timeline rows was
-// written over `entry.items` position by position whenever the timeline length differed (it does
-// as soon as a daily snapshot pushes it past 20 rows). Unrelated rows landed in holding slots,
-// duplicates collapsed, and real holdings disappeared from the portfolio (and were then autosaved).
-function applyEnrichedRowsToEntry(entry, seedItems, enrichedItems) {
-  const enrichedBySeed = new Map(
-    seedItems.map((seed, index) => [seed, enrichedItems[index] ?? seed]),
-  );
-  const swap = (row) => enrichedBySeed.get(row) ?? row;
-  const timeline = Array.isArray(entry.timelineItems) ? entry.timelineItems : [];
-  const items = Array.isArray(entry.items) ? entry.items : [];
-  const timelineHits = timeline.filter((row) => enrichedBySeed.has(row)).length;
-  const itemHits = items.filter((row) => enrichedBySeed.has(row)).length;
-
-  let nextTimeline = timeline;
-  let nextItems = items;
-  if (timelineHits > 0) {
-    nextTimeline = timeline.map(swap);
-    nextItems = collapsePortfolioItemsForDisplayShared(nextTimeline);
-  } else if (itemHits > 0) {
-    nextItems = collapsePortfolioItemsForDisplayShared(items.map(swap));
-  } else {
-    // The entry changed while quotes were in flight; nothing to match safely.
-    return entry;
-  }
-
-  // A price refresh must never change which holdings exist.
-  const nextKeys = new Set(nextItems.map(holdingIdentityKey));
-  if (items.some((item) => !nextKeys.has(holdingIdentityKey(item)))) {
-    return entry;
-  }
-
-  return {
-    ...entry,
-    items: nextItems,
-    timelineItems: timelineHits > 0 ? nextTimeline : entry.timelineItems,
-  };
-}
-
 function compactAtomTagName(value) {
   const text = String(value ?? '')
     .replace(/,?\s*(Inc\.?|Corporation|Corp\.?|Company|Platforms|Ltd\.?)$/i, '')
@@ -2725,7 +2688,10 @@ export default function App() {
             if (entry.id !== entryId) {
               return entry;
             }
-            return applyEnrichedRowsToEntry(entry, seedItems, enrichedItems);
+            return applyEnrichedRowsToEntry(entry, seedItems, enrichedItems, {
+              collapse: collapsePortfolioItemsForDisplayShared,
+              identityKey: holdingIdentityKey,
+            });
           }),
         );
       } catch {
@@ -3515,13 +3481,11 @@ export default function App() {
     }
 
     const syncWorkspaceId = getPortfolioWorkspaceId();
-    const changedEntries = safeEntries
-      .map((entry) => ({
-        entry,
-        key: `${syncWorkspaceId}|${entry.id}`,
-        json: JSON.stringify(entry),
-      }))
-      .filter(({ key, json }) => portfolioSyncedJsonRef.current.get(key) !== json);
+    const changedEntries = selectChangedEntries(
+      safeEntries,
+      portfolioSyncedJsonRef.current,
+      syncWorkspaceId,
+    );
 
     if (!changedEntries.length) {
       setPortfolioSyncStatus(localPersistFailed ? 'local-failed' : 'saved');
@@ -3653,11 +3617,11 @@ export default function App() {
       }
       // Latest row per holding: the first N rows of a long timeline are its oldest history, so
       // seeding with them refreshed stale snapshots and skipped the rows actually on screen.
-      const latestByHolding = new Map();
-      activePortfolioLiveItemsRef.current.forEach((row) => {
-        latestByHolding.set(holdingIdentityKey(row), row);
-      });
-      const sourceItems = [...latestByHolding.values()].slice(0, LIVE_QUOTE_REFRESH_MAX_ITEMS);
+      const sourceItems = selectLatestRowPerHolding(
+        activePortfolioLiveItemsRef.current,
+        holdingIdentityKey,
+        LIVE_QUOTE_REFRESH_MAX_ITEMS,
+      );
       if (!sourceItems.length) {
         return;
       }
