@@ -1182,6 +1182,7 @@ body::after {
   fill: rgba(var(--frame-white), 0.52);
   font-family:
     'Bradley Hand',
+    'Gaegu',
     'Marker Felt',
     'Noteworthy',
     'Comic Sans MS',
@@ -1195,6 +1196,7 @@ body::after {
   fill: rgba(var(--frame-ink-a), 0.96);
   font-family:
     'Bradley Hand',
+    'Gaegu',
     'Marker Felt',
     'Noteworthy',
     'Comic Sans MS',
@@ -6239,7 +6241,7 @@ body::after {
   color: rgba(var(--atom-ink), calc(0.88 * var(--atom-ink-alpha-boost)));
   font-size: 0.74rem;
   letter-spacing: 0.02em;
-  font-family: "Bradley Hand", "Marker Felt", "Apple Chancery", "Segoe Print", cursive;
+  font-family: "Bradley Hand", "Gaegu", "Marker Felt", "Apple Chancery", "Segoe Print", cursive;
   text-shadow: 0 0 12px rgba(var(--atom-ink), calc(0.14 * var(--atom-ink-alpha-boost)));
   pointer-events: none;
 }
@@ -6881,6 +6883,7 @@ body::after {
   fill: rgba(var(--frame-ink-c), 0.96);
   font-family:
     'Bradley Hand',
+    'Gaegu',
     'Marker Felt',
     'Noteworthy',
     'Comic Sans MS',
@@ -6952,6 +6955,7 @@ body::after {
   fill: rgba(var(--atom-ink), calc(0.9 * var(--atom-ink-alpha-boost)));
   font-family:
     'Bradley Hand',
+    'Gaegu',
     'Marker Felt',
     'Noteworthy',
     'Comic Sans MS',
@@ -8820,7 +8824,7 @@ body::after {
   background: rgba(10, 10, 9, 0.5);
   border-radius: 0.7rem;
   backdrop-filter: blur(6px);
-  font-family: 'Bradley Hand', 'Marker Felt', 'Noteworthy', 'Comic Sans MS', cursive;
+  font-family: 'Bradley Hand', 'Gaegu', 'Marker Felt', 'Noteworthy', 'Comic Sans MS', cursive;
   color: rgba(var(--atom-ink), 0.92);
   white-space: nowrap;
 }
