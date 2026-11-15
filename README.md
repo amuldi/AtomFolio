@@ -10,7 +10,7 @@
 [한국어](README.md) · [English](README.en.md)
 
 [![Live](https://img.shields.io/badge/Live-atomfolio.vercel.app-111111?logo=vercel&logoColor=fff)](https://atomfolio.vercel.app)
-![Tests](https://img.shields.io/badge/tests-152%20passing-2F7A55)
+![Tests](https://img.shields.io/badge/tests-159%20passing-2F7A55)
 ![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=111)
 ![Three.js](https://img.shields.io/badge/Three.js-0.168-000000?logo=three.js&logoColor=fff)
 ![Postgres](https://img.shields.io/badge/Postgres-Neon-4169E1?logo=postgresql&logoColor=fff)
@@ -204,9 +204,9 @@ AtomFolio는 웹 하나가 아닙니다 — `desktop/` 아래에 별도의 Elect
 | 9 | [시장 뉴스](#9-시장-뉴스) | 공개 뉴스 모음 + 지난 기사 아카이브 |
 | 10 | [포트폴리오 비교](#10-포트폴리오-비교) | 모든 포트폴리오를 한 표에서 |
 | 11 | [이번 달 변화](#11-이번-달-변화) | 지난달 대비 변화와 많이 번·잃은 종목 |
-| 12 | [입력 오류 표시](#12-입력-오류-표시) | 잘못 넣은 값에 주황 점선 테 |
+| 12 | [입력 오류 표시](#12-입력-오류-표시) | 잘못 넣은 값에 주황 점선 테, 버튼 한 번으로 고치기 |
 | 13 | [편의 기능](#13-편의-기능) | 삭제 실행 취소, 마지막 화면 복원, PWA |
-| 14 | [예시 데이터](#14-예시-데이터) | 바로 올려 볼 수 있는 CSV 8개 |
+| 14 | [예시 데이터](#14-예시-데이터) | 바로 올려 볼 수 있는 CSV 8개 + 입력 오류 연습용 1개 |
 
 ### 1. 포트폴리오 생성과 저장
 
@@ -309,6 +309,16 @@ AtomFolio는 웹 하나가 아닙니다 — `desktop/` 아래에 별도의 Elect
 - 매수가가 현재가와 크게 다름 (손실 쪽 5배, 수익 쪽 10배 초과 — 다른 종목 가격을 복사한 실수를 잡기 위함)
 - 가격 정보 없이 수익률만 ±1000%를 넘음
 
+**버튼 한 번으로 고치기** — 종목 상세 카드에서 올바른 값을 계산해 제안하고, 버튼을 누르면 그 종목의 모든 기록에 바로 반영합니다 (`suggestHoldingFix`).
+
+| 상황 | 고치는 방법 |
+| --- | --- |
+| 매수가가 현재가와 크게 다른데, 기록된 수익률은 평범함 (예: +3.3%) | `매수가 = 현재가 ÷ (1 + 수익률/100)` |
+| 매수가를 다른 통화로 입력함 (달러 종목에 원화 가격) | 환율로 나누거나 곱해 현재가와 비슷해지는 쪽으로 변환 |
+| 수량이 비었지만 평가금액이 있음 | `수량 = 평가금액 ÷ 현재가` |
+
+위 방법으로 값을 정할 수 없으면 관리 탭에서 직접 고치라고 안내합니다.
+
 ### 13. 편의 기능
 
 - 종목·포트폴리오 삭제 직후 몇 초 동안 실행 취소할 수 있습니다.
@@ -320,7 +330,7 @@ AtomFolio는 웹 하나가 아닙니다 — `desktop/` 아래에 별도의 Elect
 > [!TIP]
 > 처음 써 본다면 [`samples/demo/`](samples/demo/)의 CSV를 그대로 올려 보세요.
 
-`samples/demo/`에 시연용 포트폴리오 CSV 8개가 있습니다. 모든 종목에 종목코드·매수가·수량·통화가 들어 있어 경고 표시 없이 바로 보이고, 2026년 6월부터 월말 기록이 쌓여 있어 "이번 달 변화"와 날짜별 손익도 확인할 수 있습니다. 자세한 구성은 [samples/demo/README.md](samples/demo/README.md)를 참고하세요.
+`samples/demo/`에 시연용 포트폴리오 CSV 8개(각 10~12종목)가 있습니다. 모든 종목에 종목코드·매수가·수량·통화가 들어 있어 경고 표시 없이 바로 보이고, 2026년 6월부터 월말 기록이 쌓여 있어 "이번 달 변화"와 날짜별 손익도 확인할 수 있습니다. `입력 오류 예시.csv`는 일부러 잘못 넣은 값 3개가 들어 있어 "버튼 한 번으로 고치기"를 시연할 수 있습니다. 자세한 구성은 [samples/demo/README.md](samples/demo/README.md)를 참고하세요.
 
 ## 오픈소스와 데이터 출처
 
@@ -336,7 +346,7 @@ AtomFolio는 웹 하나가 아닙니다 — `desktop/` 아래에 별도의 Elect
 | [Electron](https://www.electronjs.org) 32 + electron-builder | MIT | macOS 메뉴바 앱과 원자 위젯, 앱 패키징 (`desktop/`) |
 | [Gaegu](https://fonts.google.com/specimen/Gaegu) | OFL | 원자 라벨의 한글 손글씨 글꼴 |
 | [ESLint](https://eslint.org) · [Prettier](https://prettier.io) · [knip](https://knip.dev) | MIT | 코드 검사, 자동 정리, 쓰지 않는 파일·export 찾기 |
-| Node.js `node:test` | MIT | 테스트 152개 (외부 테스트 프레임워크 없음) |
+| Node.js `node:test` | MIT | 테스트 159개 (외부 테스트 프레임워크 없음) |
 
 로그인(Clerk), 데이터베이스(Neon), 배포·서버 함수(Vercel)는 오픈소스가 아니라 클라우드 서비스입니다. [Plausible](https://plausible.io) 방문 통계는 `VITE_PLAUSIBLE_DOMAIN`을 설정했을 때만 켜집니다.
 
@@ -948,7 +958,7 @@ Vercel 설정은 [vercel.json](vercel.json)에 있습니다.
 
 최근 확인한 항목입니다.
 
-- `npm test` (`node --test`, 152개 — 파서, 점수, 이번 달 변화, 입력 오류 감지, 시세 병합, 인증 격리 등)
+- `npm test` (`node --test`, 159개 — 파서, 점수, 이번 달 변화, 입력 오류 감지, 시세 병합, 인증 격리 등)
 - `npm run lint`, `npm run build`
 - 배포 주소 `https://atomfolio.vercel.app`에서 점수 성향·이번 달 변화·전자 빛 표시 실제 동작 확인
 - `samples/demo/` 예시 CSV 8개 업로드 시 경고 없이 표시 확인
@@ -986,7 +996,7 @@ localStorage만 쓰는 웹 하나였습니다. 지금은 여기서 훨씬 더 �
 | 시세 안정성 | Yahoo → Stooq 2단 fallback | KIS(공식) → Naver/Mirae 동시 경쟁 → Yahoo → Stooq, 서킷 브레이커 + 실패 추적 + 장애 알림 |
 | 탐색 | 사이드 아이콘 고정 노출 | 명령 팔레트(⌘K)로 모든 포트폴리오 통합 검색, 관리 테이블 뷰 |
 | 플랫폼 | 웹 하나 | 웹 + macOS 메뉴바 동반 앱(Electron) |
-| 테스트 | 거의 없음 | `node --test` 152개 (인증 격리·레이트리밋·KIS 라우팅·점수·이번 달 변화 등) |
+| 테스트 | 거의 없음 | `node --test` 159개 (인증 격리·레이트리밋·KIS 라우팅·점수·이번 달 변화 등) |
 | 원자 화면 | 노드만 배치 | 전자 크기 = 보유 수량, 손익에 따라 색과 빛의 세기, 입력 오류 표시, 손글씨 이름표 |
 
 macOS 메뉴바 앱에 대한 스크린샷과 소개는 위 [메뉴바 동반 앱](#메뉴바-동반-앱-macos) 절을

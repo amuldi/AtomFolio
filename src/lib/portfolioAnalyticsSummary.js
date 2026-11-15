@@ -328,6 +328,34 @@ function classifyRebalanceBucket(item) {
 // portfolio holdings list row, the holding-detail card — can compute the exact same
 // buyAmount/marketValue/profitAmount/returnRate/currency figures the totals are built from,
 // instead of a second, potentially-drifting implementation of the same math living in App.jsx.
+// The 수익률 the user's own data recorded (CSV column or entry form), not the live one: `detail` is
+// rewritten from live quotes, so the field comes first. Used to repair a buy price that is far
+// from the quote while the recorded return is ordinary.
+export function readRecordedReturnRate(item) {
+  const fromField = parsePercent(
+    findFieldValueExcept(item?.fields, FIELD_CANDIDATES.returnRate, ['등락', '전일']),
+  );
+  return Number.isFinite(fromField) ? fromField : null;
+}
+
+// Replaces one standard field (buyPrice, shares, purchaseCurrency, ...) on a holding, matching the
+// label the same way the readers above do, or appends it under `defaultLabel` when absent.
+export function setHoldingField(item, key, value, defaultLabel) {
+  const candidates = (FIELD_CANDIDATES[key] ?? []).map(normalizeText);
+  const fields = Array.isArray(item?.fields) ? item.fields : [];
+  let index = fields.findIndex((field) => candidates.includes(normalizeText(field?.label)));
+  if (index < 0) {
+    index = fields.findIndex((field) =>
+      candidates.some((candidate) => normalizeText(field?.label).includes(candidate)),
+    );
+  }
+  const nextFields =
+    index >= 0
+      ? fields.map((field, fieldIndex) => (fieldIndex === index ? { ...field, value: String(value) } : field))
+      : [...fields, { label: defaultLabel, value: String(value) }];
+  return { ...item, fields: nextFields };
+}
+
 export function resolveHoldingPosition(item, options) {
   return resolvePosition(item, 0, options);
 }

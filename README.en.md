@@ -10,7 +10,7 @@ and investment simulation into a single picture: holdings radiating out from the
 [한국어](README.md) · [English](README.en.md)
 
 [![Live](https://img.shields.io/badge/Live-atomfolio.vercel.app-111111?logo=vercel&logoColor=fff)](https://atomfolio.vercel.app)
-![Tests](https://img.shields.io/badge/tests-152%20passing-2F7A55)
+![Tests](https://img.shields.io/badge/tests-159%20passing-2F7A55)
 ![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=111)
 ![Three.js](https://img.shields.io/badge/Three.js-0.168-000000?logo=three.js&logoColor=fff)
 ![Postgres](https://img.shields.io/badge/Postgres-Neon-4169E1?logo=postgresql&logoColor=fff)
@@ -191,9 +191,9 @@ built and refined (bugs included) is written up by date in the
 | 9 | [Market news](#9-market-news) | Public news sources plus an archive of past articles |
 | 10 | [Portfolio comparison](#10-portfolio-comparison) | Every portfolio in one table |
 | 11 | [This month](#11-this-month) | Change since last month, biggest gainers and losers |
-| 12 | [Input checks](#12-input-checks) | Amber dashed ring on suspicious values |
+| 12 | [Input checks](#12-input-checks) | Amber dashed ring on suspicious values, one-click fix |
 | 13 | [Conveniences](#13-conveniences) | Undo deletes, reopen last view, PWA |
-| 14 | [Demo data](#14-demo-data) | Eight CSVs ready to upload |
+| 14 | [Demo data](#14-demo-data) | Eight CSVs ready to upload + one input-error practice file |
 
 ### 1. Creating and saving a portfolio
 
@@ -296,6 +296,16 @@ So one mistyped value can't silently distort the portfolio total, suspicious hol
 - Buy price is far from the current price (beyond 5x on the loss side, 10x on the gain side — catches another security's price pasted in)
 - Return alone exceeds ±1000% when prices aren't available
 
+**One-click fix** — the holding's detail card works out the right value and, on one click, applies it to every record of that holding (`suggestHoldingFix`).
+
+| Situation | Fix |
+| --- | --- |
+| Buy price far from the quote while the recorded return is ordinary (e.g. +3.3%) | `buy price = current price ÷ (1 + return/100)` |
+| Buy price typed in the other currency (a KRW price on a USD stock) | Divide or multiply by the FX rate, whichever lands near the quote |
+| Quantity missing but market value recorded | `quantity = market value ÷ current price` |
+
+When none of these can determine the value, the card says to fix it in the Manage tab.
+
 ### 13. Conveniences
 
 - Deleting a holding or portfolio can be undone for a few seconds.
@@ -307,7 +317,7 @@ So one mistyped value can't silently distort the portfolio total, suspicious hol
 > [!TIP]
 > Trying it for the first time? Upload any CSV from [`samples/demo/`](samples/demo/) as-is.
 
-`samples/demo/` holds eight demo portfolio CSVs. Every holding has a ticker, buy price, quantity, and currency, so they load with no warnings, and month-end records from June 2026 on let "This month" and the daily P/L view show real changes. See [samples/demo/README.md](samples/demo/README.md).
+`samples/demo/` holds eight demo portfolio CSVs (10–12 holdings each). Every holding has a ticker, buy price, quantity, and currency, so they load with no warnings, and month-end records from June 2026 on let "This month" and the daily P/L view show real changes. `입력 오류 예시.csv` (input-error practice) has three deliberately wrong values for demoing the one-click fix. See [samples/demo/README.md](samples/demo/README.md).
 
 ## Open source and data sources
 
@@ -323,7 +333,7 @@ So one mistyped value can't silently distort the portfolio total, suspicious hol
 | [Electron](https://www.electronjs.org) 32 + electron-builder | MIT | The macOS menu bar app, the atom widget, and packaging (`desktop/`) |
 | [Gaegu](https://fonts.google.com/specimen/Gaegu) | OFL | Handwritten Hangul font for atom labels |
 | [ESLint](https://eslint.org) · [Prettier](https://prettier.io) · [knip](https://knip.dev) | MIT | Linting, formatting, and finding unused files/exports |
-| Node.js `node:test` | MIT | 152 tests (no external test framework) |
+| Node.js `node:test` | MIT | 159 tests (no external test framework) |
 
 Sign-in (Clerk), the database (Neon), and hosting/functions (Vercel) are cloud services, not open source. [Plausible](https://plausible.io) visit analytics turns on only when `VITE_PLAUSIBLE_DOMAIN` is set.
 
@@ -914,7 +924,7 @@ Vercel configuration lives in [vercel.json](vercel.json).
 
 Recently confirmed:
 
-- `npm test` (`node --test`, 152 tests — parser, scoring, "This month", input checks, quote merging, auth isolation, and more)
+- `npm test` (`node --test`, 159 tests — parser, scoring, "This month", input checks, quote merging, auth isolation, and more)
 - `npm run lint`, `npm run build`
 - On `https://atomfolio.vercel.app`: score styles, "This month", and electron glow checked live
 - All eight `samples/demo/` CSVs load with no warnings
@@ -952,7 +962,7 @@ in [docs/updates/AtomFolio_Bugs.en.md](docs/updates/AtomFolio_Bugs.en.md) (Korea
 | Quote reliability | Yahoo → Stooq, two-step fallback | KIS (official) → Naver/Mirae raced concurrently → Yahoo → Stooq, with a circuit breaker, failure tracking, and outage alerting |
 | Navigation | Fixed sidebar icons | Command palette (⌘K) searching across every portfolio, a separate management table view |
 | Platforms | Web only | Web + a macOS menu bar companion app (Electron) |
-| Tests | Almost none | 152 (`node --test`) — auth isolation, rate limiting, KIS routing, scoring, "This month", and more |
+| Tests | Almost none | 159 (`node --test`) — auth isolation, rate limiting, KIS routing, scoring, "This month", and more |
 | Atom scene | Nodes only | Electron size = quantity held, color and glow by gain/loss, input-check rings, handwritten name tag |
 
 See the [menu bar companion app](#menu-bar-companion-app-macos) section above for screenshots and

@@ -4694,6 +4694,7 @@ body::after {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: stretch;
   min-width: 0;
+  cursor: pointer;
   overflow: hidden;
   border: 1px solid rgba(var(--frame-hairline), 0.09);
   border-radius: 13px 15px 12px 14px / 15px 12px 14px 13px;
@@ -5535,9 +5536,12 @@ body::after {
 
 .tool-drawer__compare-row {
   display: grid;
-  grid-template-columns: minmax(7rem, 1.35fr) repeat(4, minmax(4rem, 1fr));
+  /* minmax(0, …): with 4rem/7rem minimums the five columns were wider than the drawer and the
+     last one (집중도) spilled past the row's border. */
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.8fr) minmax(0, 0.55fr) minmax(0, 1.1fr) minmax(0, 0.85fr);
   gap: 0.42rem;
   align-items: center;
+  width: 100%;
   min-width: 0;
   padding: 0.58rem;
   border: 1px solid rgba(var(--frame-hairline), 0.08);
@@ -8809,6 +8813,30 @@ body::after {
   font-size: 0.74rem;
   font-weight: 600;
   line-height: 1.4;
+}
+.atom-detail-panel__issue p {
+  margin: 0;
+}
+.atom-detail-panel__fix-note {
+  margin-top: 0.3rem !important;
+  color: rgba(var(--frame-ink-a), 0.72);
+  font-weight: 500;
+}
+.atom-detail-panel__fix {
+  margin-top: 0.45rem;
+  padding: 0.32rem 0.6rem;
+  border: 1px solid rgba(242, 180, 64, 0.6);
+  border-radius: 7px;
+  background: rgba(242, 180, 64, 0.16);
+  color: rgb(242, 180, 64);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.atom-detail-panel__fix:hover,
+.atom-detail-panel__fix:focus-visible {
+  background: rgba(242, 180, 64, 0.26);
+  outline: none;
 }
 
 /* Unchanged or unknown return: a faint ink wash, so no electron is left unpainted. */

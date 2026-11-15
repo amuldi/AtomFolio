@@ -1730,11 +1730,12 @@ export function ToolSideDrawer({
                 </span>
                 <span>
                   <small>{language === 'en' ? 'Concentration' : '집중도'}</small>
-                  <strong>
-                    {concentrationLevelLabel(row.concentrationLevel, language)}
-                    {' · '}
-                    {formatAnalyticsCompactValue(row.effectiveHoldings, language)}
-                  </strong>
+                  <strong>{concentrationLevelLabel(row.concentrationLevel, language)}</strong>
+                  <em>
+                    {language === 'en'
+                      ? `~${formatAnalyticsCompactValue(row.effectiveHoldings, language)} holdings`
+                      : `실질 ${formatAnalyticsCompactValue(row.effectiveHoldings, language)}종목`}
+                  </em>
                 </span>
               </button>
             );
@@ -1930,9 +1931,19 @@ export function ToolSideDrawer({
                 const isActive = entry.id === activePortfolioId;
 
                 return (
+                  // The whole card selects the portfolio, not just its name row: the review note
+                  // below the name took most of the card and clicking it did nothing. Keyboard
+                  // users still have the name button.
                   <article
                     key={entry.id}
                     className={`tool-drawer__account-card${isActive ? ' is-active' : ''}`}
+                    onClick={(event) => {
+                      if (event.target.closest('button, summary, a, input')) {
+                        return;
+                      }
+                      onInteract?.();
+                      onSelectPortfolio?.(entry.id);
+                    }}
                   >
                     <button
                       type="button"

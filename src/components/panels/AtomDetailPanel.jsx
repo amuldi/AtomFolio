@@ -9,7 +9,17 @@ import { useCallback, useRef, useState } from 'react';
 // doesn't snap it back.
 let lastDragOffset = { x: 0, y: 0 };
 
-export function AtomDetailPanel({ atom, fields, returnValue, returnToneClass, issue, text, onClose }) {
+export function AtomDetailPanel({
+  atom,
+  fields,
+  returnValue,
+  returnToneClass,
+  issue,
+  fix = null,
+  onApplyFix,
+  text,
+  onClose,
+}) {
   const [offset, setOffset] = useState(lastDragOffset);
   const [dragging, setDragging] = useState(false);
   const dragRef = useRef(null);
@@ -101,9 +111,19 @@ export function AtomDetailPanel({ atom, fields, returnValue, returnToneClass, is
       ) : null}
 
       {issue ? (
-        <p className="atom-detail-panel__issue" role="note">
-          ⚠ {issue}
-        </p>
+        <div className="atom-detail-panel__issue" role="note">
+          <p>⚠ {issue}</p>
+          {fix ? (
+            <>
+              <p className="atom-detail-panel__fix-note">{fix.label}</p>
+              <button type="button" className="atom-detail-panel__fix" onClick={() => onApplyFix?.()}>
+                {fix.actionLabel}
+              </button>
+            </>
+          ) : (
+            <p className="atom-detail-panel__fix-note">{text?.holdingFixManual ?? '자동으로 맞출 값을 찾지 못했어요. 관리 탭에서 매수가와 수량을 직접 고쳐 주세요.'}</p>
+          )}
+        </div>
       ) : null}
 
       {fields.length ? (

@@ -71,7 +71,9 @@ function checkSchemaMapping(parserDiagnostics) {
 function extractDateValue(item) {
   for (const field of item?.fields ?? []) {
     const label = String(field?.label ?? '').trim();
-    if (/(날짜|일자|date|day|tradedate|recorddate|valuedate|snapshotdate|buydate)/i.test(label)) {
+    // 평가일/기준일/매수일/거래일 are the usual Korean broker headers; without them a properly
+    // dated CSV looked like "one date for every row" and got a false timeline-collapsed warning.
+    if (/(날짜|일자|평가일|기준일|매수일|거래일|date|day|tradedate|recorddate|valuedate|snapshotdate|buydate)/i.test(label)) {
       return String(field?.value ?? '').trim();
     }
   }

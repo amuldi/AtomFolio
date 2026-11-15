@@ -8,13 +8,18 @@ import {
   shouldFallbackToLocalTimeline as shouldFallbackToLocalTimelineShared,
 } from './lib/portfolioIngestionCore.js';
 import { createPortfolioScorecard } from './lib/portfolioScoring.js';
-import { detectHoldingIssues } from './lib/holdingIssues.js';
+import { detectHoldingIssues, suggestHoldingFix } from './lib/holdingIssues.js';
 import {
   applyEnrichedRowsToEntry,
   selectChangedEntries,
   selectLatestRowPerHolding,
 } from './lib/portfolioSync.js';
-import { createPortfolioAnalyticsSummary, resolveHoldingPosition } from './lib/portfolioAnalyticsSummary.js';
+import {
+  createPortfolioAnalyticsSummary,
+  readRecordedReturnRate,
+  resolveHoldingPosition,
+  setHoldingField,
+} from './lib/portfolioAnalyticsSummary.js';
 import { enrichPortfolioItem, resolveExactSecurityReferenceCode } from './lib/securityKnowledge.js';
 import { useAtomTransition } from './utils/useAtomTransition.js';
 import { useViewportWidth } from './utils/useViewportWidth.js';
@@ -1723,7 +1728,36 @@ function atomIssueFor(item) {
   return detectHoldingIssues(position, { language: latestAtomLanguage })[0]?.label ?? null;
 }
 
-// Market value in KRW, used to size each electron by its share of the portfolio.
+// One-click repair offered in the holding card for a flagged holding (see suggestHoldingFix).
+function holdingFixFor(item, language) {
+  if (!item) {
+    return null;
+  }
+  const position = resolveHoldingPosition(item, {
+    baseCurrency: 'KRW',
+    fxRates: latestFxRatesForQuotes,
+  });
+  return suggestHoldingFix(position, {
+    recordedReturnRate: readRecordedReturnRate(item),
+    usdKrwRate: latestFxRatesForQuotes?.USD?.KRW,
+    language,
+  });
+}
+
+const HOLDING_FIX_FIELD_LABELS = { buyPrice: '매수가', shares: '보유수량', purchaseCurrency: '매수통화' };
+
+function applyHoldingFixToItem(item, patch) {
+  let next = item;
+  for (const [key, value] of Object.entries(patch)) {
+    next = setHoldingField(next, key, value, HOLDING_FIX_FIELD_LABELS[key] ?? key);
+    if (key === 'purchaseCurrency') {
+      // resolvePosition reads the item property before the field.
+      next = { ...next, purchaseCurrency: value };
+    }
+  }
+  return withLiveReturnDetail(next);
+}
+
 // Electron size: number of shares held, so fewer shares draw a smaller electron.
 function atomSharesFor(item) {
   const value = Number(
@@ -1735,6 +1769,7 @@ function atomSharesFor(item) {
   return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
+// Market value in KRW: the electron label's share of the portfolio.
 function atomWeightFor(item) {
   const value = resolveHoldingPosition(item, {
     baseCurrency: 'KRW',
@@ -5377,6 +5412,37 @@ export default function App() {
   );
   const hoveredAtom = atoms.find((atom) => atom.id === hoverInfo?.atomId) ?? null;
   const selectedAtomData = atoms.find((atom) => atom.id === selectedAtomId) ?? null;
+  // CSV-parsed items often have no id (sourceItemId is then ''), so fall back to the holding's
+  // ticker/name identity.
+  const selectedSourceItem = selectedAtomData
+    ? (activePortfolio?.items ?? []).find((item) =>
+        selectedAtomData.sourceItemId
+          ? item.id === selectedAtomData.sourceItemId
+          : holdingIdentityKey(item) === holdingIdentityKey(selectedAtomData),
+      ) ?? null
+    : null;
+  const selectedHoldingFix = selectedAtomData?.issue ? holdingFixFor(selectedSourceItem, language) : null;
+  const handleApplyHoldingFix = () => {
+    if (!selectedHoldingFix || !selectedSourceItem || !activePortfolio) {
+      return;
+    }
+    noteInteraction();
+    const entryId = activePortfolio.id;
+    const key = holdingIdentityKey(selectedSourceItem);
+    const patchItem = (item) =>
+      holdingIdentityKey(item) === key ? applyHoldingFixToItem(item, selectedHoldingFix.patch) : item;
+    setPortfolioEntries((current) =>
+      current.map((entry) =>
+        entry.id === entryId
+          ? {
+              ...entry,
+              items: (entry.items ?? []).map(patchItem),
+              timelineItems: entry.timelineItems?.length ? entry.timelineItems.map(patchItem) : entry.timelineItems,
+            }
+          : entry,
+      ),
+    );
+  };
   const selectedAtomInfoFields = buildAtomInfoFields(selectedAtomData, language);
   const selectedAtomReturnRaw = selectedAtomData?.detail ?? '';
   const selectedAtomReturnToneClass = getSignedValueToneClass(
@@ -5719,6 +5785,8 @@ export default function App() {
           returnValue={selectedAtomReturnRaw}
           returnToneClass={selectedAtomReturnToneClass}
           issue={selectedAtomData.issue}
+          fix={selectedHoldingFix}
+          onApplyFix={handleApplyHoldingFix}
           text={text}
           onClose={() => {
             noteInteraction();
