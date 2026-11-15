@@ -26,7 +26,9 @@ test('parsePublishedAt anchors a naive Naver-style date-time to KST, not the hos
     // And displaying it back with the KST basis must show the 15th, not the 16th — this is the
     // exact symptom that was reported: an evening KST article rolling over to "look like" the
     // next day once the server had (incorrectly) treated its timestamp as UTC.
-    assert.equal(formatNewsTime(publishedAt, 'ko', 'kst'), '08. 15. 오후 11:45', raw);
+    // The day period depends on the runtime's ICU data ("오후" with full ICU, "PM" on runners
+    // without Korean locale data), so only the date and the clock time are asserted.
+    assert.match(formatNewsTime(publishedAt, 'ko', 'kst'), /^08\. 15\. (오후|PM) 11:45$/, raw);
   }
 });
 
@@ -34,7 +36,9 @@ test('parsePublishedAt handles a naive date with no time component (date-only)',
   for (const raw of ['2026.08.15.', '2026.08.15']) {
     const publishedAt = parsePublishedAt(raw);
     assert.equal(new Date(publishedAt).toISOString(), '2026-08-14T15:00:00.000Z', raw);
-    assert.equal(formatNewsTime(publishedAt, 'ko', 'kst'), '08. 15. 오전 12:00', raw);
+    // The day period depends on the runtime's ICU data ("오후" with full ICU, "PM" on runners
+    // without Korean locale data), so only the date and the clock time are asserted.
+    assert.match(formatNewsTime(publishedAt, 'ko', 'kst'), /^08\. 15\. (오전|AM) 12:00$/, raw);
   }
 });
 
