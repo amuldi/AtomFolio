@@ -9,6 +9,9 @@ import {
   CENTER_SPIN_LOOPS,
   DUST,
 } from '../../utils/scene.js';
+import { parseLabelReturn, resolveWashTone } from './washTone.js';
+
+export { resolveWashTone };
 
 export function SketchAtom({
   atom,
@@ -80,13 +83,31 @@ export function SketchAtom({
           // Red already means "up", so it can't be used for warnings.
           <circle className="node-issue" cx="0" cy="0" r={atom.node * 1.55} />
         ) : null}
+        {washTone.glow > 0 ? (
+          // Bigger gain or loss → wider, brighter halo, with a slow shimmer so strong movers
+          // catch the eye while the atom spins.
+          <circle
+            className="node-glow"
+            cx="0"
+            cy="0"
+            r={atom.node * (1.35 + washTone.glow * 1.5)}
+            fill={washTone.direction > 0 ? 'url(#node-glow-up)' : 'url(#node-glow-down)'}
+            opacity={Math.min(
+              1,
+              washTone.glow *
+                (0.78 + Math.sin(phase * 2 + atom.seed) * 0.22 * washTone.glow) *
+                (0.7 + atom.depth * 0.3) *
+                dimFactor,
+            )}
+          />
+        ) : null}
         {washTone ? (
           <path
             className={washTone.className}
             d={atom.nodePaths[1]}
             opacity={Math.min(
               1,
-              (0.22 + washTone.strength * 0.38) * (0.6 + atom.depth * 0.4) * dimFactor,
+              (0.2 + washTone.strength * 0.66) * (0.6 + atom.depth * 0.4) * dimFactor,
             )}
           />
         ) : null}
@@ -298,31 +319,6 @@ function buildLabelDetail(atom) {
   return [shareText, returnText].filter(Boolean).join(' · ');
 }
 
-function parseLabelReturn(detail) {
-  const numeric = Number.parseFloat(String(detail ?? '').replace(/[,%\s]/g, ''));
-  return Number.isFinite(numeric) ? numeric : null;
-}
-
-// Watercolor wash inside each hand-drawn electron: red for gains, blue for losses (Korean market
-// convention), stronger for bigger moves. Flat ink for ~0%.
-export function resolveWashTone(atomOrReturn) {
-  const value =
-    typeof atomOrReturn === 'number'
-      ? atomOrReturn
-      : Number.isFinite(atomOrReturn?.returnRate)
-        ? atomOrReturn.returnRate
-        : parseLabelReturn(atomOrReturn?.detail);
-  // Every electron gets paint: unknown or ~0% returns get a faint ink wash instead of nothing,
-  // so an unpainted electron never reads as "missing".
-  if (value === null || !Number.isFinite(value) || Math.abs(value) < 0.05) {
-    return { className: 'node-wash is-flat', strength: 0 };
-  }
-  return {
-    className: value > 0 ? 'node-wash is-up' : 'node-wash is-down',
-    strength: Math.min(1, Math.abs(value) / 25),
-  };
-}
-
 export function PortfolioPreviewAtom({ entry, slot, onSelect, returnFor }) {
   const atoms = generateAtomLayout(entry.items, { returnFor }).slice(0, 9);
   const previewNodes = atoms.map((atom, index) => {
@@ -507,6 +503,19 @@ export function AtomSketch({
             <feMergeNode in="SourceGraphic" />
           </feMerge>
         </filter>
+        {/* Soft halo behind electrons with big gains/losses (SketchAtom's node-glow). Colors are
+            inline so the desktop widget, which doesn't load styles.css, gets them too. */}
+        <radialGradient id="node-glow-up">
+          <stop offset="0%" stopColor="rgb(255, 120, 104)" stopOpacity="0.95" />
+          <stop offset="45%" stopColor="rgb(255, 92, 78)" stopOpacity="0.42" />
+          <stop offset="100%" stopColor="rgb(255, 80, 66)" stopOpacity="0" />
+        </radialGradient>
+        <radialGradient id="node-glow-down">
+          {/* Blue reads darker than red on the near-black stage, so its halo is lifted a notch. */}
+          <stop offset="0%" stopColor="rgb(150, 198, 255)" stopOpacity="1" />
+          <stop offset="45%" stopColor="rgb(100, 165, 255)" stopOpacity="0.55" />
+          <stop offset="100%" stopColor="rgb(70, 132, 255)" stopOpacity="0" />
+        </radialGradient>
       </defs>
 
       <g className="aura-layer" filter="url(#glow)">

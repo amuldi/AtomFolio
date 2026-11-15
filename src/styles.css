@@ -8764,6 +8764,12 @@ body::after {
 .node-wash.is-down {
   fill: rgb(86, 150, 255);
 }
+/* Halo behind big movers; fill comes from the #node-glow-up/-down gradients in AtomSketch. */
+.node-glow {
+  stroke: none;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
 /* Data-quality warnings (lib/holdingIssues.js). Amber, never red: red already means "up". */
 .node-issue {
   fill: none;
