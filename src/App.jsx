@@ -1724,6 +1724,17 @@ function atomIssueFor(item) {
 }
 
 // Market value in KRW, used to size each electron by its share of the portfolio.
+// Electron size: number of shares held, so fewer shares draw a smaller electron.
+function atomSharesFor(item) {
+  const value = Number(
+    resolveHoldingPosition(item, {
+      baseCurrency: 'KRW',
+      fxRates: latestFxRatesForQuotes,
+    }).shares,
+  );
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
 function atomWeightFor(item) {
   const value = resolveHoldingPosition(item, {
     baseCurrency: 'KRW',
@@ -2343,6 +2354,7 @@ export default function App() {
         atoms: generateAtomLayout(targetEntry?.items ?? [], {
           resolveLabel: resolveAtomStockDisplayName,
           weightFor: atomWeightFor,
+          sizeFor: atomSharesFor,
           returnFor: atomReturnFor,
           issueFor: atomIssueFor,
         }).map(createAtomState),
@@ -3671,6 +3683,7 @@ export default function App() {
         : generateAtomLayout(portfolioItems, {
             resolveLabel: resolveAtomStockDisplayName,
             weightFor: atomWeightFor,
+            sizeFor: atomSharesFor,
             returnFor: atomReturnFor,
             issueFor: atomIssueFor,
           }).map(createAtomState);

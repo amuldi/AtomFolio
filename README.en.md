@@ -1,14 +1,52 @@
+<div align="center">
+
 # AtomFolio
+
+**Your whole portfolio as one atom, at a glance.**
+
+An investment data dashboard that pulls investment CSVs, manually entered holdings, live quotes, news,<br>
+and investment simulation into a single picture: holdings radiating out from the portfolio at the center.
 
 [한국어](README.md) · [English](README.en.md)
 
-An investment data dashboard that pulls investment CSVs, manually entered holdings, live quotes, news, and investment simulation into a single portfolio screen.
+[![Live](https://img.shields.io/badge/Live-atomfolio.vercel.app-111111?logo=vercel&logoColor=fff)](https://atomfolio.vercel.app)
+![Tests](https://img.shields.io/badge/tests-152%20passing-2F7A55)
+![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=111)
+![Three.js](https://img.shields.io/badge/Three.js-0.168-000000?logo=three.js&logoColor=fff)
+![Postgres](https://img.shields.io/badge/Postgres-Neon-4169E1?logo=postgresql&logoColor=fff)
 
-AtomFolio turns investment data that's normally scattered across tables into a "central portfolio with holdings radiating outward" structure. The concept started from a hand-drawn atomic-portfolio sketch in a notebook. To solve the problem of several accounts and holdings never fitting into one clear picture, holdings are drawn as nodes branching out from a center.
+**[Live site](https://atomfolio.vercel.app)** · [Demo data](samples/demo/) · [Update log](docs/updates/AtomFolio_Updates.en.md) · [Proposal](docs/proposal/AtomFolio_Proposal.md)
 
-<p align="center">
-  <img src="docs/assets/atomfolio-concept-sketch.png" alt="Early hand-drawn concept sketch" width="260">
-</p>
+<img src="docs/updates/assets/atomfolio-current-atomview.jpg" alt="AtomFolio main screen: holdings radiate from the portfolio at the center, with big movers glowing red or blue" width="100%">
+
+</div>
+
+<br>
+
+| | |
+| --- | --- |
+| **One atom = one portfolio** | The center is your whole portfolio, each electron is a holding, electron size is the quantity held |
+| **Gain and loss as color and glow** | Red for gains, blue for losses; the bigger the move, the brighter the glow |
+| **Any CSV as-is** | The app interprets each broker's own CSV layout |
+| **Summary · Compare · Simulation · News** | Scores, this month's changes, portfolio comparison, market-shock math, and market news in one flow |
+
+## Table of contents
+
+1. [Deployment & repository](#deployment--repository)
+2. [Tech stack](#tech-stack)
+3. [Why this exists](#why-this-exists)
+4. [Screens](#screens)
+5. [Menu bar companion app (macOS)](#menu-bar-companion-app-macos)
+6. [Core features](#core-features)
+7. [Settings policy](#settings-policy)
+8. [Architecture](#architecture)
+9. [Data flow](#data-flow)
+10. [File structure](#file-structure)
+11. [Things that were hard to build](#things-that-were-hard-to-build)
+12. [Running it](#running-it)
+13. [Environment variables & deployment](#environment-variables--deployment)
+14. [Verification](#verification)
+15. [Update log](#update-log)
 
 ## Deployment & repository
 
@@ -22,35 +60,31 @@ AtomFolio turns investment data that's normally scattered across tables into a "
 
 ## Tech stack
 
-![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=111)
-![Vite](https://img.shields.io/badge/Vite-5.4-646CFF?logo=vite&logoColor=fff)
-![JavaScript](https://img.shields.io/badge/JavaScript-ESM-F7DF1E?logo=javascript&logoColor=111)
-![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=node.js&logoColor=fff)
-![Three.js](https://img.shields.io/badge/Three.js-0.168-000000?logo=three.js&logoColor=fff)
-![Vercel](https://img.shields.io/badge/Vercel-Deploy-000000?logo=vercel&logoColor=fff)
-![Postgres](https://img.shields.io/badge/Postgres-Neon%20Ready-4169E1?logo=postgresql&logoColor=fff)
-
-## Table of contents
-
-1. [Why this exists](#why-this-exists)
-2. [Screens](#screens)
-3. [Menu bar companion app (macOS)](#menu-bar-companion-app-macos)
-4. [Core features](#core-features)
-5. [Settings policy](#settings-policy)
-6. [Architecture](#architecture)
-7. [Data flow](#data-flow)
-8. [File structure](#file-structure)
-9. [Things that were hard to build](#things-that-were-hard-to-build)
-10. [Running it](#running-it)
-11. [Environment variables & deployment](#environment-variables--deployment)
-12. [Verification](#verification)
-13. [Update log](#update-log)
+| Area | Technology |
+| --- | --- |
+| UI | ![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=111) ![Vite](https://img.shields.io/badge/Vite-5.4-646CFF?logo=vite&logoColor=fff) ![JavaScript](https://img.shields.io/badge/JavaScript-ESM-F7DF1E?logo=javascript&logoColor=111) |
+| Atom 3D scene | ![Three.js](https://img.shields.io/badge/Three.js-0.168-000000?logo=three.js&logoColor=fff) |
+| Server | ![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=node.js&logoColor=fff) ![Vercel](https://img.shields.io/badge/Vercel-Functions-000000?logo=vercel&logoColor=fff) |
+| Login & storage | ![Clerk](https://img.shields.io/badge/Clerk-Auth-6C47FF?logo=clerk&logoColor=fff) ![Postgres](https://img.shields.io/badge/Postgres-Neon%20Ready-4169E1?logo=postgresql&logoColor=fff) |
+| Menu bar app | ![Electron](https://img.shields.io/badge/Electron-32-47848F?logo=electron&logoColor=fff) |
+| Tests & quality | `node --test` · ESLint · Prettier |
 
 ## Why this exists
 
 Investment data is harder to look at than it should be. Broker CSVs carry holding name, ticker, cost basis, quantity, return rate, and date in a different shape every time, and Korean ETFs or US stocks each come with their own naming and abbreviation conventions. Using multiple accounts often means the same holding shows up across several repeated rows.
 
-The original idea was something as simple as "upload a CSV, get a nice chart." What turned out to actually be needed was a screen that shows, at a glance, what shape your portfolio is in. So holdings ended up placed one by one like atoms, with the whole portfolio anchored at the center.
+The original idea was something as simple as "upload a CSV, get a nice chart." What turned out to actually be needed was a screen that shows, at a glance, what shape your portfolio is in. So holdings ended up placed one by one like atoms, with the whole portfolio anchored at the center. The concept started from a hand-drawn atomic-portfolio sketch in a notebook.
+
+<table>
+  <tr>
+    <th width="50%">The first notebook sketch</th>
+    <th width="50%">The atom today</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/assets/atomfolio-concept-sketch.png" alt="Early hand-drawn concept sketch" width="260"></td>
+    <td align="center"><img src="docs/updates/assets/atomfolio-current-glow.jpg" alt="Close-up of the current atom: big movers glow" width="100%"></td>
+  </tr>
+</table>
 
 AtomFolio has three goals:
 
@@ -60,12 +94,12 @@ AtomFolio has three goals:
 
 ## Screens
 
-> Every screenshot below is current as of this README's last refresh (2026-08-13) — if an older
-> screen is ever left in place by mistake, the [update log](#update-log) has the diff.
+> [!NOTE]
+> These screenshots were retaken on 2026-11-15 with the eight demo portfolios from [`samples/demo/`](samples/demo/) loaded. They are not real account data. Older screens are kept in the [update log](#update-log).
 
 ### Main portfolio
 
-Holdings are placed as nodes branching out from a central portfolio. Profit is always red and loss is always blue, following the color convention Korean investors are used to. It's a WebGL (Three.js) 3D scene you can drag to rotate, with a command palette (⌘K) and an Explore/Manage tab pair up top.
+Holdings are placed as nodes branching out from a central portfolio. Profit is always red and loss is always blue, following the color convention Korean investors are used to. It's a WebGL (Three.js) 3D scene you can drag to rotate, with quick search (⌘K) in the top-right corner.
 
 How one atom encodes a portfolio:
 
@@ -73,37 +107,42 @@ How one atom encodes a portfolio:
 | --- | --- |
 | Center nucleus + hanging name tag | The whole portfolio; the tag shows total value, return, and top-holding weight |
 | One electron | One holding. Click for a detail card, which can be dragged around |
-| Electron size | Weight. Perspective is damped so a big holding at the back never draws smaller than a small one up front |
+| Electron size | Quantity held: fewer shares, smaller electron (weight is the % in the label). A CSV with no quantities falls back to weight; perspective is damped so depth never flips the size order |
 | Electron fill | Return vs. cost: red for gains, blue for losses, deeper for bigger moves |
 | Glow around an electron | Appears past a ±3% move and grows wider and brighter with the size of the gain or loss |
 | Amber dashed ring | The holding's input needs checking (see [Input checks](#12-input-checks)) |
 | Handwritten label | Name and `weight · ▲/▼return`; Hangul uses the Gaegu handwriting font, overlapping labels fade |
 
-![AtomFolio main screen](docs/updates/assets/atomfolio-current-atomview.jpg)
+### Tool panels
 
-### Command palette (⌘K)
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/updates/assets/atomfolio-current-summary.jpg" alt="AtomFolio summary tools"><br>
+      <b>Summary</b> · Category filters, a daily P/L heatmap, portfolio score by investing style, asset allocation, and this month's changes together.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/updates/assets/atomfolio-current-compare.jpg" alt="AtomFolio portfolio comparison"><br>
+      <b>Compare</b> · Every portfolio's return, score, largest holding, and concentration side by side in one table.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/updates/assets/atomfolio-current-simulation.jpg" alt="AtomFolio investment simulation"><br>
+      <b>Investment simulation</b> · Enter market-shock, stress-test, rebalancing-target, and long-term recurring-investment assumptions to compute projected outcomes. Any value the user hasn't entered is shown only as a placeholder — never silently filled in.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/updates/assets/atomfolio-current-news.jpg" alt="AtomFolio market news"><br>
+      <b>Market news</b> · Falls back to the latest stock news if there's nothing dated today. News cards are kept to title, source, and time so they can be scanned quickly.
+    </td>
+  </tr>
+</table>
+
+### Quick search (⌘K)
 
 Searching by name or ticker returns matches across every portfolio at once — the same holding scattered across multiple portfolios shows which one each result belongs to.
 
-![AtomFolio command palette](docs/updates/assets/atomfolio-current-commandpalette.jpg)
-
-### Summary tools
-
-The summary panel brings together category filters, a daily P/L heatmap, the 6-axis portfolio score, and asset allocation.
-
-![AtomFolio summary tools](docs/updates/assets/atomfolio-current-summary.jpg)
-
-### Investment simulation
-
-Enter market-shock, stress-test, rebalancing-target, and long-term recurring-investment assumptions to compute projected outcomes. Any value the user hasn't entered is shown only as a placeholder — never silently filled in.
-
-![AtomFolio investment simulation](docs/updates/assets/atomfolio-current-simulation.jpg)
-
-### Market news
-
-Falls back to the latest stock news if there's nothing dated today. News cards are kept to title, source, and time so they can be scanned quickly.
-
-![AtomFolio market news](docs/updates/assets/atomfolio-current-news.jpg)
+<img src="docs/updates/assets/atomfolio-current-commandpalette.jpg" alt="AtomFolio quick search: searching 삼성 lists Samsung Electronics in two portfolios" width="100%">
 
 ## Menu bar companion app (macOS)
 
@@ -136,6 +175,23 @@ built and refined (bugs included) is written up by date in the
 [update log](docs/updates/AtomFolio_Updates.en.md).
 
 ## Core features
+
+| | Feature | In one line |
+| --- | --- | --- |
+| 1 | [Creating and saving a portfolio](#1-creating-and-saving-a-portfolio) | CSV upload or manual entry, saved in the browser and on the server |
+| 2 | [Automatic CSV structure inference](#2-automatic-csv-structure-inference) | Each broker's layout mapped onto standard fields |
+| 3 | [Security search built for Korean investors](#3-security-search-built-for-korean-investors) | `삼전`, `005930`, `Samsung` resolve to the same security |
+| 4 | [Live market data](#4-live-market-data) | Quotes recompute the current return |
+| 5 | [Daily P/L heatmap](#5-daily-pl-heatmap) | Profit red / loss blue per day |
+| 6 | [Asset allocation donut](#6-asset-allocation-donut) | Weight per holding and weighted-average return |
+| 7 | [Portfolio score](#7-portfolio-score) | Six axes, an overall score for each of four styles |
+| 8 | [Investment simulation](#8-investment-simulation) | Market shocks, stress tests, recurring investment |
+| 9 | [Market news](#9-market-news) | Public news sources plus an archive of past articles |
+| 10 | [Portfolio comparison](#10-portfolio-comparison) | Every portfolio in one table |
+| 11 | [This month](#11-this-month) | Change since last month, biggest gainers and losers |
+| 12 | [Input checks](#12-input-checks) | Amber dashed ring on suspicious values |
+| 13 | [Conveniences](#13-conveniences) | Undo deletes, reopen last view, PWA |
+| 14 | [Demo data](#14-demo-data) | Eight CSVs ready to upload |
 
 ### 1. Creating and saving a portfolio
 
@@ -246,6 +302,9 @@ So one mistyped value can't silently distort the portfolio total, suspicious hol
 
 ### 14. Demo data
 
+> [!TIP]
+> Trying it for the first time? Upload any CSV from [`samples/demo/`](samples/demo/) as-is.
+
 `samples/demo/` holds eight demo portfolio CSVs. Every holding has a ticker, buy price, quantity, and currency, so they load with no warnings, and month-end records from June 2026 on let "This month" and the daily P/L view show real changes. See [samples/demo/README.md](samples/demo/README.md).
 
 ## Settings policy
@@ -268,10 +327,10 @@ flowchart LR
   User["User"]
   Browser["React web UI\nApp.jsx + styles.css"]
   Desktop["macOS menu bar app\nElectron (desktop/)"]
-  Tools["Tool panels\nlist / add holding / summary / simulation / news"]
+  Tools["Tool panels\nlist / add holding / summary / compare / simulation / news"]
   Parser["CSV parser\nportfolioIngestionCore.js"]
   Knowledge["Security knowledge\nsecurityKnowledge.js"]
-  Analytics["Analytics engine\nheatmap / allocation / scoring / twin"]
+  Analytics["Analytics engine\nheatmap / allocation / scoring / twin\nmonthlyDigest / holdingIssues"]
   Local["localStorage\nbrowser cache"]
   Api["Vercel Functions\napi/*"]
   Server["Shared Node API logic\nserver/*"]
@@ -338,6 +397,9 @@ flowchart LR
 
 ### API abuse protection
 
+<details>
+<summary>Expand — rate limits, quote cache, circuit breaker, outage alerts</summary>
+
 A per-minute, per-IP request limit protects external API cost and availability.
 Exceeding it returns `429` with a `Retry-After` header.
 
@@ -371,7 +433,12 @@ allowed throughput can exceed the configured limit — treat this as best-effort
 hard guarantee. Swap in a shared store like Upstash Redis if a strict global limit is ever needed.
 The local Node server (`server/index.mjs`) is a single process, so its limits apply exactly.
 
+</details>
+
 ### Authentication
+
+<details>
+<summary>Expand — Clerk token flow, guest promotion, guest workspace policy</summary>
 
 Login runs through [Clerk](https://clerk.com). A custom email/password UI
 (`src/components/auth/AuthPanel.jsx`) is drawn directly against Clerk's headless
@@ -405,6 +472,8 @@ impersonate another user in production.
 Without `VITE_CLERK_PUBLISHABLE_KEY`, `src/main.jsx` doesn't wrap the app in `<ClerkProvider>` and
 `AuthPanel` isn't rendered either — the app just runs in guest-only mode.
 
+</details>
+
 ## Data flow
 
 ```mermaid
@@ -418,7 +487,7 @@ flowchart TD
   G["Keep time-series raw data\ntimelineItems"]
   H["Save\nlocalStorage + API storage"]
   I["Accrue daily P/L\ngenerate days since last save"]
-  J["Compute analytics\nscore, heatmap, allocation, simulation"]
+  J["Compute analytics\nscore, heatmap, allocation, simulation\nthis month, input checks"]
   K["Render the atomic UI and tool panels"]
 
   A --> B --> C --> D --> E
@@ -454,6 +523,9 @@ sequenceDiagram
 ```
 
 ## File structure
+
+<details>
+<summary>Expand — repository layout</summary>
 
 ```text
 .
@@ -552,6 +624,8 @@ sequenceDiagram
     ├── proposal/
     └── updates/                  # dated update log + screenshots + README archive
 ```
+
+</details>
 
 ## Things that were hard to build
 
@@ -689,14 +763,15 @@ Vercel configuration lives in [vercel.json](vercel.json).
 
 Recently confirmed:
 
-- `npm test` (`node --test`, 150 tests — parser, scoring, "This month", input checks, quote merging, auth isolation, and more)
+- `npm test` (`node --test`, 152 tests — parser, scoring, "This month", input checks, quote merging, auth isolation, and more)
 - `npm run lint`, `npm run build`
 - On `https://atomfolio.vercel.app`: score styles, "This month", and electron glow checked live
 - All eight `samples/demo/` CSVs load with no warnings
 
 ## Disclaimer
 
-AtomFolio is a tool for organizing investment data and computing outcomes from stated assumptions. It is not investment advice or a buy/sell recommendation service. External quotes and news use public endpoints, so responses may be rate-limited or restricted depending on network conditions or provider policy.
+> [!IMPORTANT]
+> AtomFolio is a tool for organizing investment data and computing outcomes from stated assumptions. It is not investment advice or a buy/sell recommendation service. External quotes and news use public endpoints, so responses may be rate-limited or restricted depending on network conditions or provider policy.
 
 ## Update log
 
@@ -726,8 +801,8 @@ in [docs/updates/AtomFolio_Bugs.en.md](docs/updates/AtomFolio_Bugs.en.md) (Korea
 | Quote reliability | Yahoo → Stooq, two-step fallback | KIS (official) → Naver/Mirae raced concurrently → Yahoo → Stooq, with a circuit breaker, failure tracking, and outage alerting |
 | Navigation | Fixed sidebar icons | Command palette (⌘K) searching across every portfolio, a separate management table view |
 | Platforms | Web only | Web + a macOS menu bar companion app (Electron) |
-| Tests | Almost none | 150 (`node --test`) — auth isolation, rate limiting, KIS routing, scoring, "This month", and more |
-| Atom scene | Nodes only | Electron size = weight, color and glow by gain/loss, input-check rings, handwritten name tag |
+| Tests | Almost none | 152 (`node --test`) — auth isolation, rate limiting, KIS routing, scoring, "This month", and more |
+| Atom scene | Nodes only | Electron size = quantity held, color and glow by gain/loss, input-check rings, handwritten name tag |
 
 See the [menu bar companion app](#menu-bar-companion-app-macos) section above for screenshots and
 an introduction to the macOS app. More detailed per-feature screenshots, architecture diagrams, the

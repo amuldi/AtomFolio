@@ -31,8 +31,8 @@ export function SketchAtom({
   const shadowOpacity = 0.3 + atom.depth * 0.3 + atom.hoverMix * 0.08;
   const mainOpacity = 0.45 + atom.depth * 0.48 + atom.hoverMix * 0.08;
   const scale = atom.scale * (0.86 + atom.depth * 0.1);
-  // Electron size now encodes weight, so perspective is damped for the node itself: at full
-  // strength a 53% holding at the back drew smaller than an 18% one at the front. Depth still
+  // Electron size encodes quantity held, so perspective is damped for the node itself: at full
+  // strength a big holding at the back drew smaller than a small one at the front. Depth still
   // reads through bond strokes and opacity.
   const sizeScale = (1 + (atom.scale - 1) * 0.3) * (0.92 + atom.depth * 0.06);
   const nodeScale =
@@ -271,8 +271,8 @@ export function AtomLabel({ atom, maxLength = null, occluded = false }) {
   // ("+12.3%") and truncating it could hide the sign, which matters a lot more than a few extra
   // characters of a company name do.
   const labelText = truncateLabelText(atom.label, maxLength);
-  // Bigger holdings get bigger handwriting, so the label hierarchy matches the weight hierarchy.
-  const labelScale = Number.isFinite(atom.weightRatio) ? 0.86 + 0.34 * Math.sqrt(atom.weightRatio) : 1;
+  // Bigger electrons get bigger handwriting, so the label hierarchy matches the size hierarchy.
+  const labelScale = Number.isFinite(atom.sizeRatio) ? 0.86 + 0.34 * Math.sqrt(atom.sizeRatio) : 1;
   const detailText = buildLabelDetail(atom);
 
   return (

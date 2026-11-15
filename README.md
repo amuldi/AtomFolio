@@ -1,14 +1,52 @@
+<div align="center">
+
 # AtomFolio
+
+**내 주식을 원자 하나로, 한눈에.**
+
+투자 CSV, 직접 입력한 보유 종목, 실시간 시세, 뉴스, 투자 시뮬레이션을<br>
+가운데 포트폴리오에서 뻗어 나가는 원자 그림 하나로 묶어 보여주는 투자 데이터 대시보드입니다.
 
 [한국어](README.md) · [English](README.en.md)
 
-투자 CSV, 직접 입력한 보유 종목, 실시간 시세, 뉴스, 투자 시뮬레이션을 하나의 포트폴리오 화면으로 묶어 보여주는 투자 데이터 대시보드입니다.
+[![Live](https://img.shields.io/badge/Live-atomfolio.vercel.app-111111?logo=vercel&logoColor=fff)](https://atomfolio.vercel.app)
+![Tests](https://img.shields.io/badge/tests-152%20passing-2F7A55)
+![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=111)
+![Three.js](https://img.shields.io/badge/Three.js-0.168-000000?logo=three.js&logoColor=fff)
+![Postgres](https://img.shields.io/badge/Postgres-Neon-4169E1?logo=postgresql&logoColor=fff)
 
-AtomFolio는 표 형태로 흩어진 투자 데이터를 “중앙 포트폴리오와 주변 보유 종목” 구조로 바꿔 보여줍니다. 처음 구상은 노트에 직접 그린 원자형 포트폴리오 스케치에서 시작했습니다. 여러 계좌와 종목이 한눈에 안 들어오는 문제를 해결하려고, 보유 종목을 중심에서 뻗어나가는 노드로 표현했습니다.
+**[배포 사이트](https://atomfolio.vercel.app)** · [예시 데이터](samples/demo/) · [업데이트 로그](docs/updates/AtomFolio_Updates.md) · [기획서](docs/proposal/AtomFolio_Proposal.md)
 
-<p align="center">
-  <img src="docs/assets/atomfolio-concept-sketch.png" alt="초기 손그림 구상" width="260">
-</p>
+<img src="docs/updates/assets/atomfolio-current-atomview.jpg" alt="AtomFolio 메인 화면: 가운데 포트폴리오에서 종목 전자들이 뻗어 나가고, 손익이 큰 종목이 빨강·파랑으로 빛나는 모습" width="100%">
+
+</div>
+
+<br>
+
+| | |
+| --- | --- |
+| **원자 하나 = 포트폴리오 하나** | 가운데가 내 돈 전체, 전자 하나가 종목 하나, 전자 크기가 보유 수량 |
+| **색과 빛으로 손익** | 수익은 빨강, 손실은 파랑. 많이 벌거나 잃을수록 더 밝게 빛남 |
+| **CSV 그대로** | 증권사마다 다른 CSV 양식을 앱이 알아서 해석 |
+| **요약·비교·모의 투자·뉴스** | 점수, 이번 달 변화, 포트폴리오 비교, 시장 충격 계산, 시장 뉴스를 한 화면 흐름에서 |
+
+## 목차
+
+1. [배포와 저장소](#배포와-저장소)
+2. [사용 기술](#사용-기술)
+3. [개발 목적](#개발-목적)
+4. [실행 화면](#실행-화면)
+5. [메뉴바 동반 앱 (macOS)](#메뉴바-동반-앱-macos)
+6. [주요 기능](#주요-기능)
+7. [설정 정책](#설정-정책)
+8. [아키텍처](#아키텍처)
+9. [데이터 흐름](#데이터-흐름)
+10. [파일 구조](#파일-구조)
+11. [구현하면서 애먹었던 부분](#구현하면서-애먹었던-부분)
+12. [실행 방법](#실행-방법)
+13. [환경 변수와 배포](#환경-변수와-배포)
+14. [검증](#검증)
+15. [업데이트 로그](#업데이트-로그)
 
 ## 배포와 저장소
 
@@ -22,35 +60,31 @@ AtomFolio는 표 형태로 흩어진 투자 데이터를 “중앙 포트폴리�
 
 ## 사용 기술
 
-![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=111)
-![Vite](https://img.shields.io/badge/Vite-5.4-646CFF?logo=vite&logoColor=fff)
-![JavaScript](https://img.shields.io/badge/JavaScript-ESM-F7DF1E?logo=javascript&logoColor=111)
-![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=node.js&logoColor=fff)
-![Three.js](https://img.shields.io/badge/Three.js-0.168-000000?logo=three.js&logoColor=fff)
-![Vercel](https://img.shields.io/badge/Vercel-Deploy-000000?logo=vercel&logoColor=fff)
-![Postgres](https://img.shields.io/badge/Postgres-Neon%20Ready-4169E1?logo=postgresql&logoColor=fff)
-
-## 목차
-
-1. [개발 목적](#왜-만들었나)
-2. [실행 화면](#실행-화면)
-3. [메뉴바 동반 앱 (macOS)](#메뉴바-동반-앱-macos)
-4. [주요 기능](#주요-기능)
-5. [설정 정책](#설정-정책)
-6. [아키텍처](#아키텍처)
-7. [데이터 흐름](#데이터-흐름)
-8. [파일 구조](#파일-구조)
-9. [구현하면서 애먹었던 부분](#구현하면서-애먹었던-부분)
-10. [실행 방법](#실행-방법)
-11. [환경 변수와 배포](#환경-변수와-배포)
-12. [검증](#검증)
-13. [업데이트 로그](#업데이트-로그)
+| 영역 | 기술 |
+| --- | --- |
+| 화면 | ![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=111) ![Vite](https://img.shields.io/badge/Vite-5.4-646CFF?logo=vite&logoColor=fff) ![JavaScript](https://img.shields.io/badge/JavaScript-ESM-F7DF1E?logo=javascript&logoColor=111) |
+| 원자 3D 장면 | ![Three.js](https://img.shields.io/badge/Three.js-0.168-000000?logo=three.js&logoColor=fff) |
+| 서버 | ![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=node.js&logoColor=fff) ![Vercel](https://img.shields.io/badge/Vercel-Functions-000000?logo=vercel&logoColor=fff) |
+| 로그인·저장 | ![Clerk](https://img.shields.io/badge/Clerk-Auth-6C47FF?logo=clerk&logoColor=fff) ![Postgres](https://img.shields.io/badge/Postgres-Neon%20Ready-4169E1?logo=postgresql&logoColor=fff) |
+| 메뉴바 앱 | ![Electron](https://img.shields.io/badge/Electron-32-47848F?logo=electron&logoColor=fff) |
+| 테스트·품질 | `node --test` · ESLint · Prettier |
 
 ## 개발 목적
 
 투자 데이터는 생각보다 보기 어렵습니다. 증권사 CSV는 종목명, 티커, 매수가, 보유수량, 수익률, 날짜가 파일마다 다르게 들어오고, 한국 ETF나 미국 주식은 이름과 줄임말도 제각각입니다. 여러 계좌를 쓰면 같은 종목이 여러 줄로 반복되기도 합니다.
 
-처음에는 CSV를 업로드해 차트로 보여주는 정도를 생각했지만, 실제로 필요한 것은 “내 포트폴리오가 어떤 모양인지 바로 보는 화면”이었습니다. 그래서 보유 종목을 하나씩 원자처럼 배치하고, 중심에는 전체 포트폴리오를 두는 방식으로 바꿨습니다.
+처음에는 CSV를 업로드해 차트로 보여주는 정도를 생각했지만, 실제로 필요한 것은 “내 포트폴리오가 어떤 모양인지 바로 보는 화면”이었습니다. 그래서 보유 종목을 하나씩 원자처럼 배치하고, 중심에는 전체 포트폴리오를 두는 방식으로 바꿨습니다. 처음 구상은 노트에 직접 그린 원자형 포트폴리오 스케치에서 시작했습니다.
+
+<table>
+  <tr>
+    <th width="50%">노트에 그린 첫 구상</th>
+    <th width="50%">지금의 원자 화면</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/assets/atomfolio-concept-sketch.png" alt="초기 손그림 구상" width="260"></td>
+    <td align="center"><img src="docs/updates/assets/atomfolio-current-glow.jpg" alt="현재 원자 화면 확대: 손익이 큰 종목이 빛나는 모습" width="100%"></td>
+  </tr>
+</table>
 
 AtomFolio의 목표는 세 가지입니다.
 
@@ -60,14 +94,12 @@ AtomFolio의 목표는 세 가지입니다.
 
 ## 실행 화면
 
-> 아래 스크린샷은 이 README가 최근 갱신된 시점(2026-08-15)에 실제로 접속해 다시 찍은
-> 화면입니다 — 단, 메인 포트폴리오(원자 장면) 캡처만은 그 장면 자체의 시각적 디자인이 그 사이
-> 바뀌지 않아 8월 13일 캡처를 그대로 남겨뒀습니다. 예전 화면이 남아있으면
-> [업데이트 로그](#업데이트-로그)에 그 차이가 기록돼 있습니다.
+> [!NOTE]
+> 아래 스크린샷은 2026-11-15에 [`samples/demo/`](samples/demo/)의 예시 포트폴리오 8개를 올려 다시 찍은 화면입니다. 실제 계좌 데이터가 아닙니다. 예전 화면은 [업데이트 로그](#업데이트-로그)에 남아 있습니다.
 
 ### 메인 포트폴리오
 
-보유 종목을 중앙 포트폴리오에서 뻗어나가는 노드로 배치했습니다. 수익은 빨간색, 손실은 파란색으로 통일해 한국 투자자가 익숙한 손익 색상 체계를 따릅니다. WebGL(Three.js) 3D 장면이라 드래그로 회전시킬 수 있고, 상단에는 명령 팔레트(⌘K)와 탐색/관리 탭이 있습니다.
+보유 종목을 중앙 포트폴리오에서 뻗어나가는 노드로 배치했습니다. 수익은 빨간색, 손실은 파란색으로 통일해 한국 투자자가 익숙한 손익 색상 체계를 따릅니다. WebGL(Three.js) 3D 장면이라 드래그로 회전시킬 수 있고, 오른쪽 위에는 빠른 검색(⌘K)이 있습니다.
 
 원자 하나에 이렇게 정보를 담습니다.
 
@@ -75,37 +107,42 @@ AtomFolio의 목표는 세 가지입니다.
 | --- | --- |
 | 가운데 핵 + 위에 걸린 이름표 | 포트폴리오 전체. 이름표에 총 평가금액·수익률·상위 종목 비중 |
 | 전자 하나 | 보유 종목 하나. 클릭하면 상세 카드가 열리고, 카드는 끌어서 옮길 수 있음 |
-| 전자 크기 | 비중. 원근 때문에 크기가 뒤바뀌지 않도록 깊이에 따른 크기 변화를 줄임 |
+| 전자 크기 | 보유 수량. 적게 가진 종목일수록 작게 그려짐 (비중은 라벨의 % 숫자로 표시). 수량이 없는 CSV는 비중 기준으로 크기를 정하고, 원근 때문에 크기가 뒤바뀌지 않도록 깊이에 따른 크기 변화를 줄임 |
 | 전자 안쪽 색 | 매수가 대비 수익률. 수익 빨강, 손실 파랑, 클수록 진하게 |
 | 전자 주변 빛 | ±3%를 넘는 종목부터 빨강/파랑 빛이 번지고, 손익이 클수록 넓고 밝게 빛남 |
 | 주황 점선 테 | 입력값 확인 필요 (아래 [입력 오류 표시](#12-입력-오류-표시) 참고) |
 | 손글씨 라벨 | 종목명과 `비중 · ▲/▼수익률`. 한글은 Gaegu 손글씨 폰트, 겹치는 라벨은 흐리게 처리 |
 
-![AtomFolio 메인 화면](docs/updates/assets/atomfolio-current-atomview.jpg)
+### 도구 패널
 
-### 명령 팔레트 (⌘K)
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/updates/assets/atomfolio-current-summary.jpg" alt="AtomFolio 요약 도구"><br>
+      <b>요약</b> · 카테고리 필터, 날짜별 손익 히트맵, 성향별 포트폴리오 점수, 자산 비중, 이번 달 변화를 함께 확인합니다.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/updates/assets/atomfolio-current-compare.jpg" alt="AtomFolio 포트폴리오 비교"><br>
+      <b>비교</b> · 모든 포트폴리오의 수익률, 점수, 최대 비중 종목, 집중도를 한 표에서 나란히 봅니다.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/updates/assets/atomfolio-current-simulation.jpg" alt="AtomFolio 투자 시뮬레이션"><br>
+      <b>투자 시뮬레이션</b> · 시장 충격, 스트레스 테스트, 리밸런싱 목표, 장기 적립식 투자 가정을 입력해 예상 변화를 계산합니다. 사용자가 입력하지 않은 값은 임의로 채우지 않고 placeholder로만 안내합니다.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/updates/assets/atomfolio-current-news.jpg" alt="AtomFolio 시장 뉴스"><br>
+      <b>시장 뉴스</b> · 오늘 뉴스가 없으면 최신 주식 뉴스로 fallback합니다. 뉴스 카드는 제목, 출처, 시간 중심으로 빠르게 스캔할 수 있게 구성했습니다.
+    </td>
+  </tr>
+</table>
+
+### 빠른 검색 (⌘K)
 
 이름·티커로 검색하면 모든 포트폴리오를 가로질러 한 번에 결과가 뜹니다 — 같은 종목이 여러 포트폴리오에 흩어져 있어도 어디 소속인지 함께 보여줍니다.
 
-![AtomFolio 명령 팔레트](docs/updates/assets/atomfolio-current-commandpalette.jpg)
-
-### 요약 도구
-
-요약 패널에서는 카테고리 필터, 날짜별 손익 히트맵, 6축 포트폴리오 점수, 자산 비중을 함께 확인합니다.
-
-![AtomFolio 요약 도구](docs/updates/assets/atomfolio-current-summary.jpg)
-
-### 투자 시뮬레이션
-
-시장 충격, 스트레스 테스트, 리밸런싱 목표, 장기 적립식 투자 가정을 입력해 예상 변화를 계산합니다. 사용자가 입력하지 않은 값은 임의로 채우지 않고 placeholder로만 안내합니다.
-
-![AtomFolio 투자 시뮬레이션](docs/updates/assets/atomfolio-current-simulation.jpg)
-
-### 시장 뉴스
-
-오늘 뉴스가 없으면 최신 주식 뉴스로 fallback합니다. 뉴스 카드는 제목, 출처, 시간 중심으로 빠르게 스캔할 수 있게 구성했습니다.
-
-![AtomFolio 시장 뉴스](docs/updates/assets/atomfolio-current-news.jpg)
+<img src="docs/updates/assets/atomfolio-current-commandpalette.jpg" alt="AtomFolio 빠른 검색: 삼성으로 검색하면 두 포트폴리오의 삼성전자가 함께 표시됨" width="100%">
 
 ## 메뉴바 동반 앱 (macOS)
 
@@ -151,6 +188,23 @@ AtomFolio는 웹 하나가 아닙니다 — `desktop/` 아래에 별도의 Elect
 [업데이트 로그](docs/updates/AtomFolio_Updates.md)에 날짜별로 정리돼 있습니다.
 
 ## 주요 기능
+
+| | 기능 | 한 줄 요약 |
+| --- | --- | --- |
+| 1 | [포트폴리오 생성과 저장](#1-포트폴리오-생성과-저장) | CSV 업로드·직접 입력, 브라우저와 서버에 저장 |
+| 2 | [CSV 구조 자동 추론](#2-csv-구조-자동-추론) | 증권사마다 다른 양식을 표준 필드로 해석 |
+| 3 | [한국 투자자용 종목 검색](#3-한국-투자자용-종목-검색) | `삼전`, `005930`, `Samsung`을 같은 종목으로 |
+| 4 | [실시간 시장 정보](#4-실시간-시장-정보) | 시세로 현재 수익률 재계산 |
+| 5 | [날짜별 손익 히트맵](#5-날짜별-손익-히트맵) | 날짜마다 수익 빨강 / 손실 파랑 |
+| 6 | [자산 비중 도넛](#6-자산-비중-도넛) | 종목별 비중과 가중 평균 수익률 |
+| 7 | [포트폴리오 점수](#7-포트폴리오-점수) | 6개 축, 성향 4개의 종합 점수 |
+| 8 | [투자 시뮬레이션](#8-투자-시뮬레이션) | 시장 충격·스트레스 테스트·적립식 계산 |
+| 9 | [시장 뉴스](#9-시장-뉴스) | 공개 뉴스 모음 + 지난 기사 아카이브 |
+| 10 | [포트폴리오 비교](#10-포트폴리오-비교) | 모든 포트폴리오를 한 표에서 |
+| 11 | [이번 달 변화](#11-이번-달-변화) | 지난달 대비 변화와 많이 번·잃은 종목 |
+| 12 | [입력 오류 표시](#12-입력-오류-표시) | 잘못 넣은 값에 주황 점선 테 |
+| 13 | [편의 기능](#13-편의-기능) | 삭제 실행 취소, 마지막 화면 복원, PWA |
+| 14 | [예시 데이터](#14-예시-데이터) | 바로 올려 볼 수 있는 CSV 8개 |
 
 ### 1. 포트폴리오 생성과 저장
 
@@ -261,6 +315,9 @@ AtomFolio는 웹 하나가 아닙니다 — `desktop/` 아래에 별도의 Elect
 
 ### 14. 예시 데이터
 
+> [!TIP]
+> 처음 써 본다면 [`samples/demo/`](samples/demo/)의 CSV를 그대로 올려 보세요.
+
 `samples/demo/`에 시연용 포트폴리오 CSV 8개가 있습니다. 모든 종목에 종목코드·매수가·수량·통화가 들어 있어 경고 표시 없이 바로 보이고, 2026년 6월부터 월말 기록이 쌓여 있어 "이번 달 변화"와 날짜별 손익도 확인할 수 있습니다. 자세한 구성은 [samples/demo/README.md](samples/demo/README.md)를 참고하세요.
 
 ## 설정 정책
@@ -283,10 +340,10 @@ flowchart LR
   User["사용자"]
   Browser["React 웹 UI\nApp.jsx + styles.css"]
   Desktop["macOS 메뉴바 앱\nElectron (desktop/)"]
-  Tools["도구 패널\n목록 / 종목 추가 / 요약 / 시뮬레이션 / 뉴스"]
+  Tools["도구 패널\n목록 / 종목 추가 / 요약 / 비교 / 시뮬레이션 / 뉴스"]
   Parser["CSV 파서\nportfolioIngestionCore.js"]
   Knowledge["종목 지식\nsecurityKnowledge.js"]
-  Analytics["분석 엔진\nheatmap / allocation / scoring / twin"]
+  Analytics["분석 엔진\nheatmap / allocation / scoring / twin\nmonthlyDigest / holdingIssues"]
   Local["localStorage\n브라우저 캐시"]
   Api["Vercel Functions\napi/*"]
   Server["Node API 공통 로직\nserver/*"]
@@ -353,6 +410,9 @@ flowchart LR
 
 ### API 남용 방어
 
+<details>
+<summary>펼쳐 보기 — 레이트 리밋, 시세 캐시, 서킷 브레이커, 장애 알림</summary>
+
 외부 API 비용과 가용성을 보호하기 위해 IP 기준 분당 요청 한도를 둔다.
 초과 시 `429`와 `Retry-After` 헤더를 반환한다.
 
@@ -390,7 +450,12 @@ Naver와 Mirae Asset 프록시는 서로 독립적인 소스라 순차 대기 �
 `memory`이면 `GET /api/health`의 `readiness.warnings`에 `rate-limit-not-durable`로 표시된다.
 자세한 내용과 권장값은 [`docs/production-readiness.md`](docs/production-readiness.md) 참고.
 
+</details>
+
 ### 인증
+
+<details>
+<summary>펼쳐 보기 — Clerk 토큰 흐름, 게스트 승격, 게스트 워크스페이스 정책</summary>
 
 [Clerk](https://clerk.com)로 로그인을 처리한다. 커스텀 이메일/비밀번호 UI
 (`src/components/auth/AuthPanel.jsx`)가 Clerk의 headless `useSignIn`/`useSignUp`
@@ -438,6 +503,8 @@ UUID 형식이 아니면 거부하고, 로그인 없이 워크스페이스 ID를
 [`docs/production-readiness.md`](docs/production-readiness.md)의 "게스트 워크스페이스
 정책" 절에 정리했다.
 
+</details>
+
 ## 데이터 흐름
 
 ```mermaid
@@ -451,7 +518,7 @@ flowchart TD
   G["시계열 원본 유지\ntimelineItems"]
   H["저장\nlocalStorage + API 저장소"]
   I["일별 손익 누적\n마지막 저장일 이후 날짜 생성"]
-  J["분석 계산\n점수, 히트맵, 비중, 시뮬레이션"]
+  J["분석 계산\n점수, 히트맵, 비중, 시뮬레이션\n이번 달 변화, 입력 오류 감지"]
   K["원자형 UI와 도구 패널 렌더링"]
 
   A --> B --> C --> D --> E
@@ -487,6 +554,9 @@ sequenceDiagram
 ```
 
 ## 파일 구조
+
+<details>
+<summary>펼쳐 보기 — 저장소 폴더 구성</summary>
 
 ```text
 .
@@ -585,6 +655,8 @@ sequenceDiagram
     ├── proposal/
     └── updates/                  # 업데이트 로그(changelog) + 스크린샷 + README 아카이브
 ```
+
+</details>
 
 ## 구현하면서 애먹었던 부분
 
@@ -725,14 +797,15 @@ Vercel 설정은 [vercel.json](vercel.json)에 있습니다.
 
 최근 확인한 항목입니다.
 
-- `npm test` (`node --test`, 150개 — 파서, 점수, 이번 달 변화, 입력 오류 감지, 시세 병합, 인증 격리 등)
+- `npm test` (`node --test`, 152개 — 파서, 점수, 이번 달 변화, 입력 오류 감지, 시세 병합, 인증 격리 등)
 - `npm run lint`, `npm run build`
 - 배포 주소 `https://atomfolio.vercel.app`에서 점수 성향·이번 달 변화·전자 빛 표시 실제 동작 확인
 - `samples/demo/` 예시 CSV 8개 업로드 시 경고 없이 표시 확인
 
 ## 주의사항
 
-AtomFolio는 투자 데이터를 정리하고 가정을 계산하는 도구입니다. 투자 조언이나 매수/매도 추천 서비스가 아닙니다. 외부 시세와 뉴스는 공개 엔드포인트를 사용하므로 네트워크 상태나 제공자 정책에 따라 응답이 제한될 수 있습니다.
+> [!IMPORTANT]
+> AtomFolio는 투자 데이터를 정리하고 가정을 계산하는 도구입니다. 투자 조언이나 매수/매도 추천 서비스가 아닙니다. 외부 시세와 뉴스는 공개 엔드포인트를 사용하므로 네트워크 상태나 제공자 정책에 따라 응답이 제한될 수 있습니다.
 
 ## 업데이트 로그
 
@@ -762,8 +835,8 @@ localStorage만 쓰는 웹 하나였습니다. 지금은 여기서 훨씬 더 �
 | 시세 안정성 | Yahoo → Stooq 2단 fallback | KIS(공식) → Naver/Mirae 동시 경쟁 → Yahoo → Stooq, 서킷 브레이커 + 실패 추적 + 장애 알림 |
 | 탐색 | 사이드 아이콘 고정 노출 | 명령 팔레트(⌘K)로 모든 포트폴리오 통합 검색, 관리 테이블 뷰 |
 | 플랫폼 | 웹 하나 | 웹 + macOS 메뉴바 동반 앱(Electron) |
-| 테스트 | 거의 없음 | `node --test` 150개 (인증 격리·레이트리밋·KIS 라우팅·점수·이번 달 변화 등) |
-| 원자 화면 | 노드만 배치 | 전자 크기 = 비중, 손익에 따라 색과 빛의 세기, 입력 오류 표시, 손글씨 이름표 |
+| 테스트 | 거의 없음 | `node --test` 152개 (인증 격리·레이트리밋·KIS 라우팅·점수·이번 달 변화 등) |
+| 원자 화면 | 노드만 배치 | 전자 크기 = 보유 수량, 손익에 따라 색과 빛의 세기, 입력 오류 표시, 손글씨 이름표 |
 
 macOS 메뉴바 앱에 대한 스크린샷과 소개는 위 [메뉴바 동반 앱](#메뉴바-동반-앱-macos) 절을
 참고하세요. 더 자세한 기능별 스크린샷, 아키텍처 다이어그램, 시세 복원력(서킷 브레이커, 공급자

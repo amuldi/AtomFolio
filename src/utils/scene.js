@@ -313,6 +313,16 @@ export function generateAtomLayout(items, options = {}) {
   });
   const maxWeight = Math.max(0, ...rawWeights);
   const weightTotal = rawWeights.reduce((sum, value) => sum + value, 0);
+  // Electron size follows the holding's quantity (shares) when `sizeFor` is given: fewer shares,
+  // smaller electron. Weight still drives the "28%" share in the label. Without any quantities
+  // (e.g. a CSV with no 수량 column) size falls back to weight.
+  const rawSizes = visibleItems.map((item) => {
+    const value = typeof options.sizeFor === 'function' ? Number(options.sizeFor(item)) : NaN;
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  });
+  const maxSize = Math.max(0, ...rawSizes);
+  const sizeBasis = maxSize > 0 ? rawSizes : rawWeights;
+  const maxSizeBasis = maxSize > 0 ? maxSize : maxWeight;
   // Live return per holding (computed from price, not the entry-time `detail` text) so every
   // electron can be tinted, including holdings whose stored detail is empty.
   const returnOf = (index) => {
@@ -323,20 +333,22 @@ export function generateAtomLayout(items, options = {}) {
   const issueOf = (index) =>
     typeof options.issueFor === 'function' ? options.issueFor(visibleItems[index]) || null : null;
   const sizeFor = (index, fallback) => {
-    if (!(maxWeight > 0)) {
+    const weightShare = weightTotal > 0 ? (rawWeights[index] ?? 0) / weightTotal : null;
+    if (!(maxSizeBasis > 0)) {
       return {
         node: fallback,
-        weightShare: null,
-        weightRatio: null,
+        weightShare,
+        sizeRatio: null,
         returnRate: returnOf(index),
         issue: issueOf(index),
       };
     }
-    const ratio = (rawWeights[index] ?? 0) / maxWeight;
+    // Radius follows sqrt(value / largest) so drawn *area* tracks the value.
+    const ratio = (sizeBasis[index] ?? 0) / maxSizeBasis;
     return {
       node: (3.2 + 13 * Math.sqrt(ratio)) * NODE_BASE_RADIUS_SCALE,
-      weightShare: weightTotal > 0 ? (rawWeights[index] ?? 0) / weightTotal : null,
-      weightRatio: ratio,
+      weightShare,
+      sizeRatio: ratio,
       returnRate: returnOf(index),
       issue: issueOf(index),
     };
