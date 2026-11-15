@@ -38,15 +38,17 @@ and investment simulation into a single picture: holdings radiating out from the
 4. [Screens](#screens)
 5. [Menu bar companion app (macOS)](#menu-bar-companion-app-macos)
 6. [Core features](#core-features)
-7. [Settings policy](#settings-policy)
-8. [Architecture](#architecture)
-9. [Data flow](#data-flow)
-10. [File structure](#file-structure)
-11. [Things that were hard to build](#things-that-were-hard-to-build)
-12. [Running it](#running-it)
-13. [Environment variables & deployment](#environment-variables--deployment)
-14. [Verification](#verification)
-15. [Update log](#update-log)
+7. [Open source and data sources](#open-source-and-data-sources)
+8. [Formulas](#formulas)
+9. [Settings policy](#settings-policy)
+10. [Architecture](#architecture)
+11. [Data flow](#data-flow)
+12. [File structure](#file-structure)
+13. [Things that were hard to build](#things-that-were-hard-to-build)
+14. [Running it](#running-it)
+15. [Environment variables & deployment](#environment-variables--deployment)
+16. [Verification](#verification)
+17. [Update log](#update-log)
 
 ## Deployment & repository
 
@@ -306,6 +308,155 @@ So one mistyped value can't silently distort the portfolio total, suspicious hol
 > Trying it for the first time? Upload any CSV from [`samples/demo/`](samples/demo/) as-is.
 
 `samples/demo/` holds eight demo portfolio CSVs. Every holding has a ticker, buy price, quantity, and currency, so they load with no warnings, and month-end records from June 2026 on let "This month" and the daily P/L view show real changes. See [samples/demo/README.md](samples/demo/README.md).
+
+## Open source and data sources
+
+### Open source used
+
+| Name | License | Where and how it's used |
+| --- | --- | --- |
+| [React](https://react.dev) 18 / React DOM | MIT | The whole UI: the atom scene, tool panels (summary, compare, simulation, news), quick search, and settings as components (`src/App.jsx`, `src/components/*`) |
+| [Vite](https://vitejs.dev) 5 + `@vitejs/plugin-react` | MIT | Dev server (proxies `/api` to the local Node server) and the production build; three.js and Clerk are split into their own chunks for better caching (`vite.config.js`) |
+| [three.js](https://threejs.org) 0.168 | MIT | The atom's 3D rotation, perspective, and depth. Each electron is a direction vector on a sphere, rotated and projected to screen coordinates (`src/scene/*`, `src/utils/scene.js`) |
+| [`@clerk/clerk-react`](https://github.com/clerk/javascript) · [`@clerk/backend`](https://github.com/clerk/javascript) | MIT (SDK) | Sign-in UI (headless `useSignIn`/`useSignUp`) and server-side session token checks (`verifyToken`). Clerk itself is a cloud service (`src/components/auth/`, `server/workspaceAccess.mjs`) |
+| [`@neondatabase/serverless`](https://github.com/neondatabase/serverless) | MIT | Connects from Vercel functions to Neon Postgres to store portfolios and upload history (`server/postgresPortfolioStore.mjs`) |
+| [Electron](https://www.electronjs.org) 32 + electron-builder | MIT | The macOS menu bar app, the atom widget, and packaging (`desktop/`) |
+| [Gaegu](https://fonts.google.com/specimen/Gaegu) | OFL | Handwritten Hangul font for atom labels |
+| [ESLint](https://eslint.org) · [Prettier](https://prettier.io) · [knip](https://knip.dev) | MIT | Linting, formatting, and finding unused files/exports |
+| Node.js `node:test` | MIT | 152 tests (no external test framework) |
+
+Sign-in (Clerk), the database (Neon), and hosting/functions (Vercel) are cloud services, not open source. [Plausible](https://plausible.io) visit analytics turns on only when `VITE_PLAUSIBLE_DOMAIN` is set.
+
+### Where the data comes from
+
+Market data (quotes, news, search) is never fetched by the browser directly. Every request goes through the AtomFolio server (`/api/*`), which fetches from the sources below, caches, and returns the result. Requests are rate-limited per minute (see [API abuse protection](#api-abuse-protection)).
+
+| Data | Sources (tried in order) | Code |
+| --- | --- | --- |
+| **Price, change, chart** | ① For Korean tickers, Korea Investment & Securities KIS Open API first (when `KIS_APP_KEY` is set) → ② Naver Finance mobile API and a Mirae Asset quote proxy (when configured), requested **concurrently**, first answer wins → ③ Yahoo Finance chart API → ④ Stooq | `server/marketData/liveQuoteRouter.mjs`, `kisProvider.mjs`, `src/lib/liveMarketData.js` |
+| **Exchange rates** | Yahoo Finance `USDKRW=X` and `{CODE}KRW=X` (e.g. `INRKRW=X`); a default rate if unavailable | `src/App.jsx`, `src/utils/currency.js` |
+| **Security search / autocomplete** | Naver Finance autocomplete, Yahoo Finance search, and a built-in Korean ETF/alias dictionary | `/api/market/search`, `src/lib/securityKnowledge.js` |
+| **Security metadata** (asset class, region, sector) | Built-in dictionary, Wikidata (API and SPARQL), Yahoo Finance search | `/api/securities/enrich`, `server/securityEnrichment.mjs` |
+| **Financials** | US SEC EDGAR (`company_tickers.json`, XBRL companyfacts), Yahoo Finance quoteSummary | `/api/market/financials`, `src/lib/companyFinancials.js` |
+| **Market news** | Naver Finance news, Naver news search, Bing News RSS, Finnhub (when `FINNHUB_API_KEY` is set); if all fail, previously collected articles | `/api/market/news`, `src/lib/marketNews.js`, `server/newsArchive.mjs` |
+| **Your portfolio** | CSVs you upload or holdings you type in. Saved to browser `localStorage` first, then synced to the server (Neon Postgres, or a JSON file locally) | `server/portfolioStore.mjs` |
+
+- Quote responses are cached on the server for 10 seconds; if every source fails, the last good answer is returned with `stale: true`.
+- A source that fails 3 times in a row is skipped for 30 seconds (circuit breaker).
+- Public endpoints may be blocked or changed at any time by their providers.
+
+## Formulas
+
+Every amount is converted to the base currency (KRW by default) before it is combined. Returns are recomputed from real amounts whenever possible; a return string from the CSV is used only when no price data exists at all. (`src/lib/portfolioAnalyticsSummary.js`)
+
+### One holding
+
+| Value | Formula |
+| --- | --- |
+| Cost | `buy price × quantity` (or the CSV's cost column) |
+| Market value | `current price × quantity` (or the CSV's market value column) |
+| P/L | `market value − cost` |
+| Return | `P/L ÷ cost × 100` |
+| KRW conversion | `amount × FX rate` (currencies other than KRW/USD are crossed through KRW) |
+
+$$
+\text{Return}(\%) = \frac{\text{price}\times\text{qty} - \text{buy price}\times\text{qty}}{\text{buy price}\times\text{qty}} \times 100
+$$
+
+When a holding is bought and quoted in the same currency (a US stock bought in USD), the FX rate cancels out, so the return is computed in that currency. When the currencies differ (a USD stock with a KRW cost basis), the return includes the FX move as well.
+
+### Whole portfolio
+
+| Value | Formula |
+| --- | --- |
+| Total value, cost, P/L | Each holding converted to KRW and summed |
+| Total return | `total P/L ÷ total cost × 100` (weight-averaged return if cost is unknown) |
+| Weight | `holding market value ÷ total market value` (falls back to cost → the CSV's weight column → equal split) |
+| Donut center return | Holding returns averaged by **cost** weight (= `ΣP/L ÷ Σcost`) |
+| Concentration (HHI) | `Σ weight²` · 0.25+ high, 0.12+ medium, below that low |
+| Effective holdings | `1 ÷ HHI` (five equal holdings → 5; one dominant holding → close to 1) |
+
+### This month (`src/lib/monthlyDigest.js`)
+
+1. Snapshots are grouped by month, keeping only **each holding's latest snapshot** in a month (so a duplicate save isn't counted twice).
+2. Per month: `Σ market value`, `Σ P/L`, and `return = Σ P/L ÷ Σ cost × 100`.
+3. This month − last month = change in value, change in P/L, change in return (pp).
+4. **Biggest gainers / losers**: only holdings present in both months, ranked by `this month's P/L − last month's P/L`; holdings bought this month are left out. With only one recorded month, cumulative P/L is used instead.
+
+### Daily P/L heatmap (`src/lib/portfolioHeatmap.js`)
+
+P/L (or return) is summed per day, and the cell's color strength is that day's value ÷ the largest value in the range (minimum 0.12). Gains are red, losses blue. The last 24 weeks are shown.
+
+### Portfolio score (`src/lib/portfolioScoring.js`)
+
+Input values are computed first, each of the six axes is scored within 18–98, and the axes are combined with per-style weights.
+
+<details>
+<summary>Expand — input values and the six axis formulas</summary>
+
+**Input values**
+
+| Name | Formula |
+| --- | --- |
+| Average return, return volatility | Mean and standard deviation of holding returns |
+| Downside volatility | Standard deviation of losing holdings' returns only |
+| Winner / loser ratio | Holdings with return ≥ 0 / < 0 ÷ all holdings |
+| Effective holdings | `1 ÷ Σ weight²` |
+| Holding spread | `(effective holdings − 1) ÷ 11`, clamped to 0–1 (12 holdings = full marks) |
+| Concentration penalty | `1 − (effective holdings − 1) ÷ (holding count − 1)` |
+| Sector / region / style / asset-class spread | Group count ÷ 6 · 4 · 4 · 3, clamped to 0–1 |
+| Balance | Normalized entropy of group weights, `−Σ p·ln p ÷ ln(group count)` (1 = evenly split) |
+| High / medium / low-risk share, defensive share | Summed weight of holdings in that risk tier, or in bonds, commodities, dividend, value, gold, consumer staples |
+| Purchase timing spread | Average of distinct buy months/days ratio and buying span (180 days = full marks) |
+
+**Six axes** (each clamped to its floor and ceiling)
+
+| Axis | Formula |
+| --- | --- |
+| Profitability | `40 + avgReturn×4.6 + winnerRatio×24 − max(0, volatility−8)×1.4 − downsideVolatility×0.6` |
+| Diversification | `18 + holdingSpread×24 + assetSpread×18 + sectorSpread×16 + regionSpread×12 + styleSpread×8 + avgBalance×18 − concentrationPenalty×8` |
+| Risk management | `24 + diversification×0.26 + lowRisk×18 + mediumRisk×8 + defensive×16 − highRisk×14 − concentrationPenalty×16` |
+| Composition | `22 + metadataCoverage×0.2 + assetSpread×20 + assetBalance×14 + sectorBalance×12 + regionBalance×10 + holdingSpread×10` |
+| Timing | `28 + timingSpread×42 + holdingSpread×8 + defensive×6` (no buy dates: `54 + holdingSpread×6`) |
+| Stability | `70 − volatility×4 + winnerRatio×10 + defensive×16 + lowRisk×10 + assetSpread×8 − highRisk×8 − concentrationPenalty×10 − loserRatio×8` |
+
+</details>
+
+**Overall score per style** = sum of the six axis scores × the weights below (rounded)
+
+| Axis | Balanced | Growth | Stable | Aggressive |
+| --- | ---: | ---: | ---: | ---: |
+| Profitability | 0.20 | 0.24 | 0.12 | 0.28 |
+| Diversification | 0.22 | 0.22 | 0.18 | 0.24 |
+| Risk management | 0.20 | 0.12 | 0.24 | 0.16 |
+| Composition | 0.16 | 0.12 | 0.18 | 0.12 |
+| Timing | 0.08 | 0.04 | 0.08 | 0.08 |
+| Stability | 0.14 | 0.26 | 0.20 | 0.12 |
+
+### Investment simulation (`src/lib/digitalTwin.js`)
+
+| Calculation | Formula |
+| --- | --- |
+| Market shock | Per holding, `shock = overall + (US? US) + (tech? tech) + (gold/cash? gold/cash) + (REIT? REIT)`, clamped to −95%…+200%. `projected = market value × (1 + shock/100)` |
+| Stress tests | Preset shock bundles, e.g. tech crash = overall −4%, US −4%, tech −18%, gold/cash +5%, REIT −5% |
+| Risk score | `22 + topWeight×26 + techWeight×22 + usWeight×9 + highRiskWeight×24 − defensiveWeight×16`, 0–100 |
+| Rebalancing | Current vs. target weights across stocks / dividend / gold-cash / REIT / other; `trade amount = (target − current) × total value` |
+| Recurring investment | Monthly rate `r = (1 + annual rate)^(1/12) − 1`; each month `value = value × (1 + r) + contribution`. 4% (stable), 7% (moderate), 10% (aggressive) shown side by side |
+
+$$
+V_{n} = V_{n-1}\times(1+r) + \text{monthly contribution},\qquad r=(1+\text{annual rate})^{1/12}-1
+$$
+
+These are calculations over assumptions you enter, not investment advice.
+
+### The atom (`src/utils/scene.js`, `src/components/atom/washTone.js`)
+
+| Mark | Formula |
+| --- | --- |
+| Electron radius | `3.2 + 13 × √(quantity ÷ largest quantity)` (drawn **area** tracks quantity); falls back to market-value weight when there are no quantities |
+| Fill strength | `√(min(1, absolute return ÷ 40))` → full at 40%+ |
+| Glow | `((absolute return − 3) ÷ 37)^0.75`, clamped to 0–1 → none at 3% or less, brightest at 40%+ |
+| Amber dashed ring | No quantity, or `buy ÷ current > 5` (loss side) / `current ÷ buy > 10` (gain side), or a return beyond ±1000% with no prices |
 
 ## Settings policy
 
