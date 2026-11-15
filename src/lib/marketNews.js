@@ -277,7 +277,9 @@ async function fetchHtml(url, signal) {
 
     const decoder = new TextDecoder('utf-8');
     let html = '';
-    while (html.length < 60000) {
+    // Reading stops as soon as og:image shows up; the cap is for pages like Yahoo Finance whose
+    // og:image sits ~110 KB in, after the inline scripts.
+    while (html.length < 250000) {
       const { done, value } = await reader.read();
       if (done) {
         break;
