@@ -6,7 +6,7 @@ import {
 } from './securityEnrichment.mjs';
 import { searchMarketSymbolSuggestions } from '../src/lib/liveMarketData.js';
 import { fetchCompanyFinancialsFromProviders } from '../src/lib/companyFinancials.js';
-import { fetchMarketNewsFromProviders, uniqueNewsItems } from '../src/lib/marketNews.js';
+import { enrichWithOgImages, fetchMarketNewsFromProviders, uniqueNewsItems } from '../src/lib/marketNews.js';
 import {
   isFinnhubConfigured,
   fetchFinnhubGeneralNews,
@@ -475,7 +475,17 @@ export async function handleMarketNewsRequest({ method, query, clientKey, sendJs
     }
 
     const start = (page - 1) * pageSize;
-    const pageItems = allItems.slice(start, start + pageSize);
+    let pageItems = allItems.slice(start, start + pageSize);
+    // Archived articles saved before thumbnails were looked up (or whose lookup failed then) get
+    // another try for the page being served; whatever is found is written back to the archive.
+    if (pageItems.some((item) => !item.thumbnailUrl)) {
+      const filled = await enrichWithOgImages(pageItems);
+      const newlyFilled = filled.filter((item, index) => item.thumbnailUrl && !pageItems[index].thumbnailUrl);
+      if (newlyFilled.length) {
+        await archiveNewsItems(newlyFilled, { language }).catch(() => {});
+      }
+      pageItems = filled;
+    }
 
     sendJson(200, {
       ...payload,

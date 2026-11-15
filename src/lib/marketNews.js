@@ -332,6 +332,7 @@ async function fetchMsnImageUrl(articleUrl, signal) {
       { signal: timeout.signal, headers: { 'User-Agent': 'Mozilla/5.0 AtomFolio/1.0', Accept: 'application/json' } },
     );
     if (!response.ok) {
+      console.warn('[news] msn image lookup failed', response.status, id);
       return null;
     }
     const payload = await response.json();
@@ -345,7 +346,13 @@ async function fetchMsnImageUrl(articleUrl, signal) {
 async function fetchOgImageUrl(rawLink, signal) {
   const link = unwrapArticleLink(rawLink);
   try {
-    const msnImage = await fetchMsnImageUrl(link, signal);
+    let msnImage;
+    try {
+      msnImage = await fetchMsnImageUrl(link, signal);
+    } catch (error) {
+      console.warn('[news] msn image lookup error', error?.name, error?.message);
+      return null;
+    }
     if (msnImage !== undefined) {
       return msnImage;
     }
@@ -391,7 +398,8 @@ function rememberThumbnail(link, value) {
   }
 }
 
-async function enrichWithOgImages(items, { signal } = {}) {
+// Also used by the news route for archived articles that were saved without a thumbnail.
+export async function enrichWithOgImages(items, { signal } = {}) {
   // MSN lookups are one small JSON call each, so they go first; slow article pages (a 4 s
   // timeout each) were filling the queue and MSN items never got their turn before the deadline.
   const isMsn = (item) => /(^|\.)msn\.com$/i.test(safeHostname(unwrapArticleLink(item.link)));
