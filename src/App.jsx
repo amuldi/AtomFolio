@@ -1,4 +1,13 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  memo,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import * as THREE from 'three';
 import { createPortfolioHeatmap } from './lib/portfolioHeatmap.js';
 import { createPortfolioAllocation } from './lib/portfolioAllocation.js';
@@ -2149,6 +2158,143 @@ function SketchUploadArrowIcon() {
   );
 }
 
+// The animation loop publishes its frame time here instead of into App state: committing it as
+// App state re-rendered the whole app (tool drawer, command palette, preview atoms) ~30 times a
+// second, which was most of the main thread. Only SceneAtomLayer subscribes.
+function createFrameStore() {
+  let time = 0;
+  const listeners = new Set();
+  return {
+    get: () => time,
+    set(next) {
+      time = next;
+      listeners.forEach((listener) => listener());
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+
+// Camera drift is written straight onto the shell element's CSS variables each frame, for the
+// same reason: no React render is needed to move a background.
+function applyCameraStyle(element, camera) {
+  if (!element) {
+    return;
+  }
+  const stageX = camera.panX * 0.2 + camera.driftX * 0.84;
+  const stageY = camera.panY * 0.17 + camera.driftY * 0.9;
+  const style = element.style;
+  style.setProperty('--space-pan-x', `${format(camera.panX * -0.26 + camera.driftX * 1.18)}px`);
+  style.setProperty('--space-pan-y', `${format(camera.panY * -0.22 + camera.driftY * 1.12)}px`);
+  style.setProperty('--space-pan-stage-x', `${format(stageX)}px`);
+  style.setProperty('--space-pan-stage-y', `${format(stageY)}px`);
+  style.setProperty('--space-depth', format(camera.dolly * 0.012 + camera.focus * 0.38));
+  style.setProperty('--camera-focus', format(camera.focus));
+  style.setProperty('--camera-stage-zoom', format(1 + (camera.zoom - 1) * 0.42 + camera.focus * 0.025));
+  style.setProperty('--camera-stage-roll', `${format(camera.roll * 0.46)}deg`);
+  style.setProperty('--camera-glow', format(0.28 + camera.focus * 0.5));
+}
+
+// The only part of the page that re-renders every animation frame: projects the atoms with the
+// current rotation/camera and draws them.
+function SceneAtomLayer({
+  frameStore,
+  atomsRef,
+  rotationRef,
+  cameraRef,
+  motionPreferenceRef,
+  hasPortfolioItems,
+  introCenterBurstAt,
+  highlightActive,
+  activeGroupKey,
+  normalizedActiveGroupValue,
+  selectedAtomId,
+  selectedAtomFocusActive,
+  svgRef,
+  ariaLabel,
+  maxLabelLength,
+  onCenterClick,
+  onPointerDown,
+  onPointerEnter,
+  onPointerMove,
+  onPointerLeave,
+  onKeyboardSelect,
+}) {
+  const frameTime = useSyncExternalStore(frameStore.subscribe, frameStore.get, frameStore.get);
+  const introCenterBurst =
+    !hasPortfolioItems && introCenterBurstAt >= 0
+      ? Math.sin(clamp((frameTime - introCenterBurstAt) / 420, 0, 1) * Math.PI)
+      : 0;
+  const pulse = 0.5 + Math.sin(frameTime * 0.00042) * 0.5;
+  const centerMotion = frameTime * 0.00112;
+  const cameraMotion = cameraRef.current.current;
+  const atoms = atomsRef.current.map((atom) => {
+    const position = atom.baseDirection
+      .clone()
+      .applyQuaternion(rotationRef.current.current)
+      .multiplyScalar(BOND_LENGTH);
+    const projection = projectPoint(position, cameraMotion);
+    const matchesActiveGroup =
+      highlightActive &&
+      canHighlightGroupField(atom, activeGroupKey) &&
+      normalizeDisplayKey(atom[activeGroupKey]) === normalizedActiveGroupValue;
+
+    return {
+      ...atom,
+      ...projection,
+      isSelected: atom.id === selectedAtomId,
+      isGroupMatch: matchesActiveGroup,
+      dimmed: selectedAtomFocusActive
+        ? atom.id !== selectedAtomId
+        : highlightActive
+          ? !matchesActiveGroup
+          : false,
+      position,
+    };
+  });
+
+  return (
+    <>
+      {ENABLE_WEBGL_SCENE_PREVIEW ? (
+        <AtomCanvas
+          atoms={atoms}
+          rotationRef={rotationRef}
+          motionPreferenceRef={motionPreferenceRef}
+          bondLength={BOND_LENGTH}
+          onAtomPointerDown={onPointerDown}
+          onAtomPointerEnter={onPointerEnter}
+          onAtomPointerMove={onPointerMove}
+          onAtomPointerLeave={onPointerLeave}
+          onKeyboardSelect={onKeyboardSelect}
+          onCenterClick={onCenterClick}
+        />
+      ) : null}
+      <AtomSketchView
+        atoms={atoms}
+        pulse={pulse}
+        centerMotion={centerMotion}
+        centerClickBurst={introCenterBurst}
+        standalone={!hasPortfolioItems}
+        svgRef={svgRef}
+        ariaLabel={ariaLabel}
+        maxLabelLength={maxLabelLength}
+        highlightActive={highlightActive}
+        centerFocusActive={Boolean(selectedAtomId)}
+        onCenterClick={onCenterClick}
+        onPointerDown={onPointerDown}
+        onPointerEnter={onPointerEnter}
+        onPointerMove={onPointerMove}
+        onPointerLeave={onPointerLeave}
+        onKeyboardSelect={onKeyboardSelect}
+      />
+    </>
+  );
+}
+
+const MemoPortfolioPreviewAtom = memo(PortfolioPreviewAtomView);
+
 function HoverCard({ atom, position, language }) {
   const infoFields = buildAtomInfoFields(atom, language);
 
@@ -2457,7 +2603,13 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [atomHintVisible, dismissAtomHint]);
   const [hoverInfo, setHoverInfo] = useState(null);
-  const [frameTime, setFrameTime] = useState(0);
+  const frameStoreRef = useRef(null);
+  if (!frameStoreRef.current) {
+    frameStoreRef.current = createFrameStore();
+  }
+  // Bumped whenever atomsRef.current is rebuilt, so App re-renders to pick up the new atom data
+  // (it no longer re-renders on every animation frame).
+  const [atomsVersion, setAtomsVersion] = useState(0);
   const [shootingStar, setShootingStar] = useState(null);
   const [fileDragActive, setFileDragActive] = useState(false);
   const fileDragCounterRef = useRef(0);
@@ -3111,7 +3263,8 @@ export default function App() {
         )
       ) {
         frameCommitRef.current = now;
-        setFrameTime(now);
+        applyCameraStyle(shellRef.current, cameraRef.current.current);
+        frameStoreRef.current.set(now);
         if (pendingHoverInfoRef.current !== null) {
           const pending = pendingHoverInfoRef.current;
           pendingHoverInfoRef.current = null;
@@ -3722,6 +3875,7 @@ export default function App() {
             returnFor: atomReturnFor,
             issueFor: atomIssueFor,
           }).map(createAtomState);
+    setAtomsVersion((version) => version + 1);
 
     // A live quote refresh on the still-active portfolio (see the interval a few effects below)
     // replaces portfolioItems with a new array of the *same* holdings — same entryId, same count
@@ -5322,28 +5476,7 @@ export default function App() {
     noteInteraction();
     setIntroCenterBurstAt(performance.now());
   };
-  const introCenterBurst =
-    !hasPortfolioItems && introCenterBurstAt >= 0
-      ? Math.sin(clamp((frameTime - introCenterBurstAt) / 420, 0, 1) * Math.PI)
-      : 0;
-
-  const pulse = 0.5 + Math.sin(frameTime * 0.00042) * 0.5;
-  const centerMotion = frameTime * 0.00112;
-  const spreadScale = 1;
-  const nodeShrink = 1;
-  const cameraMotion = cameraRef.current.current;
-  const stageCameraX = cameraMotion.panX * 0.2 + cameraMotion.driftX * 0.84;
-  const stageCameraY = cameraMotion.panY * 0.17 + cameraMotion.driftY * 0.9;
   const sceneStyle = {
-    '--space-pan-x': `${format(cameraMotion.panX * -0.26 + cameraMotion.driftX * 1.18)}px`,
-    '--space-pan-y': `${format(cameraMotion.panY * -0.22 + cameraMotion.driftY * 1.12)}px`,
-    '--space-pan-stage-x': `${format(stageCameraX)}px`,
-    '--space-pan-stage-y': `${format(stageCameraY)}px`,
-    '--space-depth': format(cameraMotion.dolly * 0.012 + cameraMotion.focus * 0.38),
-    '--camera-focus': format(cameraMotion.focus),
-    '--camera-stage-zoom': format(1 + (cameraMotion.zoom - 1) * 0.42 + cameraMotion.focus * 0.025),
-    '--camera-stage-roll': `${format(cameraMotion.roll * 0.46)}deg`,
-    '--camera-glow': format(0.28 + cameraMotion.focus * 0.5),
     '--tool-drawer-current-width': toolTrayOpen ? `${toolDrawerWidth}px` : '0px',
     // Which direction to push the atom to keep it visually centered in whatever space the open
     // drawer leaves behind depends on which side it's docked to — left dock pushes the atom
@@ -5369,47 +5502,9 @@ export default function App() {
       '--shooting-star-opacity': format(shootingStar.opacity),
     };
   }, [shootingStar]);
-  const atoms = useMemo(
-    () =>
-      atomsRef.current.map((atom) => {
-        const position = atom.baseDirection
-          .clone()
-          .applyQuaternion(rotationRef.current.current)
-          .multiplyScalar(BOND_LENGTH);
-        const projection = projectPoint(position, cameraMotion);
-        const matchesActiveGroup =
-          highlightActive &&
-          canHighlightGroupField(atom, activeGroupKey) &&
-          normalizeDisplayKey(atom[activeGroupKey]) === normalizedActiveGroupValue;
-
-        return {
-          ...atom,
-          ...projection,
-          x: projection.x * spreadScale,
-          y: projection.y * spreadScale,
-          scale: projection.scale * nodeShrink,
-          isSelected: atom.id === selectedAtomId,
-          isGroupMatch: matchesActiveGroup,
-          dimmed: selectedAtomFocusActive
-            ? atom.id !== selectedAtomId
-            : highlightActive
-              ? !matchesActiveGroup
-              : false,
-          position,
-        };
-      }),
-    [
-      activeGroupKey,
-      cameraMotion,
-      frameTime,
-      highlightActive,
-      nodeShrink,
-      normalizedActiveGroupValue,
-      selectedAtomFocusActive,
-      selectedAtomId,
-      spreadScale,
-    ],
-  );
+  // Atom data without per-frame positions: enough for the hover card and detail panel.
+  // atomsVersion makes this re-read after atomsRef.current is rebuilt.
+  const atoms = useMemo(() => atomsRef.current, [atomsVersion]);
   const hoveredAtom = atoms.find((atom) => atom.id === hoverInfo?.atomId) ?? null;
   const selectedAtomData = atoms.find((atom) => atom.id === selectedAtomId) ?? null;
   // CSV-parsed items often have no id (sourceItemId is then ''), so fall back to the holding's
@@ -5672,33 +5767,22 @@ export default function App() {
                   className="atom-materialize-wrapper"
                   style={{ '--materialize': atomTransitionScale }}
                 >
-                  {ENABLE_WEBGL_SCENE_PREVIEW ? (
-                    <AtomCanvas
-                      atoms={atoms}
-                      rotationRef={rotationRef}
-                      motionPreferenceRef={motionPreferenceRef}
-                      bondLength={BOND_LENGTH}
-                      onAtomPointerDown={handleNodePointerDown}
-                      onAtomPointerEnter={handleNodeEnter}
-                      onAtomPointerMove={handleNodeMove}
-                      onAtomPointerLeave={handleNodeLeave}
-                      onKeyboardSelect={handleNodeKeyboardSelect}
-                      onCenterClick={
-                        hasPortfolioItems ? clearCenterSelection : triggerIntroCenterBurst
-                      }
-                    />
-                  ) : null}
-                  <AtomSketchView
-                    atoms={atoms}
-                    pulse={pulse}
-                    centerMotion={centerMotion}
-                    centerClickBurst={introCenterBurst}
-                    standalone={!hasPortfolioItems}
+                  <SceneAtomLayer
+                    frameStore={frameStoreRef.current}
+                    atomsRef={atomsRef}
+                    rotationRef={rotationRef}
+                    cameraRef={cameraRef}
+                    motionPreferenceRef={motionPreferenceRef}
+                    hasPortfolioItems={hasPortfolioItems}
+                    introCenterBurstAt={introCenterBurstAt}
+                    highlightActive={highlightActive}
+                    activeGroupKey={activeGroupKey}
+                    normalizedActiveGroupValue={normalizedActiveGroupValue}
+                    selectedAtomId={selectedAtomId}
+                    selectedAtomFocusActive={selectedAtomFocusActive}
                     svgRef={svgRef}
                     ariaLabel={text.atomAria}
                     maxLabelLength={atomLabelMaxLength}
-                    highlightActive={highlightActive}
-                    centerFocusActive={Boolean(selectedAtomId)}
                     onCenterClick={
                       hasPortfolioItems ? clearCenterSelection : triggerIntroCenterBurst
                     }
@@ -5749,7 +5833,7 @@ export default function App() {
                       .filter((entry) => entry.id !== activePortfolioId)
                       .slice(0, PORTFOLIO_PREVIEW_SLOTS.length)
                       .map((entry, index) => (
-                        <PortfolioPreviewAtomView
+                        <MemoPortfolioPreviewAtom
                           key={entry.id}
                           entry={entry}
                           slot={PORTFOLIO_PREVIEW_SLOTS[index]}

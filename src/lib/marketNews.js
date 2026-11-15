@@ -236,7 +236,13 @@ const OG_IMAGE_TIMEOUT_MS = 4000;
 // Bounded independent of the total pool size (which can now run to TODAY_POOL_LIMIT=60 for
 // pagination) — only the first page's worth gets the synchronous per-article fetch, so growing
 // the pool for "more pages available" doesn't also grow the time the first response takes.
-const OG_IMAGE_ENRICH_LIMIT = 20;
+const OG_IMAGE_ENRICH_LIMIT = 80;
+// Thumbnails are looked up 10 at a time and the response waits at most this long; lookups still
+// running keep filling THUMBNAIL_CACHE so the next request (or page) has them.
+const OG_IMAGE_CONCURRENCY = 10;
+const OG_IMAGE_DEADLINE_MS = 4500;
+const THUMBNAIL_CACHE_LIMIT = 800;
+const THUMBNAIL_CACHE = new Map();
 const OG_IMAGE_PATTERN =
   /<meta\b[^>]*(?:property=["']og:image["'][^>]*content=["']([^"']+)["']|content=["']([^"']+)["'][^>]*property=["']og:image["'])[^>]*>/i;
 // finance.naver.com's article links are a JS bounce page (`top.location.href='...'`), not a real
@@ -288,8 +294,54 @@ async function fetchHtml(url, signal) {
   }
 }
 
-async function fetchOgImageUrl(link, signal) {
+// Bing wraps every article link in bing.com/news/apiclick.aspx?url=<real url>.
+function unwrapArticleLink(link) {
   try {
+    const url = new URL(link);
+    const inner = /(^|\.)bing\.com$/i.test(url.hostname) ? url.searchParams.get('url') : null;
+    return inner ? safeExternalLink(inner) || link : link;
+  } catch {
+    return link;
+  }
+}
+
+// msn.com articles are rendered client-side (no og:image in the HTML), but MSN's public content
+// API returns the article's images by its "ar-AA…" id.
+async function fetchMsnImageUrl(articleUrl, signal) {
+  const url = new URL(articleUrl);
+  if (!/(^|\.)msn\.com$/i.test(url.hostname)) {
+    return undefined;
+  }
+  const id = url.pathname.match(/\/ar-([A-Za-z0-9]+)/)?.[1];
+  if (!id) {
+    return null;
+  }
+  const locale = url.pathname.split('/').filter(Boolean)[0] || 'ko-kr';
+  const timeout = withTimeout(signal, OG_IMAGE_TIMEOUT_MS);
+  try {
+    const response = await fetch(
+      `https://assets.msn.com/content/view/v2/Detail/${encodeURIComponent(locale)}/${encodeURIComponent(id)}`,
+      { signal: timeout.signal, headers: { 'User-Agent': 'Mozilla/5.0 AtomFolio/1.0', Accept: 'application/json' } },
+    );
+    if (!response.ok) {
+      return null;
+    }
+    const payload = await response.json();
+    const image = safeExternalLink(payload?.imageResources?.[0]?.url);
+    return image ? `${image}?w=320&h=200` : null;
+  } finally {
+    timeout.cleanup();
+  }
+}
+
+async function fetchOgImageUrl(rawLink, signal) {
+  const link = unwrapArticleLink(rawLink);
+  try {
+    const msnImage = await fetchMsnImageUrl(link, signal);
+    if (msnImage !== undefined) {
+      return msnImage;
+    }
+
     let html = await fetchHtml(link, signal);
 
     if (html == null) {
@@ -324,31 +376,48 @@ async function fetchOgImageUrl(link, signal) {
 // this is deliberately bounded. Runs as Promise.allSettled: any individual article fetch failing
 // (dead link, slow site, blocked scrape) just leaves that item's thumbnailUrl null rather than
 // failing the whole news response.
-async function enrichWithOgImages(items, { signal } = {}) {
-  const candidates = items.filter((item) => !item.thumbnailUrl && item.link).slice(0, OG_IMAGE_ENRICH_LIMIT);
-
-  if (!candidates.length) {
-    return items;
+function rememberThumbnail(link, value) {
+  THUMBNAIL_CACHE.set(link, value);
+  if (THUMBNAIL_CACHE.size > THUMBNAIL_CACHE_LIMIT) {
+    THUMBNAIL_CACHE.delete(THUMBNAIL_CACHE.keys().next().value);
   }
+}
 
-  const results = await Promise.allSettled(
-    candidates.map((item) => fetchOgImageUrl(item.link, signal)),
-  );
-  const thumbnailByLink = new Map();
+async function enrichWithOgImages(items, { signal } = {}) {
+  const candidates = items
+    .filter((item) => !item.thumbnailUrl && item.link && !THUMBNAIL_CACHE.has(item.link))
+    .slice(0, OG_IMAGE_ENRICH_LIMIT);
 
-  candidates.forEach((item, index) => {
-    const result = results[index];
-    if (result.status === 'fulfilled' && result.value) {
-      thumbnailByLink.set(item.link, result.value);
-    }
-  });
-
-  if (!thumbnailByLink.size) {
-    return items;
+  if (candidates.length) {
+    let next = 0;
+    const worker = async () => {
+      while (next < candidates.length) {
+        const item = candidates[next];
+        next += 1;
+        try {
+          rememberThumbnail(item.link, (await fetchOgImageUrl(item.link, signal)) || null);
+        } catch {
+          rememberThumbnail(item.link, null);
+        }
+      }
+    };
+    const workers = Promise.all(
+      Array.from({ length: Math.min(OG_IMAGE_CONCURRENCY, candidates.length) }, worker),
+    );
+    let deadlineTimer;
+    await Promise.race([
+      workers,
+      new Promise((resolve) => {
+        deadlineTimer = setTimeout(resolve, OG_IMAGE_DEADLINE_MS);
+      }),
+    ]);
+    clearTimeout(deadlineTimer);
   }
 
   return items.map((item) =>
-    thumbnailByLink.has(item.link) ? { ...item, thumbnailUrl: thumbnailByLink.get(item.link) } : item,
+    !item.thumbnailUrl && THUMBNAIL_CACHE.get(item.link)
+      ? { ...item, thumbnailUrl: THUMBNAIL_CACHE.get(item.link) }
+      : item,
   );
 }
 
@@ -691,6 +760,10 @@ function parseRssItems(xml, limit = 10) {
       const source = extractTag(block, 'source');
       const pubDate = extractTag(block, 'pubDate');
       const publishedAt = pubDate ? Date.parse(pubDate) : null;
+      // Bing's RSS carries its own thumbnail (<News:Image>, a bing.com/th URL) for most items.
+      const rssImage = safeExternalLink(
+        stripHtml(block.match(/<News:Image>([^<]+)<\/News:Image>/i)?.[1] ?? '').replace(/^http:/i, 'https:'),
+      );
 
       return {
         id: `${link || title}-${index}`,
@@ -699,7 +772,7 @@ function parseRssItems(xml, limit = 10) {
         description,
         source: source || '뉴스',
         publishedAt: Number.isFinite(publishedAt) ? publishedAt : null,
-        thumbnailUrl: null,
+        thumbnailUrl: rssImage ? `${rssImage}&w=320&h=200&c=7` : null,
       };
     })
     .filter((item) => item.title && item.link);

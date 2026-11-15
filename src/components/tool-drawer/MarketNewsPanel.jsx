@@ -3,6 +3,12 @@
 // the panel's query/results survive an unmount/remount when the drawer switches tabs (see
 // the comment at its own declaration for why that unmount happens every tab switch).
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
+
+// First letter of the publisher, ignoring "on MSN" style suffixes, for the thumbnail fallback.
+function newsSourceInitial(source) {
+  const name = String(source ?? '').replace(/\s+on\s+msn$/i, '').trim();
+  return (name.match(/[\p{L}\p{N}]/u)?.[0] ?? '·').toUpperCase();
+}
 import { fetchMarketNews, formatNewsTime } from '../../lib/marketNews.js';
 
 const NEWS_AUTO_REFRESH_MS = 90 * 1000;
@@ -297,12 +303,16 @@ export const MarketNewsPanel = memo(function MarketNewsPanel({ language, dateBas
               target="_blank"
               rel="noopener noreferrer"
             >
-              <div className="tool-drawer__news-thumb">
+              {/* The source's initial sits behind the image: it shows when there is no
+                  thumbnail, or when a publisher refuses to serve its image to other sites. */}
+              <div className="tool-drawer__news-thumb" data-initial={newsSourceInitial(sourceLabel)}>
                 {article.thumbnailUrl ? (
                   <img
                     src={article.thumbnailUrl}
                     alt=""
                     loading="lazy"
+                    decoding="async"
+                    referrerPolicy="no-referrer"
                     onError={(event) => {
                       event.currentTarget.style.display = 'none';
                     }}
