@@ -232,7 +232,7 @@ async function fetchText(url, { signal, encoding = 'utf-8' } = {}) {
   }
 }
 
-const OG_IMAGE_TIMEOUT_MS = 4000;
+const OG_IMAGE_TIMEOUT_MS = 2500;
 // Bounded independent of the total pool size (which can now run to TODAY_POOL_LIMIT=60 for
 // pagination) — only the first page's worth gets the synchronous per-article fetch, so growing
 // the pool for "more pages available" doesn't also grow the time the first response takes.
@@ -291,6 +291,14 @@ async function fetchHtml(url, signal) {
     return html;
   } finally {
     timeout.cleanup();
+  }
+}
+
+function safeHostname(link) {
+  try {
+    return new URL(link).hostname;
+  } catch {
+    return '';
   }
 }
 
@@ -384,9 +392,14 @@ function rememberThumbnail(link, value) {
 }
 
 async function enrichWithOgImages(items, { signal } = {}) {
-  const candidates = items
-    .filter((item) => !item.thumbnailUrl && item.link && !THUMBNAIL_CACHE.has(item.link))
-    .slice(0, OG_IMAGE_ENRICH_LIMIT);
+  // MSN lookups are one small JSON call each, so they go first; slow article pages (a 4 s
+  // timeout each) were filling the queue and MSN items never got their turn before the deadline.
+  const isMsn = (item) => /(^|\.)msn\.com$/i.test(safeHostname(unwrapArticleLink(item.link)));
+  const pending = items.filter((item) => !item.thumbnailUrl && item.link && !THUMBNAIL_CACHE.has(item.link));
+  const candidates = [...pending.filter(isMsn), ...pending.filter((item) => !isMsn(item))].slice(
+    0,
+    OG_IMAGE_ENRICH_LIMIT,
+  );
 
   if (candidates.length) {
     let next = 0;
