@@ -1441,14 +1441,29 @@ export async function enrichPortfolioItemsWithLiveKnowledge(items, options = {})
   });
 }
 
+const TICKER_LIKE_PATTERN = /^(?:[A-Za-z]{1,6}(?:[.-][A-Za-z]{1,3})?|\d{6}(?:\.(?:KS|KQ))?)$/;
+
+// A dictionary entry found through the *name* must not override an explicit ticker that names a
+// different security: "NEOS Nasdaq-100 High Income ETF" (QQQI) contains QQQM's alias
+// "nasdaq 100", and was being renamed to QQQM / Invesco NASDAQ 100 ETF.
+function referenceConflictsWithTicker(reference, item) {
+  const ticker = String(item?.ticker || item?.code || '').trim();
+  if (!reference || !TICKER_LIKE_PATTERN.test(ticker)) {
+    return false;
+  }
+  const normalizedTicker = normalizeSecurityKey(ticker.replace(/\.(KS|KQ)$/i, ''));
+  return normalizeSecurityKey(reference.code) !== normalizedTicker && !reference.normalizedKeys.includes(normalizedTicker);
+}
+
 export function enrichPortfolioItem(item) {
-  const reference = findSecurityReference([
+  const matchedReference = findSecurityReference([
     item.code,
     item.ticker,
     item.name,
     item.label,
     item.companyName,
   ]);
+  const reference = referenceConflictsWithTicker(matchedReference, item) ? null : matchedReference;
   const baseCode = reference?.code || item.ticker || item.code || '';
   const regionMeta = resolveRegion(item, reference);
   const assetClassMeta = resolveAssetClass(item, reference);

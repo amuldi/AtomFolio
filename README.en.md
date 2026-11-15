@@ -10,7 +10,7 @@ and investment simulation into a single picture: holdings radiating out from the
 [한국어](README.md) · [English](README.en.md)
 
 [![Live](https://img.shields.io/badge/Live-atomfolio.vercel.app-111111?logo=vercel&logoColor=fff)](https://atomfolio.vercel.app)
-![Tests](https://img.shields.io/badge/tests-159%20passing-2F7A55)
+![Tests](https://img.shields.io/badge/tests-162%20passing-2F7A55)
 ![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=111)
 ![Three.js](https://img.shields.io/badge/Three.js-0.168-000000?logo=three.js&logoColor=fff)
 ![Postgres](https://img.shields.io/badge/Postgres-Neon-4169E1?logo=postgresql&logoColor=fff)
@@ -333,7 +333,7 @@ When none of these can determine the value, the card says to fix it in the Manag
 | [Electron](https://www.electronjs.org) 32 + electron-builder | MIT | The macOS menu bar app, the atom widget, and packaging (`desktop/`) |
 | [Gaegu](https://fonts.google.com/specimen/Gaegu) | OFL | Handwritten Hangul font for atom labels |
 | [ESLint](https://eslint.org) · [Prettier](https://prettier.io) · [knip](https://knip.dev) | MIT | Linting, formatting, and finding unused files/exports |
-| Node.js `node:test` | MIT | 159 tests (no external test framework) |
+| Node.js `node:test` | MIT | 162 tests (no external test framework) |
 
 Sign-in (Clerk), the database (Neon), and hosting/functions (Vercel) are cloud services, not open source. [Plausible](https://plausible.io) visit analytics turns on only when `VITE_PLAUSIBLE_DOMAIN` is set.
 
@@ -924,7 +924,7 @@ Vercel configuration lives in [vercel.json](vercel.json).
 
 Recently confirmed:
 
-- `npm test` (`node --test`, 159 tests — parser, scoring, "This month", input checks, quote merging, auth isolation, and more)
+- `npm test` (`node --test`, 162 tests — parser, scoring, "This month", input checks, quote merging, auth isolation, and more)
 - `npm run lint`, `npm run build`
 - On `https://atomfolio.vercel.app`: score styles, "This month", and electron glow checked live
 - All eight `samples/demo/` CSVs load with no warnings
@@ -962,7 +962,7 @@ in [docs/updates/AtomFolio_Bugs.en.md](docs/updates/AtomFolio_Bugs.en.md) (Korea
 | Quote reliability | Yahoo → Stooq, two-step fallback | KIS (official) → Naver/Mirae raced concurrently → Yahoo → Stooq, with a circuit breaker, failure tracking, and outage alerting |
 | Navigation | Fixed sidebar icons | Command palette (⌘K) searching across every portfolio, a separate management table view |
 | Platforms | Web only | Web + a macOS menu bar companion app (Electron) |
-| Tests | Almost none | 159 (`node --test`) — auth isolation, rate limiting, KIS routing, scoring, "This month", and more |
+| Tests | Almost none | 162 (`node --test`) — auth isolation, rate limiting, KIS routing, scoring, "This month", and more |
 | Atom scene | Nodes only | Electron size = quantity held, color and glow by gain/loss, input-check rings, handwritten name tag |
 
 See the [menu bar companion app](#menu-bar-companion-app-macos) section above for screenshots and

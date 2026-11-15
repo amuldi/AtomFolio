@@ -10,7 +10,7 @@
 [한국어](README.md) · [English](README.en.md)
 
 [![Live](https://img.shields.io/badge/Live-atomfolio.vercel.app-111111?logo=vercel&logoColor=fff)](https://atomfolio.vercel.app)
-![Tests](https://img.shields.io/badge/tests-159%20passing-2F7A55)
+![Tests](https://img.shields.io/badge/tests-162%20passing-2F7A55)
 ![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=111)
 ![Three.js](https://img.shields.io/badge/Three.js-0.168-000000?logo=three.js&logoColor=fff)
 ![Postgres](https://img.shields.io/badge/Postgres-Neon-4169E1?logo=postgresql&logoColor=fff)
@@ -346,7 +346,7 @@ AtomFolio는 웹 하나가 아닙니다 — `desktop/` 아래에 별도의 Elect
 | [Electron](https://www.electronjs.org) 32 + electron-builder | MIT | macOS 메뉴바 앱과 원자 위젯, 앱 패키징 (`desktop/`) |
 | [Gaegu](https://fonts.google.com/specimen/Gaegu) | OFL | 원자 라벨의 한글 손글씨 글꼴 |
 | [ESLint](https://eslint.org) · [Prettier](https://prettier.io) · [knip](https://knip.dev) | MIT | 코드 검사, 자동 정리, 쓰지 않는 파일·export 찾기 |
-| Node.js `node:test` | MIT | 테스트 159개 (외부 테스트 프레임워크 없음) |
+| Node.js `node:test` | MIT | 테스트 162개 (외부 테스트 프레임워크 없음) |
 
 로그인(Clerk), 데이터베이스(Neon), 배포·서버 함수(Vercel)는 오픈소스가 아니라 클라우드 서비스입니다. [Plausible](https://plausible.io) 방문 통계는 `VITE_PLAUSIBLE_DOMAIN`을 설정했을 때만 켜집니다.
 
@@ -958,7 +958,7 @@ Vercel 설정은 [vercel.json](vercel.json)에 있습니다.
 
 최근 확인한 항목입니다.
 
-- `npm test` (`node --test`, 159개 — 파서, 점수, 이번 달 변화, 입력 오류 감지, 시세 병합, 인증 격리 등)
+- `npm test` (`node --test`, 162개 — 파서, 점수, 이번 달 변화, 입력 오류 감지, 시세 병합, 인증 격리 등)
 - `npm run lint`, `npm run build`
 - 배포 주소 `https://atomfolio.vercel.app`에서 점수 성향·이번 달 변화·전자 빛 표시 실제 동작 확인
 - `samples/demo/` 예시 CSV 8개 업로드 시 경고 없이 표시 확인
@@ -996,7 +996,7 @@ localStorage만 쓰는 웹 하나였습니다. 지금은 여기서 훨씬 더 �
 | 시세 안정성 | Yahoo → Stooq 2단 fallback | KIS(공식) → Naver/Mirae 동시 경쟁 → Yahoo → Stooq, 서킷 브레이커 + 실패 추적 + 장애 알림 |
 | 탐색 | 사이드 아이콘 고정 노출 | 명령 팔레트(⌘K)로 모든 포트폴리오 통합 검색, 관리 테이블 뷰 |
 | 플랫폼 | 웹 하나 | 웹 + macOS 메뉴바 동반 앱(Electron) |
-| 테스트 | 거의 없음 | `node --test` 159개 (인증 격리·레이트리밋·KIS 라우팅·점수·이번 달 변화 등) |
+| 테스트 | 거의 없음 | `node --test` 162개 (인증 격리·레이트리밋·KIS 라우팅·점수·이번 달 변화 등) |
 | 원자 화면 | 노드만 배치 | 전자 크기 = 보유 수량, 손익에 따라 색과 빛의 세기, 입력 오류 표시, 손글씨 이름표 |
 
 macOS 메뉴바 앱에 대한 스크린샷과 소개는 위 [메뉴바 동반 앱](#메뉴바-동반-앱-macos) 절을
