@@ -67,6 +67,18 @@ AtomFolio has three goals:
 
 Holdings are placed as nodes branching out from a central portfolio. Profit is always red and loss is always blue, following the color convention Korean investors are used to. It's a WebGL (Three.js) 3D scene you can drag to rotate, with a command palette (⌘K) and an Explore/Manage tab pair up top.
 
+How one atom encodes a portfolio:
+
+| Mark | Meaning |
+| --- | --- |
+| Center nucleus + hanging name tag | The whole portfolio; the tag shows total value, return, and top-holding weight |
+| One electron | One holding. Click for a detail card, which can be dragged around |
+| Electron size | Weight. Perspective is damped so a big holding at the back never draws smaller than a small one up front |
+| Electron fill | Return vs. cost: red for gains, blue for losses, deeper for bigger moves |
+| Glow around an electron | Appears past a ±3% move and grows wider and brighter with the size of the gain or loss |
+| Amber dashed ring | The holding's input needs checking (see [Input checks](#12-input-checks)) |
+| Handwritten label | Name and `weight · ▲/▼return`; Hangul uses the Gaegu handwriting font, overlapping labels fade |
+
 ![AtomFolio main screen](docs/updates/assets/atomfolio-current-atomview.jpg)
 
 ### Command palette (⌘K)
@@ -186,6 +198,8 @@ Evaluates a portfolio along six axes.
 | Risk management | High-risk concentration, defensive weight, asset concentration |
 | Diversification | Number of holdings, number of asset classes, regional/sector spread |
 
+The six axis scores don't depend on investing style; a style only changes the weights used for the overall score. So the four style buttons (Balanced, Growth, Stable, Aggressive) each show their own overall score at once, with a one-line note on what the selected style emphasizes. There is a single radar: with more than one portfolio, a dashed outline (all portfolios combined) is drawn over the solid one (current portfolio).
+
 ### 8. Investment simulation
 
 - Enter shocks directly for overall market, US assets, tech stocks, gold/cash, and REITs.
@@ -200,6 +214,39 @@ Evaluates a portfolio along six axes.
 - Searchable by ticker, holding name, theme, or date keyword.
 - Falls back across a combination of Naver Finance, Naver search, and Bing News RSS.
 - Runs on public endpoints — no news API key required.
+- If every provider fails, previously collected articles (the news archive) are shown instead.
+
+### 10. Portfolio comparison
+
+- The Compare tab puts every portfolio in one table: return, score, largest holding, and concentration (effective number of holdings).
+- Clicking a row switches to that portfolio.
+
+### 11. This month
+
+The monthly card in the Summary tab no longer repeats the summary numbers; it shows **what changed since last month** (`src/lib/monthlyDigest.js`).
+
+- Change in market value and P/L, and return change in percentage points
+- Month-end return bars for the last six months
+- Biggest gainers / losers this month (only holdings held in both months are compared)
+- With only one recorded month, it says there is nothing to compare yet and falls back to cumulative P/L.
+
+### 12. Input checks
+
+So one mistyped value can't silently distort the portfolio total, suspicious holdings get an amber dashed ring and a `⚠` label, and the name tag shows "N holdings need checking" (`src/lib/holdingIssues.js`). Red already means "up", so it is never used for warnings.
+
+- Quantity is missing
+- Buy price is far from the current price (beyond 5x on the loss side, 10x on the gain side — catches another security's price pasted in)
+- Return alone exceeds ±1000% when prices aren't available
+
+### 13. Conveniences
+
+- Deleting a holding or portfolio can be undone for a few seconds.
+- A reload reopens the last portfolio you were viewing.
+- Terms of service and privacy policy pages; installable as a PWA.
+
+### 14. Demo data
+
+`samples/demo/` holds eight demo portfolio CSVs. Every holding has a ticker, buy price, quantity, and currency, so they load with no warnings, and month-end records from June 2026 on let "This month" and the daily P/L view show real changes. See [samples/demo/README.md](samples/demo/README.md).
 
 ## Settings policy
 
@@ -444,35 +491,41 @@ sequenceDiagram
 │   ├── alerting.mjs
 │   ├── operationalEvents.mjs
 │   ├── newsCache.mjs
+│   ├── newsArchive.mjs           # past articles served when news providers fail
 │   ├── finnhubNews.mjs
-│   ├── marketData/
-│   │   ├── liveQuoteRouter.mjs
-│   │   └── kisProvider.mjs
-│   └── agents/
-│       ├── contracts.mjs
-│       ├── explanationAgent.mjs
-│       ├── orchestrator.mjs
-│       ├── qualityGuard.mjs
-│       └── schemaMapper.mjs
+│   ├── portfolioReview.mjs       # CSV upload validation (schema/quality checks)
+│   ├── deviceTokens.mjs          # menu bar app connection codes
+│   ├── secretCrypto.mjs
+│   ├── productionReadiness.mjs
+│   └── marketData/
+│       ├── liveQuoteRouter.mjs
+│       └── kisProvider.mjs
 ├── src/
 │   ├── App.jsx
 │   ├── main.jsx
 │   ├── styles.css
 │   ├── components/
-│   │   ├── atom/
+│   │   ├── atom/                 # atom scene (washTone.js: gain/loss color and glow strength)
 │   │   ├── allocation/
-│   │   └── panels/
+│   │   ├── auth/
+│   │   ├── cards/                # heatmap, portfolio score radar
+│   │   ├── command-palette/
+│   │   ├── panels/
+│   │   └── tool-drawer/          # summary / compare / simulation / news panels
+│   ├── legal/                    # terms of service, privacy policy
 │   ├── constants/
-│   ├── hooks/
 │   ├── lib/
 │   │   ├── digitalTwin.js
+│   │   ├── holdingIssues.js      # input checks
 │   │   ├── liveMarketData.js
 │   │   ├── marketNews.js
+│   │   ├── monthlyDigest.js      # "This month"
 │   │   ├── portfolioAllocation.js
 │   │   ├── portfolioAnalyticsSummary.js
 │   │   ├── portfolioHeatmap.js
 │   │   ├── portfolioIngestionCore.js
 │   │   ├── portfolioScoring.js
+│   │   ├── portfolioSync.js      # live quote / autosave merge
 │   │   └── securityKnowledge.js
 │   └── utils/
 │       ├── format.js
@@ -491,7 +544,9 @@ sequenceDiagram
 │       ├── preload.cjs
 │       ├── lib/                  # config store, API client, insight logic
 │       └── renderer/             # atom-widget / popover renderers
-├── samples/portfolio/
+├── samples/
+│   ├── demo/                     # 8 demo portfolios (with quantity and buy price)
+│   └── portfolio/                # CSVs for parser regression tests
 └── docs/
     ├── assets/
     ├── proposal/
@@ -634,12 +689,10 @@ Vercel configuration lives in [vercel.json](vercel.json).
 
 Recently confirmed:
 
-- `npm run build`
-- Live deployment `https://atomfolio.vercel.app` returns HTTP 200
-- Settings panel renders correctly
-- No console errors in the settings panel
-- Profit/loss color rule applied correctly
-- Daily P/L accrual logic passes the build
+- `npm test` (`node --test`, 150 tests — parser, scoring, "This month", input checks, quote merging, auth isolation, and more)
+- `npm run lint`, `npm run build`
+- On `https://atomfolio.vercel.app`: score styles, "This month", and electron glow checked live
+- All eight `samples/demo/` CSVs load with no warnings
 
 ## Disclaimer
 
@@ -673,7 +726,8 @@ in [docs/updates/AtomFolio_Bugs.en.md](docs/updates/AtomFolio_Bugs.en.md) (Korea
 | Quote reliability | Yahoo → Stooq, two-step fallback | KIS (official) → Naver/Mirae raced concurrently → Yahoo → Stooq, with a circuit breaker, failure tracking, and outage alerting |
 | Navigation | Fixed sidebar icons | Command palette (⌘K) searching across every portfolio, a separate management table view |
 | Platforms | Web only | Web + a macOS menu bar companion app (Electron) |
-| Tests | Almost none | 78 (`node --test`) — auth isolation, rate limiting, KIS routing, and more |
+| Tests | Almost none | 150 (`node --test`) — auth isolation, rate limiting, KIS routing, scoring, "This month", and more |
+| Atom scene | Nodes only | Electron size = weight, color and glow by gain/loss, input-check rings, handwritten name tag |
 
 See the [menu bar companion app](#menu-bar-companion-app-macos) section above for screenshots and
 an introduction to the macOS app. More detailed per-feature screenshots, architecture diagrams, the

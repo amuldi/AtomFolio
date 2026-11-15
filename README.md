@@ -69,6 +69,18 @@ AtomFolio의 목표는 세 가지입니다.
 
 보유 종목을 중앙 포트폴리오에서 뻗어나가는 노드로 배치했습니다. 수익은 빨간색, 손실은 파란색으로 통일해 한국 투자자가 익숙한 손익 색상 체계를 따릅니다. WebGL(Three.js) 3D 장면이라 드래그로 회전시킬 수 있고, 상단에는 명령 팔레트(⌘K)와 탐색/관리 탭이 있습니다.
 
+원자 하나에 이렇게 정보를 담습니다.
+
+| 표시 | 뜻 |
+| --- | --- |
+| 가운데 핵 + 위에 걸린 이름표 | 포트폴리오 전체. 이름표에 총 평가금액·수익률·상위 종목 비중 |
+| 전자 하나 | 보유 종목 하나. 클릭하면 상세 카드가 열리고, 카드는 끌어서 옮길 수 있음 |
+| 전자 크기 | 비중. 원근 때문에 크기가 뒤바뀌지 않도록 깊이에 따른 크기 변화를 줄임 |
+| 전자 안쪽 색 | 매수가 대비 수익률. 수익 빨강, 손실 파랑, 클수록 진하게 |
+| 전자 주변 빛 | ±3%를 넘는 종목부터 빨강/파랑 빛이 번지고, 손익이 클수록 넓고 밝게 빛남 |
+| 주황 점선 테 | 입력값 확인 필요 (아래 [입력 오류 표시](#12-입력-오류-표시) 참고) |
+| 손글씨 라벨 | 종목명과 `비중 · ▲/▼수익률`. 한글은 Gaegu 손글씨 폰트, 겹치는 라벨은 흐리게 처리 |
+
 ![AtomFolio 메인 화면](docs/updates/assets/atomfolio-current-atomview.jpg)
 
 ### 명령 팔레트 (⌘K)
@@ -201,6 +213,8 @@ AtomFolio는 웹 하나가 아닙니다 — `desktop/` 아래에 별도의 Elect
 | 위험관리 | 고위험 집중도, 방어형 비중, 자산 집중도 |
 | 분산투자 | 종목 수, 자산군 수, 지역과 분야 분산 |
 
+여섯 축 점수는 투자 성향과 무관하게 같고, 성향은 종합 점수를 낼 때의 가중치만 바꿉니다. 그래서 성향 버튼 네 개(균형형·성장형·안정형·공격형)에 각 성향의 종합 점수를 한꺼번에 보여주고, 고른 성향이 무엇을 크게 보는지 한 줄로 설명합니다. 레이더는 하나만 그리며, 포트폴리오가 둘 이상이면 실선(현재 포트폴리오) 위에 점선(전체 합산)을 겹쳐 비교합니다.
+
 ### 8. 투자 시뮬레이션
 
 - 전체 시장, 미국 자산, 기술주, 금/현금, 리츠 충격을 직접 입력합니다.
@@ -215,6 +229,39 @@ AtomFolio는 웹 하나가 아닙니다 — `desktop/` 아래에 별도의 Elect
 - 티커, 종목명, 테마, 날짜 키워드로 검색할 수 있습니다.
 - Naver Finance, Naver 검색, Bing News RSS를 조합해 fallback합니다.
 - 뉴스 API 키 없이 공개 엔드포인트 중심으로 동작합니다.
+- 뉴스 제공자가 모두 실패해도 서버에 모아 둔 지난 기사(뉴스 아카이브)를 보여줍니다.
+
+### 10. 포트폴리오 비교
+
+- 비교 탭에서 모든 포트폴리오를 한 표에 놓고 수익률, 점수, 최대 비중 종목, 집중도(실질 종목 수)를 나란히 봅니다.
+- 행을 누르면 그 포트폴리오로 바로 전환됩니다.
+
+### 11. 이번 달 변화
+
+요약 탭의 월간 카드는 요약 숫자를 반복하지 않고 **지난달 대비 무엇이 바뀌었는지**만 보여줍니다 (`src/lib/monthlyDigest.js`).
+
+- 평가금액·손익 변화액과 수익률 변화(%p)
+- 최근 6개월 월말 수익률 막대
+- 이번 달에 많이 번 종목 / 많이 잃은 종목 (두 달 모두 보유한 종목만 비교)
+- 기록된 달이 하나뿐이면 비교할 수 없다고 알리고 누적 손익 기준으로 보여줍니다.
+
+### 12. 입력 오류 표시
+
+잘못 입력한 값 하나가 전체 수익률을 왜곡하지 않도록, 의심스러운 종목에 주황 점선 테와 `⚠` 라벨을 붙이고 이름표에 "확인 필요 N종목"을 띄웁니다 (`src/lib/holdingIssues.js`). 빨강은 이미 "상승"이라 경고에는 쓰지 않습니다.
+
+- 수량이 비어 있음
+- 매수가가 현재가와 크게 다름 (손실 쪽 5배, 수익 쪽 10배 초과 — 다른 종목 가격을 복사한 실수를 잡기 위함)
+- 가격 정보 없이 수익률만 ±1000%를 넘음
+
+### 13. 편의 기능
+
+- 종목·포트폴리오 삭제 직후 몇 초 동안 실행 취소할 수 있습니다.
+- 새로고침해도 마지막으로 보던 포트폴리오가 다시 열립니다.
+- 이용약관·개인정보처리방침 페이지가 있고, PWA로 홈 화면에 설치할 수 있습니다.
+
+### 14. 예시 데이터
+
+`samples/demo/`에 시연용 포트폴리오 CSV 8개가 있습니다. 모든 종목에 종목코드·매수가·수량·통화가 들어 있어 경고 표시 없이 바로 보이고, 2026년 6월부터 월말 기록이 쌓여 있어 "이번 달 변화"와 날짜별 손익도 확인할 수 있습니다. 자세한 구성은 [samples/demo/README.md](samples/demo/README.md)를 참고하세요.
 
 ## 설정 정책
 
@@ -477,35 +524,41 @@ sequenceDiagram
 │   ├── alerting.mjs
 │   ├── operationalEvents.mjs
 │   ├── newsCache.mjs
+│   ├── newsArchive.mjs           # 뉴스 제공자 실패 시 보여줄 지난 기사
 │   ├── finnhubNews.mjs
-│   ├── marketData/
-│   │   ├── liveQuoteRouter.mjs
-│   │   └── kisProvider.mjs
-│   └── agents/
-│       ├── contracts.mjs
-│       ├── explanationAgent.mjs
-│       ├── orchestrator.mjs
-│       ├── qualityGuard.mjs
-│       └── schemaMapper.mjs
+│   ├── portfolioReview.mjs       # CSV 업로드 검증 (스키마·품질 점검)
+│   ├── deviceTokens.mjs          # 메뉴바 앱 연결 코드
+│   ├── secretCrypto.mjs
+│   ├── productionReadiness.mjs
+│   └── marketData/
+│       ├── liveQuoteRouter.mjs
+│       └── kisProvider.mjs
 ├── src/
 │   ├── App.jsx
 │   ├── main.jsx
 │   ├── styles.css
 │   ├── components/
-│   │   ├── atom/
+│   │   ├── atom/                 # 원자 장면 (washTone.js: 손익 색·빛 세기)
 │   │   ├── allocation/
-│   │   └── panels/
+│   │   ├── auth/
+│   │   ├── cards/                # 히트맵, 포트폴리오 점수 레이더
+│   │   ├── command-palette/
+│   │   ├── panels/
+│   │   └── tool-drawer/          # 요약·비교·시뮬레이션·뉴스 패널
+│   ├── legal/                    # 이용약관, 개인정보처리방침
 │   ├── constants/
-│   ├── hooks/
 │   ├── lib/
 │   │   ├── digitalTwin.js
+│   │   ├── holdingIssues.js      # 입력 오류 감지
 │   │   ├── liveMarketData.js
 │   │   ├── marketNews.js
+│   │   ├── monthlyDigest.js      # 이번 달 변화
 │   │   ├── portfolioAllocation.js
 │   │   ├── portfolioAnalyticsSummary.js
 │   │   ├── portfolioHeatmap.js
 │   │   ├── portfolioIngestionCore.js
 │   │   ├── portfolioScoring.js
+│   │   ├── portfolioSync.js      # 실시간 시세·자동 저장 병합
 │   │   └── securityKnowledge.js
 │   └── utils/
 │       ├── format.js
@@ -524,7 +577,9 @@ sequenceDiagram
 │       ├── preload.cjs
 │       ├── lib/                  # 설정 저장소, API 클라이언트, 인사이트 로직
 │       └── renderer/             # 원자 위젯 / 팝오버 렌더러
-├── samples/portfolio/
+├── samples/
+│   ├── demo/                     # 시연용 포트폴리오 8개 (수량·매수가 포함)
+│   └── portfolio/                # 파서 회귀 테스트용 CSV
 └── docs/
     ├── assets/
     ├── proposal/
@@ -670,12 +725,10 @@ Vercel 설정은 [vercel.json](vercel.json)에 있습니다.
 
 최근 확인한 항목입니다.
 
-- `npm run build`
-- 배포 주소 `https://atomfolio.vercel.app` HTTP 200 확인
-- 설정 패널 렌더링 확인
-- 설정 패널 콘솔 에러 없음
-- 수익/손실 색상 규칙 적용 확인
-- 일별 손익 누적 로직 빌드 통과 확인
+- `npm test` (`node --test`, 150개 — 파서, 점수, 이번 달 변화, 입력 오류 감지, 시세 병합, 인증 격리 등)
+- `npm run lint`, `npm run build`
+- 배포 주소 `https://atomfolio.vercel.app`에서 점수 성향·이번 달 변화·전자 빛 표시 실제 동작 확인
+- `samples/demo/` 예시 CSV 8개 업로드 시 경고 없이 표시 확인
 
 ## 주의사항
 
@@ -709,7 +762,8 @@ localStorage만 쓰는 웹 하나였습니다. 지금은 여기서 훨씬 더 �
 | 시세 안정성 | Yahoo → Stooq 2단 fallback | KIS(공식) → Naver/Mirae 동시 경쟁 → Yahoo → Stooq, 서킷 브레이커 + 실패 추적 + 장애 알림 |
 | 탐색 | 사이드 아이콘 고정 노출 | 명령 팔레트(⌘K)로 모든 포트폴리오 통합 검색, 관리 테이블 뷰 |
 | 플랫폼 | 웹 하나 | 웹 + macOS 메뉴바 동반 앱(Electron) |
-| 테스트 | 거의 없음 | `node --test` 78개 (인증 격리·레이트리밋·KIS 라우팅 등) |
+| 테스트 | 거의 없음 | `node --test` 150개 (인증 격리·레이트리밋·KIS 라우팅·점수·이번 달 변화 등) |
+| 원자 화면 | 노드만 배치 | 전자 크기 = 비중, 손익에 따라 색과 빛의 세기, 입력 오류 표시, 손글씨 이름표 |
 
 macOS 메뉴바 앱에 대한 스크린샷과 소개는 위 [메뉴바 동반 앱](#메뉴바-동반-앱-macos) 절을
 참고하세요. 더 자세한 기능별 스크린샷, 아키텍처 다이어그램, 시세 복원력(서킷 브레이커, 공급자
