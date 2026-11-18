@@ -3342,12 +3342,7 @@ body::after {
    while "closed" (caught by actually opening/closing this live, not by reasoning about the CSS —
    the child's own background/blur/shadow get clipped for free as part of the same ancestor clip,
    no need to duplicate it there too). */
-/* data-dock defaults to (and this base rule *is*) the left-docked shape — right below is a mirror
-   overlay on top, not a parallel/separate system, so left doesn't have to repeat itself in an
-   attribute-selector block of its own. Bottom dock used to be a third option here (a width/height
-   axis swap, clipped from the top instead of the side) — dropped along with the clip-path reveal
-   mechanism below, since a third axis doesn't have a natural translateX-only equivalent the way
-   left/right's mirrored slide does.
+/* The drawer is always docked to the left edge (moving it to the right was removed).
    This element itself is now just a full-viewport positioning root, not a visibly-sized box — the
    rail and panel below are what actually render and take up space, independently fixed rather
    than clipped pieces of one shared box (see .tool-drawer__rail and .tool-drawer__panel for why:
@@ -3371,17 +3366,10 @@ body::after {
   font-family: var(--ui-font);
 }
 
-/* Right dock: mirror of left — rail and panel both anchor to the opposite screen edge, and the
-   panel's closed-state slide direction flips to match (see .tool-drawer__panel below). */
-.tool-drawer[data-dock='right'] {
-  --dock-edge-sign: -1;
-}
-
 /* Purely a DOM grouping now, not a layout box — rail and panel below are each independently
    position: fixed, so a real box here would have nothing to size itself around (its two children
    don't share a track/edge relationship anymore the way a grid's columns did). display: contents
-   keeps rail/panel as its rendered children (for CSS descendant selectors like
-   .tool-drawer[data-dock='right'] .tool-drawer__rail below) without this element itself
+   keeps rail/panel as its rendered children without this element itself
    participating in layout or painting anything of its own. */
 .tool-drawer__window {
   display: contents;
@@ -3407,13 +3395,6 @@ body::after {
   pointer-events: auto;
 }
 
-.tool-drawer[data-dock='right'] .tool-drawer__rail {
-  left: auto;
-  right: 0;
-  border-right: none;
-  border-left: 1px solid rgba(var(--frame-hairline), 0.12);
-}
-
 .tool-drawer__detail-popout {
   position: absolute;
   top: 0.86rem;
@@ -3426,17 +3407,6 @@ body::after {
   animation: detail-popout-in 180ms cubic-bezier(0.2, 0.78, 0.22, 1);
   scrollbar-width: thin;
   scrollbar-color: rgba(var(--frame-ink-a), 0.18) transparent;
-}
-
-/* Mirrors to spill out the panel's other side for right dock — same "float just outside the
-   panel, clamped to the viewport" idea as the left-dock default, aimed at whichever edge is
-   actually free. Positioned relative to .tool-drawer__panel now (its own nearest positioned
-   ancestor, since it moved inside the panel to ride along with its transform/overflow — see the
-   JSX), so `100%` here means the panel's own width, same role it played before when `100%` meant
-   the combined rail+panel box's width — the panel is still the only edge this needs to clear. */
-.tool-drawer[data-dock='right'] .tool-drawer__detail-popout {
-  left: auto;
-  right: max(0.75rem, min(calc(100% + 0.7rem), calc(100vw - 23.25rem)));
 }
 
 .tool-drawer__detail-popout .tool-drawer__holding-detail {
@@ -3471,31 +3441,6 @@ body::after {
   align-content: start;
   padding: 1rem 0.42rem;
   overflow: auto;
-}
-
-/* Drag-to-dock grip — always present (open or closed), sitting at the head of the rail. A plain
-   rounded bar rather than an icon: this needs to read as "grabbable" at a glance without
-   competing visually against the actual tool icons right below/beside it. */
-.tool-drawer__dock-handle {
-  width: 1.8rem;
-  height: 0.3rem;
-  margin: 0.15rem auto 0.7rem;
-  border-radius: 999px;
-  background: rgba(var(--frame-ink-c), 0.28);
-  cursor: grab;
-  touch-action: none;
-  transition: background-color 140ms ease, transform 140ms ease;
-}
-
-.tool-drawer__dock-handle:hover,
-.tool-drawer__dock-handle:focus-visible {
-  background: rgba(var(--frame-ink-b), 0.55);
-  outline: none;
-}
-
-.tool-drawer__dock-handle:active {
-  cursor: grabbing;
-  transform: scaleX(1.2);
 }
 
 /* Icon + short label, stacked — was icon-only (a bare title/aria-label tooltip was the only way to
@@ -3669,11 +3614,9 @@ body::after {
 }
 
 /* This is the entire open/close mechanism now — no clip-path anywhere in the picture. Closed:
-   translateX(calc(var(--dock-edge-sign, 1) * -100%)) slides the panel fully behind its own rail
-   (100% of the panel's *own* width, not a pixel value — correct at any drawerWidth without a
-   resize needing to recompute it) and off past the true screen edge; --dock-edge-sign flips the
-   direction for right dock (see .tool-drawer[data-dock='right'] further up) so both mirror instead
-   of needing two separate transform rules. transform + visibility are the only two properties that
+   translateX(-100%) slides the panel fully behind its own rail (100% of the panel's *own* width,
+   not a pixel value — correct at any drawerWidth without a resize needing to recompute it) and off
+   past the left screen edge. transform + visibility are the only two properties that
    ever move here — no clip-path, no width — so this composites on the GPU with no layout pass,
    the same property this codebase already leans on for the resize handle's own hover states and
    the atom transition scale.
@@ -3707,18 +3650,10 @@ body::after {
   opacity: 0.98;
   visibility: hidden;
   pointer-events: auto;
-  transform: translateX(calc(var(--dock-edge-sign, 1) * -100%));
+  transform: translateX(-100%);
   transition:
     transform 320ms cubic-bezier(0.2, 0.78, 0.22, 1),
     visibility 0s linear 320ms;
-}
-
-.tool-drawer[data-dock='right'] .tool-drawer__panel {
-  left: auto;
-  right: var(--tool-drawer-rail-width);
-  box-shadow:
-    -22px 0 64px rgba(var(--frame-void), 0.42),
-    -1px 0 0 rgba(var(--frame-white), 0.035) inset;
 }
 
 .tool-drawer.is-open .tool-drawer__panel {
@@ -5711,13 +5646,6 @@ body::after {
   touch-action: none;
 }
 
-/* Right dock resizes from its left edge (that's the one actually touching the panel — the box
-   itself is anchored to the right of the screen), so the handle moves there too. */
-.tool-drawer[data-dock='right'] .tool-drawer__resize-handle {
-  right: auto;
-  left: -0.26rem;
-}
-
 .tool-drawer__resize-handle::before {
   content: '';
   position: absolute;
@@ -5743,47 +5671,6 @@ body::after {
 
 .tool-drawer__resize-handle:focus-visible {
   outline: none;
-}
-
-/* Shown while dragging .tool-drawer__dock-handle, one edge at a time, previewing where the drawer
-   will land if released now. Rendered as .tool-drawer's sibling rather than its child — see the
-   comment where this is mounted in the JSX for why a same-element child can't work here. z-index
-   is a plain literal, not one of the named z-index tokens (--ui-layer-... / --z-...): this is a
-   transient, drag-only overlay that just needs to clear whatever floating UI happens to be open
-   underneath it (the tool-drawer itself tops out at 37 via FLOATING_TOOL_Z_INDEX), not a fixture
-   with a real place in that stacking order. */
-.dock-edge-hint {
-  position: fixed;
-  z-index: 1000;
-  pointer-events: none;
-  animation: dock-edge-hint-in 140ms ease forwards;
-}
-
-.dock-edge-hint--left,
-.dock-edge-hint--right {
-  top: 0;
-  bottom: 0;
-  width: 14px;
-}
-
-.dock-edge-hint--left {
-  left: 0;
-  background: linear-gradient(90deg, rgba(var(--frame-ink-b), 0.6), transparent);
-}
-
-.dock-edge-hint--right {
-  right: 0;
-  background: linear-gradient(270deg, rgba(var(--frame-ink-b), 0.6), transparent);
-}
-
-@keyframes dock-edge-hint-in {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
 }
 
 .tool-drawer__group-grid {
@@ -8673,7 +8560,6 @@ body::after {
   .allocation-panel,
   .twin-panel,
   .tool-drawer,
-  .dock-edge-hint,
   .stage-breath,
   .stage-breath.is-intro,
   .stage-reveal.is-active,

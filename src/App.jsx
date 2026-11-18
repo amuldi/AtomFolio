@@ -154,7 +154,6 @@ const STORAGE_KEYS = {
   allocationDockPosition: 'atom-sketch-allocation-dock-position',
   twinDockPosition: 'atom-sketch-twin-dock-position',
   atomHintDismissed: 'atom-sketch-atom-hint-dismissed',
-  toolDrawerDock: 'atom-sketch-tool-drawer-dock',
 };
 const SHOOTING_STAR_INTERVAL_MS = 30000;
 const SHOOTING_STAR_CLEAR_BUFFER_MS = 420;
@@ -195,10 +194,6 @@ const FLOATING_TOOL_Z_INDEX = {
   twin: 36,
   'tool-drawer': 37,
 };
-// Bottom used to be a third dock option (its own height-based resize numbers lived here) — dropped
-// in favor of left/right only, see .tool-drawer's CSS for why a transform-based slide can't cleanly
-// support a third axis the way the old clip-path box could.
-const TOOL_DRAWER_DOCK_OPTIONS = ['left', 'right'];
 const SERVER_SYNC_DEBOUNCE_MS = 850;
 const UNDO_VISIBLE_MS = 8000;
 const DAILY_SNAPSHOT_CHECK_INTERVAL_MS = 60 * 60 * 1000;
@@ -2553,15 +2548,6 @@ export default function App() {
   const [toolTrayOpen, setToolTrayOpen] = useState(false);
   const [activeDrawerTool, setActiveDrawerTool] = useState(null);
   const [toolDrawerWidth, setToolDrawerWidth] = useState(TOOL_DRAWER_DEFAULT_WIDTH);
-  const [toolDrawerDock, setToolDrawerDock] = useState(() =>
-    readStoredOption(STORAGE_KEYS.toolDrawerDock, TOOL_DRAWER_DOCK_OPTIONS, 'left'),
-  );
-  // Which screen edge is currently highlighted while dragging the drawer's dock handle — null
-  // outside of an active drag. Lifted up here (rather than kept local to ToolSideDrawer) because
-  // the highlight itself has to render as a full screen-edge bar *outside* .tool-drawer — that
-  // element has its own clip-path now (see Stage 1), which would clip a same-element child down
-  // to the rail too, same problem as the light-mode background bleed that turned up there.
-  const [dockDragHoverEdge, setDockDragHoverEdge] = useState(null);
   // Cmd+K palette (search/add/move/delete holdings in one place) and the pending-ticker handoff
   // into the existing manual-entry form when the palette's "add" row is chosen — see
   // openManualToolWithTicker below for why this is a prop into ToolSideDrawer rather than lifting
@@ -3323,14 +3309,6 @@ export default function App() {
 
     window.localStorage.setItem(STORAGE_KEYS.baseCurrency, baseCurrency);
   }, [baseCurrency]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    window.localStorage.setItem(STORAGE_KEYS.toolDrawerDock, toolDrawerDock);
-  }, [toolDrawerDock]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -5478,12 +5456,9 @@ export default function App() {
   };
   const sceneStyle = {
     '--tool-drawer-current-width': toolTrayOpen ? `${toolDrawerWidth}px` : '0px',
-    // Which direction to push the atom to keep it visually centered in whatever space the open
-    // drawer leaves behind depends on which side it's docked to — left dock pushes the atom
-    // right (positive), right dock pushes it left (negative).
-    '--stage-panel-shift': toolTrayOpen
-      ? `${(toolDrawerDock === 'right' ? -1 : 1) * (toolDrawerWidth / 2)}px`
-      : '0px',
+    // The drawer is always on the left, so the open drawer pushes the atom right by half its
+    // width to keep it visually centered in the space left over.
+    '--stage-panel-shift': toolTrayOpen ? `${toolDrawerWidth / 2}px` : '0px',
   };
   const shootingStarStyle = useMemo(() => {
     if (!shootingStar) {
@@ -5713,9 +5688,6 @@ export default function App() {
             pendingManualTicker={pendingManualTicker}
             drawerWidth={toolDrawerWidth}
             onDrawerWidthChange={setToolDrawerWidth}
-            dock={toolDrawerDock}
-            onDockChange={setToolDrawerDock}
-            onDockDragHoverEdgeChange={setDockDragHoverEdge}
             language={language}
             baseCurrency={baseCurrency}
             fxRates={displayFxRates}
@@ -5723,17 +5695,6 @@ export default function App() {
             layerStyle={floatingLayerStyleFor('tool-drawer')}
             onInteract={interactWithDrawerTool}
             renderSettingsPanel={renderSettingsPanel}
-          />
-        ) : null}
-
-        {dockDragHoverEdge ? (
-          // Rendered as .tool-drawer's own sibling, not its child — .tool-drawer carries a
-          // clip-path now (Stage 1), which clips its entire subtree down to the rail while
-          // closed; a same-element child here would only ever be visible in the same sliver the
-          // rail already occupies, never able to paint the full opposite/bottom edge this needs.
-          <div
-            className={`dock-edge-hint dock-edge-hint--${dockDragHoverEdge}`}
-            aria-hidden="true"
           />
         ) : null}
 

@@ -60,16 +60,6 @@ import {
 
 const TOOL_DRAWER_MAX_WIDTH = 760;
 
-// How close the cursor has to get to a screen edge, while dragging the drawer's dock handle,
-// before that edge highlights as the drop target. Top is deliberately never a candidate — there's
-// nothing at the top of this app worth docking under (the 탐색/관리 toggle lives there).
-const DOCK_EDGE_HOVER_THRESHOLD_PX = 80;
-
-// Drag-to-dock release snap duration range — see settlePanel's durationMs formula in
-// handleDockDragPointerDown for how release velocity scales between these two.
-const DOCK_DRAG_SNAP_DURATION_MS = 320;
-const DOCK_DRAG_SNAP_MIN_DURATION_MS = 140;
-
 function reviewStatusLabel(text, status) {
   if (status === 'blocked') {
     return text.reviewStatusBlocked;
@@ -333,9 +323,6 @@ export function ToolSideDrawer({
   pendingManualTicker = null,
   drawerWidth = TOOL_DRAWER_DEFAULT_WIDTH,
   onDrawerWidthChange,
-  dock = 'left',
-  onDockChange,
-  onDockDragHoverEdgeChange,
   language,
   baseCurrency = 'KRW',
   fxRates = DEFAULT_DISPLAY_FX_RATES,
@@ -345,10 +332,6 @@ export function ToolSideDrawer({
   renderSettingsPanel,
 }) {
   const text = textFor(language);
-  // Imperative target for the drag-to-dock gesture's live follow + release settle (see
-  // handleDockDragPointerDown) — mutated directly via style.transform on every pointermove/on
-  // release, never through React state, so a 60fps drag doesn't mean 60fps of re-renders.
-  const panelRef = useRef(null);
   const [resizing, setResizing] = useState(false);
   const [manualAccountName, setManualAccountName] = useState('');
   const [manualStockName, setManualStockName] = useState('');
@@ -723,17 +706,13 @@ export function ToolSideDrawer({
 
       const startPos = event.clientX;
       const startSize = drawerWidth;
-      // Which physical drag direction grows the panel depends on which edge the resize handle
-      // sits on: left dock's handle is on the panel's right edge (drag right to grow, the
-      // original/only behavior this used to be); right dock's handle is on the left edge (drag
-      // left to grow). Left is the only one where screen-direction and "growing" point the same
-      // way.
-      const sign = dock === 'left' ? 1 : -1;
+      // The drawer is always docked left, so its resize handle sits on the panel's right edge:
+      // dragging right grows it.
       setResizing(true);
 
       const handlePointerMove = (moveEvent) => {
         moveEvent.preventDefault();
-        const nextSize = startSize + sign * (moveEvent.clientX - startPos);
+        const nextSize = startSize + (moveEvent.clientX - startPos);
         onDrawerWidthChange?.(clampDrawerWidth(nextSize));
       };
 
@@ -748,7 +727,7 @@ export function ToolSideDrawer({
       window.addEventListener('pointerup', stopResize);
       window.addEventListener('pointercancel', stopResize);
     },
-    [clampDrawerWidth, dock, drawerWidth, onDrawerWidthChange, onInteract, open],
+    [clampDrawerWidth, drawerWidth, onDrawerWidthChange, onInteract, open],
   );
 
   const handleResizeKeyDown = useCallback(
@@ -757,10 +736,7 @@ export function ToolSideDrawer({
         return;
       }
 
-      // Keyboard grow/shrink stays on a fixed pair of keys regardless of which edge the drawer is
-      // actually docked to — unlike the drag handle (a direct-manipulation gesture where physical
-      // direction has to match the cursor), a keyboard shortcut that flipped meaning depending on
-      // dock side would be the opposite of predictable.
+      // ArrowRight grows the panel and ArrowLeft shrinks it, matching the drag direction.
       if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') {
         return;
       }
@@ -771,133 +747,6 @@ export function ToolSideDrawer({
       onDrawerWidthChange?.((current) => clampDrawerWidth(current + delta));
     },
     [clampDrawerWidth, onDrawerWidthChange, onInteract, open],
-  );
-
-  // Drag-to-dock: grab the handle at the top of the rail (always present, open or closed —
-  // re-docking isn't something you should have to open the drawer first to do) and drag toward
-  // whichever screen edge it should snap to. Top is deliberately never a candidate edge.
-  const handleDockDragPointerDown = useCallback(
-    (event) => {
-      if (event.button !== 0) {
-        return;
-      }
-
-      event.preventDefault();
-      onInteract?.();
-
-      const computeHoverEdge = (clientX) => {
-        const distanceToEdge = {
-          left: clientX,
-          right: window.innerWidth - clientX,
-        };
-        let nearestEdge = null;
-        let nearestDistance = DOCK_EDGE_HOVER_THRESHOLD_PX;
-        for (const edge of Object.keys(distanceToEdge)) {
-          const distance = distanceToEdge[edge];
-          if (distance <= nearestDistance) {
-            nearestEdge = edge;
-            nearestDistance = distance;
-          }
-        }
-        return nearestEdge;
-      };
-
-      const panelEl = panelRef.current;
-      const startClientX = event.clientX;
-      // A short rolling history of (time, x) samples, not just the last move — a single frame's
-      // delta right before release is noisy (whatever the pointer happened to do in that last ~8ms
-      // tick), while the last ~60ms gives a steadier read on how fast the hand was actually moving
-      // when it let go.
-      let recentSamples = [{ t: event.timeStamp, x: startClientX }];
-
-      // Directly mutating style.transform every move (not React state) is the same reason the
-      // codebase's other drag loops (rotation drag, resize) skip setState mid-gesture — a state
-      // update per pointermove would re-render the whole drawer subtree 60+ times a second for a
-      // transform that's purely visual until release.
-      const applyDragOffset = (offsetPx) => {
-        if (!panelEl) {
-          return;
-        }
-        panelEl.style.transition = 'none';
-        panelEl.style.transform = `translateX(${offsetPx}px)`;
-      };
-
-      const handlePointerMove = (moveEvent) => {
-        moveEvent.preventDefault();
-        recentSamples.push({ t: moveEvent.timeStamp, x: moveEvent.clientX });
-        if (recentSamples.length > 8) {
-          recentSamples.shift();
-        }
-        // Rubber-band clamped — this is a preview of "which edge is about to grab it", not the
-        // drawer actually relocating mid-drag, so the visible travel stays modest even if the
-        // pointer keeps going past the clamp.
-        const rawOffset = moveEvent.clientX - startClientX;
-        applyDragOffset(clamp(rawOffset, -140, 140));
-        onDockDragHoverEdgeChange?.(computeHoverEdge(moveEvent.clientX));
-      };
-
-      // velocity in px/ms, signed (direction matters for nothing here — only magnitude feeds the
-      // snap duration below), measured across the retained sample window rather than just the
-      // final two events.
-      const releaseVelocityPxMs = () => {
-        if (recentSamples.length < 2) {
-          return 0;
-        }
-        const first = recentSamples[0];
-        const last = recentSamples[recentSamples.length - 1];
-        const dt = last.t - first.t;
-        if (dt <= 0) {
-          return 0;
-        }
-        return Math.abs(last.x - first.x) / dt;
-      };
-
-      const settlePanel = (velocityPxMs) => {
-        if (!panelEl) {
-          return;
-        }
-        // Faster release -> shorter settle, so a deliberate flick doesn't visibly lag behind the
-        // hand that threw it; a slow, deliberate drag gets the fuller, more readable ease-out.
-        // This is a duration heuristic, not a real spring simulation — cubic-bezier below is what
-        // actually supplies the "natural, not linear" feel demanded of it.
-        const durationMs = clamp(
-          DOCK_DRAG_SNAP_DURATION_MS - velocityPxMs * 250,
-          DOCK_DRAG_SNAP_MIN_DURATION_MS,
-          DOCK_DRAG_SNAP_DURATION_MS,
-        );
-        panelEl.style.transition = `transform ${durationMs}ms cubic-bezier(0.16, 1, 0.3, 1)`;
-        panelEl.style.transform = 'translateX(0px)';
-        window.setTimeout(() => {
-          // Hand control back to the stylesheet's own dock/is-open-driven transform once the
-          // release animation finishes — an inline style left behind here would silently outrank
-          // every future CSS-driven open/close transition for this element.
-          panelEl.style.transition = '';
-          panelEl.style.transform = '';
-        }, durationMs + 30);
-      };
-
-      const finishDrag = (finalEdge) => {
-        window.removeEventListener('pointermove', handlePointerMove);
-        window.removeEventListener('pointerup', handlePointerUp);
-        window.removeEventListener('pointercancel', handlePointerCancel);
-        settlePanel(releaseVelocityPxMs());
-        if (finalEdge && finalEdge !== dock) {
-          onDockChange?.(finalEdge);
-        }
-        onDockDragHoverEdgeChange?.(null);
-      };
-      // pointerup commits whatever edge was last hovered (null if the cursor never got close
-      // enough to any candidate edge — dragging and releasing in the middle of the screen is a
-      // no-op, not an accidental dock change). pointercancel aborts without committing anything,
-      // same as letting go of a drag that got interrupted should.
-      const handlePointerUp = (upEvent) => finishDrag(computeHoverEdge(upEvent.clientX));
-      const handlePointerCancel = () => finishDrag(null);
-
-      window.addEventListener('pointermove', handlePointerMove, { passive: false });
-      window.addEventListener('pointerup', handlePointerUp);
-      window.addEventListener('pointercancel', handlePointerCancel);
-    },
-    [dock, onDockChange, onDockDragHoverEdgeChange, onInteract],
   );
 
   const hasAtomName = manualAccountName.trim().length > 0;
@@ -2398,14 +2247,11 @@ export function ToolSideDrawer({
   return (
     <aside
       className={`tool-drawer${open ? ' is-open' : ''}${open && resolvedTool ? ' has-panel' : ''}${resizing ? ' is-resizing' : ''}`}
-      data-dock={dock}
       style={{
         ...layerStyle,
         // Always the full expanded size now — open/closed no longer toggles this element's own
         // box size at all (that was the width-transition perf problem); see .tool-drawer's CSS
-        // for how the closed state is conveyed instead (a clip-path). Both vars are always set
-        // (not just the one the current dock uses) since dock can change while open/mid-drag —
-        // no reason the unused axis' value should ever be stale.
+        // for how the closed state is conveyed instead (a clip-path).
         // Capped at the viewport: the stored width (default 522px) only gets clamped while
         // dragging, so on a 390px phone the panel content kept its desktop width and was clipped.
         '--tool-drawer-width': `min(${drawerWidth}px, calc(100vw - 0.35rem))`,
@@ -2413,18 +2259,6 @@ export function ToolSideDrawer({
     >
       <div className="tool-drawer__window">
         <div className="tool-drawer__rail" aria-label={text.toolMenuAria}>
-          <div
-            className="tool-drawer__dock-handle"
-            role="button"
-            tabIndex={0}
-            aria-label={
-              language === 'en'
-                ? 'Drag to move this panel to an edge'
-                : '드래그해서 패널 위치를 옮기기'
-            }
-            title={language === 'en' ? 'Drag to dock left or right' : '드래그해서 좌/우에 도킹'}
-            onPointerDown={handleDockDragPointerDown}
-          />
           {tools
             .filter((tool) => !tool.hidden)
             .map((tool) => (
@@ -2448,7 +2282,7 @@ export function ToolSideDrawer({
             ))}
         </div>
 
-        <section className="tool-drawer__panel" aria-live="polite" ref={panelRef}>
+        <section className="tool-drawer__panel" aria-live="polite">
           {open && resolvedTool ? (
             <div className="tool-drawer__body">{renderActivePanel()}</div>
           ) : (
