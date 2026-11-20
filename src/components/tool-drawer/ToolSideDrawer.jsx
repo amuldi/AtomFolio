@@ -38,6 +38,7 @@ import {
 } from './icons.jsx';
 import { MarketLivePreview, StockDetailCard } from './MarketPreview.jsx';
 import { MarketNewsPanel } from './MarketNewsPanel.jsx';
+import { GuruComparePanel } from './GuruComparePanel.jsx';
 import { HeatmapCard as HeatmapCardView } from '../cards/HeatmapCard.jsx';
 import { PortfolioScoreCard as PortfolioScoreCardView } from '../cards/PortfolioScoreCard.jsx';
 import { PortfolioAllocationCard as PortfolioAllocationCardView } from '../allocation/index.jsx';
@@ -457,7 +458,10 @@ export function ToolSideDrawer({
       label: language === 'en' ? 'Compare' : '비교',
       shortLabel: language === 'en' ? 'Compare' : '비교',
       icon: <SketchAccountStackIcon />,
-      available: portfolioEntries.length >= 2,
+      // Always available: the famous-investor comparison works with a single portfolio (and
+      // shows investors even with none). The portfolio-vs-portfolio table inside only renders
+      // once there are two.
+      available: true,
     },
     {
       key: 'twin',
@@ -1537,6 +1541,13 @@ export function ToolSideDrawer({
 
   const renderComparePanel = () => (
     <div className="tool-drawer__compare-panel">
+      <GuruComparePanel
+        analyticsSummary={analyticsSummary}
+        activePortfolio={activePortfolio}
+        language={language}
+        onInteract={onInteract}
+      />
+      {portfolioComparisonRows.length >= 2 ? (
       <section className="tool-drawer__overview-card tool-drawer__overview-card--wide">
         <p>{language === 'en' ? 'Portfolio Comparison' : '포트폴리오 비교'}</p>
         <div className="tool-drawer__compare-table">
@@ -1591,6 +1602,7 @@ export function ToolSideDrawer({
           })}
         </div>
       </section>
+      ) : null}
     </div>
   );
 

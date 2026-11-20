@@ -60,6 +60,10 @@
   --loss-color-strong: rgba(126, 190, 255, 0.98);
   --loss-bg: rgba(54, 128, 255, 0.16);
   --loss-border: rgba(104, 174, 255, 0.42);
+  /* The famous-investor side of the 비교 tab (GuruComparePanel). Amber on purpose: red and blue
+     already mean gain and loss everywhere else, so "theirs" must not borrow either. RGB triple,
+     used as rgb(var(--guru-accent)) / rgba(var(--guru-accent), a) and read by the canvas. */
+  --guru-accent: 233, 184, 92;
   /* "Frame" colors — every panel around the atom stage (tool drawer, settings, command palette,
      news, simulation, etc.), as opposed to the stage/space scene itself, which keeps this exact
      dark cosmic palette permanently. RGB triples, not full colors, so every existing
@@ -5546,6 +5550,728 @@ body::after {
 .tool-drawer__digest-movers .negative,
 .tool-drawer__analytics-metric .negative {
   color: var(--loss-color-strong);
+}
+
+/* ── 비교 tab: famous-investor comparison (GuruComparePanel.jsx) ─────────────────────────── */
+.guru-compare {
+  gap: 0.62rem;
+  font-family: var(--ui-font);
+}
+
+.guru-compare__source {
+  color: rgba(var(--frame-ink-a), 0.42);
+  font-size: 0.58rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.guru-compare__picker {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(8.6rem, 1fr);
+  gap: 0.42rem;
+  overflow-x: auto;
+  padding-bottom: 0.18rem;
+  scrollbar-width: thin;
+}
+
+.guru-compare__investor {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+  padding: 0.52rem 0.58rem;
+  border: 1px solid rgba(var(--frame-hairline), 0.08);
+  border-radius: 9px;
+  background: rgba(var(--frame-surface), 0.16);
+  color: inherit;
+  font-family: var(--ui-font);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.25s ease,
+    background 0.2s ease;
+}
+
+.guru-compare__investor:hover {
+  border-color: rgba(var(--frame-hairline), 0.22);
+}
+
+.guru-compare__investor.is-active {
+  border-color: rgba(var(--guru-accent), 0.85);
+  background: rgba(var(--guru-accent), 0.06);
+  box-shadow:
+    0 0 0 1px rgba(var(--guru-accent), 0.5) inset,
+    0 0 18px rgba(var(--guru-accent), 0.1);
+}
+
+.guru-compare__investor strong,
+.guru-compare__investor em,
+.guru-compare__investor small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guru-compare__investor strong {
+  color: rgba(var(--frame-ink-a), 0.92);
+  font-size: 0.74rem;
+  font-weight: 760;
+}
+
+.guru-compare__investor em,
+.guru-compare__investor small {
+  color: rgba(var(--frame-ink-a), 0.46);
+  font-size: 0.56rem;
+  font-style: normal;
+  font-weight: 650;
+}
+
+.guru-compare__investor small {
+  color: rgba(var(--frame-ink-a), 0.62);
+}
+
+.guru-compare__stage {
+  position: relative;
+  height: 21rem;
+  overflow: hidden;
+  border: 1px solid rgba(var(--frame-hairline), 0.08);
+  border-radius: 12px;
+  background: radial-gradient(ellipse at 50% 48%, rgba(40, 34, 22, 0.55) 0%, rgba(8, 8, 7, 0.9) 48%, #000 80%);
+}
+
+.guru-compare__stage canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.guru-compare__pill {
+  position: absolute;
+  top: 0.62rem;
+  left: 50%;
+  max-width: calc(100% - 1.4rem);
+  padding: 0.26rem 0.8rem 0.32rem;
+  transform: translateX(-50%);
+  border: 1.5px solid rgba(var(--frame-ink-a), 0.66);
+  border-radius: 10px;
+  background: rgba(var(--frame-void), 0.72);
+  font-family: 'Bradley Hand', 'Gaegu', 'Marker Felt', cursive;
+  text-align: center;
+}
+
+.guru-compare__pill strong {
+  display: block;
+  color: rgba(var(--frame-ink-a), 0.95);
+  font-size: 1.12rem;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.guru-compare__pill b {
+  color: rgb(var(--guru-accent));
+}
+
+.guru-compare__pill span {
+  display: block;
+  overflow: hidden;
+  color: rgba(var(--frame-ink-a), 0.62);
+  font-size: 0.74rem;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guru-compare__stage-bar {
+  position: absolute;
+  right: 0.62rem;
+  bottom: 0.56rem;
+  left: 0.62rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.36rem 0.7rem;
+}
+
+.guru-compare__stage.is-result .guru-compare__stage-bar,
+.guru-compare__stage.is-animating .guru-compare__stage-bar {
+  justify-content: space-between;
+}
+
+.guru-compare__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.62rem;
+  color: rgba(var(--frame-ink-a), 0.6);
+  font-size: 0.56rem;
+  font-weight: 650;
+}
+
+.guru-compare__legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.guru-compare__legend i,
+.guru-compare__keys i {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+}
+
+.guru-compare .is-mine {
+  --swatch: rgba(var(--frame-ink-a), 0.92);
+}
+
+.guru-compare .is-guru {
+  --swatch: rgb(var(--guru-accent));
+}
+
+.guru-compare__legend .is-mine,
+.guru-compare__keys .is-mine {
+  background: rgba(var(--frame-ink-a), 0.92);
+}
+
+.guru-compare__legend .is-guru,
+.guru-compare__keys .is-guru {
+  background: rgb(var(--guru-accent));
+}
+
+.guru-compare__legend .is-both {
+  background: rgba(var(--frame-ink-a), 0.92);
+  box-shadow: 0 0 0 2px rgb(var(--guru-accent));
+}
+
+.guru-compare__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.36rem;
+  min-height: 1.9rem;
+  padding: 0.32rem 0.82rem;
+  border: 1px solid rgba(var(--frame-hairline), 0.22);
+  border-radius: 999px;
+  background: rgba(var(--frame-void), 0.62);
+  color: rgba(var(--frame-ink-a), 0.86);
+  font-family: var(--ui-font);
+  font-size: 0.66rem;
+  font-weight: 740;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.25s ease,
+    background 0.2s ease;
+}
+
+.guru-compare__action.is-primary {
+  padding: 0.42rem 1.08rem;
+  border-color: rgba(var(--frame-ink-a), 0.95);
+  background: rgba(var(--frame-ink-a), 0.95);
+  color: #000;
+  font-size: 0.74rem;
+}
+
+.guru-compare__action.is-primary span {
+  font-family: 'Bradley Hand', 'Gaegu', cursive;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.guru-compare__action:hover:not(:disabled) {
+  box-shadow: 0 0 22px rgba(var(--frame-ink-a), 0.2);
+}
+
+.guru-compare__action:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.guru-compare__action:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.guru-compare__action:focus-visible,
+.guru-compare__investor:focus-visible {
+  outline: 2px solid rgb(var(--guru-accent));
+  outline-offset: 2px;
+}
+
+.guru-compare__subhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.guru-compare__subhead > span {
+  color: rgba(var(--frame-ink-a), 0.5);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.guru-compare__subhead em {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  overflow: hidden;
+  color: rgba(var(--frame-ink-a), 0.42);
+  font-size: 0.56rem;
+  font-style: normal;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guru-compare__keys i + i {
+  margin-left: 0.4rem;
+}
+
+.guru-compare__holdings {
+  display: grid;
+  gap: 0.48rem;
+}
+
+.guru-compare__holdings ol {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: 0.3rem 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guru-compare__holdings li {
+  display: grid;
+  grid-template-columns: 1.1rem minmax(0, 1fr) 2.8rem;
+  gap: 0.42rem;
+  align-items: center;
+  font-size: 0.66rem;
+}
+
+.guru-compare__rank {
+  color: rgba(var(--frame-ink-a), 0.36);
+  font-size: 0.58rem;
+  text-align: right;
+}
+
+.guru-compare__name {
+  display: grid;
+  gap: 0.16rem;
+  min-width: 0;
+}
+
+.guru-compare__name > span {
+  overflow: hidden;
+  color: rgba(var(--frame-ink-a), 0.86);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guru-compare__name small,
+.guru-compare__result td small {
+  margin-left: 0.32rem;
+  color: rgba(var(--frame-ink-a), 0.36);
+  font-size: 0.54rem;
+}
+
+.guru-compare__name i {
+  display: block;
+  width: var(--w);
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(var(--guru-accent), 0.8);
+}
+
+.guru-compare__holdings li strong {
+  color: rgb(var(--guru-accent));
+  font-size: 0.64rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* .guru-compare p.… outranks .tool-drawer__overview-card p (the card's uppercase eyebrow style). */
+.guru-compare p.guru-compare__note {
+  margin: 0;
+  color: rgba(var(--frame-ink-a), 0.42);
+  font-size: 0.56rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.45;
+  text-transform: none;
+}
+
+.guru-compare__result {
+  display: grid;
+  gap: 0.52rem;
+}
+
+.guru-compare__card {
+  display: grid;
+  gap: 0.48rem;
+  min-width: 0;
+  padding: 0.6rem 0.62rem;
+  border: 1px solid rgba(var(--frame-hairline), 0.08);
+  border-radius: 9px;
+  background: rgba(var(--frame-surface), 0.16);
+}
+
+.guru-compare__insights ul {
+  display: grid;
+  gap: 0.32rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guru-compare__insights li {
+  display: grid;
+  grid-template-columns: 0.7rem 1fr;
+  color: rgba(var(--frame-ink-a), 0.86);
+  font-size: 0.68rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.guru-compare__insights li::before {
+  content: '·';
+  color: rgb(var(--guru-accent));
+  font-weight: 800;
+}
+
+.guru-compare__bars {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.guru-compare__bar-row {
+  display: grid;
+  grid-template-columns: 4.6rem minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.guru-compare__bar-row > span {
+  overflow: hidden;
+  color: rgba(var(--frame-ink-a), 0.62);
+  font-size: 0.6rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guru-compare__bar-row.is-rest > span {
+  color: rgba(var(--frame-ink-a), 0.38);
+}
+
+.guru-compare__bar-row > div {
+  display: grid;
+  gap: 0.14rem;
+}
+
+.guru-compare__bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2.6rem;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.guru-compare__bar b {
+  display: block;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: rgba(var(--frame-ink-a), 0.05);
+}
+
+.guru-compare__bar b i {
+  display: block;
+  width: var(--w);
+  height: 100%;
+  border-radius: 3px;
+  background: var(--swatch);
+}
+
+.guru-compare__bar-row.is-rest .guru-compare__bar b i {
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(var(--guru-accent), 0.55) 0 4px,
+    rgba(var(--guru-accent), 0.18) 4px 8px
+  );
+}
+
+.guru-compare__bar em {
+  color: rgba(var(--frame-ink-a), 0.6);
+  font-size: 0.56rem;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.guru-compare__table-scroll {
+  overflow-x: auto;
+}
+
+.guru-compare__result table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.64rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.guru-compare__result th {
+  padding: 0 0 0.3rem;
+  border-bottom: 1px solid rgba(var(--frame-hairline), 0.1);
+  color: rgba(var(--frame-ink-a), 0.4);
+  font-size: 0.54rem;
+  font-weight: 650;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.guru-compare__result td {
+  padding: 0.32rem 0;
+  border-bottom: 1px solid rgba(var(--frame-hairline), 0.07);
+  color: rgba(var(--frame-ink-a), 0.84);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.guru-compare__result th:first-child,
+.guru-compare__result td:first-child {
+  text-align: left;
+}
+
+.guru-compare__result tr:last-child td {
+  border-bottom: 0;
+}
+
+.guru-compare__result td.is-guru,
+.guru-compare__stats .is-guru {
+  color: rgb(var(--guru-accent));
+}
+
+.guru-compare__result td.positive {
+  color: var(--profit-color-strong);
+}
+
+.guru-compare__result td.negative {
+  color: var(--loss-color-strong);
+}
+
+.guru-compare p.guru-compare__empty {
+  margin: 0;
+  padding: 0.6rem;
+  border: 1px dashed rgba(var(--frame-hairline), 0.2);
+  border-radius: 8px;
+  color: rgba(var(--frame-ink-a), 0.62);
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.guru-compare__stack-row {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.guru-compare__stack-row > span {
+  color: rgba(var(--frame-ink-a), 0.6);
+  font-size: 0.58rem;
+}
+
+.guru-compare__stack {
+  display: flex;
+  gap: 2px;
+  height: 1rem;
+  overflow: hidden;
+  border-radius: 5px;
+}
+
+.guru-compare__stack i {
+  display: flex;
+  align-items: center;
+  min-width: 2px;
+  overflow: hidden;
+  padding-left: 0.3rem;
+  color: #000;
+  font-size: 0.52rem;
+  font-style: normal;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.guru-compare__stack i.is-rest {
+  color: rgba(var(--frame-ink-a), 0.6);
+}
+
+.guru-compare__region-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.62rem;
+  color: rgba(var(--frame-ink-a), 0.6);
+  font-size: 0.56rem;
+}
+
+.guru-compare__region-keys span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+}
+
+.guru-compare__region-keys i {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(var(--frame-hairline), 0.16);
+}
+
+.guru-compare__stats {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr);
+  margin: 0;
+  font-size: 0.64rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.guru-compare__stats dt,
+.guru-compare__stats dd {
+  margin: 0;
+  padding: 0.3rem 0;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(var(--frame-hairline), 0.07);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guru-compare__stats dt {
+  color: rgba(var(--frame-ink-a), 0.56);
+}
+
+.guru-compare__stats dd {
+  color: rgba(var(--frame-ink-a), 0.86);
+  text-align: right;
+}
+
+.guru-compare__stats > :nth-child(-n + 3) {
+  padding-top: 0;
+  color: rgba(var(--frame-ink-a), 0.4);
+  font-size: 0.54rem;
+}
+
+.guru-compare__stats > :nth-last-child(-n + 3) {
+  border-bottom: 0;
+}
+
+.guru-compare__about {
+  color: rgba(var(--frame-ink-a), 0.56);
+  font-size: 0.6rem;
+}
+
+.guru-compare__about summary {
+  color: rgba(var(--frame-ink-a), 0.6);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.guru-compare__about ul {
+  display: grid;
+  gap: 0.24rem;
+  margin: 0.4rem 0;
+  padding-left: 1rem;
+  line-height: 1.45;
+}
+
+.guru-compare__about a {
+  color: rgba(var(--frame-ink-a), 0.8);
+  text-underline-offset: 2px;
+}
+
+/* Motion: the canvas scene carries the main animation; these only stage what follows it.
+   Time-based (never scroll-observer gated) and skipped entirely for reduced-motion users. */
+@media (prefers-reduced-motion: no-preference) {
+  .guru-compare__stage.is-preview .guru-compare__action.is-primary {
+    animation: guru-compare-breathe 2.8s ease-in-out infinite;
+  }
+
+  .guru-compare__pill {
+    animation: guru-compare-pill 0.35s ease;
+  }
+
+  .guru-compare__holdings li {
+    animation: guru-compare-rise 0.4s ease both;
+    animation-delay: calc(var(--row, 0) * 28ms);
+  }
+
+  .guru-compare__stage.is-animating ~ .guru-compare__holdings {
+    opacity: 0.35;
+    transition: opacity 0.6s ease;
+  }
+
+  .guru-compare__card {
+    animation: guru-compare-rise 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: calc(var(--i, 0) * 90ms);
+  }
+
+  .guru-compare__bar b i {
+    animation: guru-compare-grow 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: calc(var(--i, 0) * 90ms + 200ms);
+  }
+
+  .guru-compare__result tbody tr {
+    animation: guru-compare-rise 0.45s ease both;
+    animation-delay: calc(var(--row, 0) * 70ms + 260ms);
+  }
+}
+
+@keyframes guru-compare-breathe {
+  50% {
+    box-shadow:
+      0 0 0 5px rgba(var(--frame-ink-a), 0.07),
+      0 0 26px rgba(var(--guru-accent), 0.28);
+  }
+}
+
+@keyframes guru-compare-pill {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@keyframes guru-compare-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes guru-compare-grow {
+  from {
+    width: 0;
+  }
+  to {
+    width: var(--w);
+  }
 }
 
 .tool-drawer__report-summary,

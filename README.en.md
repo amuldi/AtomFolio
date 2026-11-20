@@ -277,7 +277,10 @@ The six axis scores don't depend on investing style; a style only changes the we
 ### 10. Portfolio comparison
 
 - The Compare tab puts every portfolio in one table: return, score, largest holding, and concentration (effective number of holdings).
-- Clicking a row switches to that portfolio.
+- Clicking a row switches to that portfolio. (Shown once there are two or more portfolios.)
+- **Famous investors**: pick Warren Buffett, Korea's NPS (US stocks), David Tepper, Li Lu or Stanley Druckenmiller from their SEC 13F filings to preview their atom; pressing **Compare** fuses it with yours in an animation and opens the common share, common holdings, sector, region and concentration comparison (`src/lib/guruCompare.js`, `src/components/tool-drawer/GuruComparePanel.jsx`).
+- Common share = for each common holding, the smaller of your weight and theirs, summed. Only each investor's top 15 are compared by name.
+- 13F filings reflect quarter-end holdings filed up to 45 days later, so the as-of date and its age are always shown. Refresh the data with `npm run data:gurus` (mid Feb/May/Aug/Nov; set `SEC_USER_AGENT`).
 
 ### 11. This month
 

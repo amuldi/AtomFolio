@@ -11,6 +11,7 @@
     "dev:client": "vite",
     "dev:server": "node server/index.mjs",
     "db:migrate": "node scripts/migrate-db.mjs",
+    "data:gurus": "node scripts/fetch-guru-portfolios.mjs",
     "test": "node --test",
     "lint": "eslint .",
     "knip": "knip",

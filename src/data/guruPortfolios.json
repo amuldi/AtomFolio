@@ -1,0 +1,844 @@
+{
+  "generatedAt": "2026-11-20",
+  "source": "SEC EDGAR 13F-HR information tables; CUSIP→ticker via OpenFIGI",
+  "topN": 15,
+  "gurus": [
+    {
+      "id": "berkshire",
+      "person": {
+        "ko": "워런 버핏",
+        "en": "Warren Buffett"
+      },
+      "entity": "Berkshire Hathaway",
+      "cik": "1067983",
+      "accession": "0001193125-26-463399",
+      "url": "https://www.sec.gov/Archives/edgar/data/1067983/000119312526463399/",
+      "period": "2026-09-30",
+      "filed": "2026-11-16",
+      "totalValueUsd": 304196581325,
+      "holdingsCount": 27,
+      "effectiveHoldings": 7.77,
+      "top1": 0.2495,
+      "top5": 0.7154,
+      "holdings": [
+        {
+          "ticker": "AAPL",
+          "cusip": "037833100",
+          "name": {
+            "ko": "애플",
+            "en": "Apple"
+          },
+          "sector": "tech",
+          "region": "us",
+          "weight": 0.24951
+        },
+        {
+          "ticker": "AXP",
+          "cusip": "025816109",
+          "name": {
+            "ko": "아메리칸 익스프레스",
+            "en": "American Express"
+          },
+          "sector": "financials",
+          "region": "us",
+          "weight": 0.15156
+        },
+        {
+          "ticker": "GOOGL",
+          "cusip": "02079K107",
+          "name": {
+            "ko": "알파벳",
+            "en": "Alphabet"
+          },
+          "sector": "comm",
+          "region": "us",
+          "weight": 0.11958
+        },
+        {
+          "ticker": "KO",
+          "cusip": "191216100",
+          "name": {
+            "ko": "코카콜라",
+            "en": "Coca-Cola"
+          },
+          "sector": "staples",
+          "region": "us",
+          "weight": 0.11319
+        },
+        {
+          "ticker": "BAC",
+          "cusip": "060505104",
+          "name": {
+            "ko": "뱅크오브아메리카",
+            "en": "Bank of America"
+          },
+          "sector": "financials",
+          "region": "us",
+          "weight": 0.08157
+        },
+        {
+          "ticker": "CVX",
+          "cusip": "166764100",
+          "name": {
+            "ko": "셰브론",
+            "en": "Chevron"
+          },
+          "sector": "energy",
+          "region": "us",
+          "weight": 0.05664
+        },
+        {
+          "ticker": "OXY",
+          "cusip": "674599105",
+          "name": {
+            "ko": "옥시덴탈",
+            "en": "Occidental"
+          },
+          "sector": "energy",
+          "region": "us",
+          "weight": 0.04818
+        },
+        {
+          "ticker": "MCO",
+          "cusip": "615369105",
+          "name": {
+            "ko": "무디스",
+            "en": "Moody's"
+          },
+          "sector": "financials",
+          "region": "us",
+          "weight": 0.03683
+        },
+        {
+          "ticker": "CB",
+          "cusip": "H1467J104",
+          "name": {
+            "ko": "처브",
+            "en": "Chubb"
+          },
+          "sector": "financials",
+          "region": "us",
+          "weight": 0.03662
+        },
+        {
+          "ticker": "KHC",
+          "cusip": "500754106",
+          "name": {
+            "ko": "크래프트 하인즈",
+            "en": "Kraft Heinz"
+          },
+          "sector": "staples",
+          "region": "us",
+          "weight": 0.02432
+        },
+        {
+          "ticker": "DAL",
+          "cusip": "247361702",
+          "name": {
+            "ko": "델타항공",
+            "en": "Delta Air Lines"
+          },
+          "sector": "industrials",
+          "region": "us",
+          "weight": 0.01768
+        },
+        {
+          "ticker": "DVA",
+          "cusip": "23918K108",
+          "name": {
+            "ko": "다비타",
+            "en": "DaVita"
+          },
+          "sector": "health",
+          "region": "us",
+          "weight": 0.0165
+        },
+        {
+          "ticker": "SIRI",
+          "cusip": "829933100",
+          "name": {
+            "ko": "시리우스XM",
+            "en": "SiriusXM"
+          },
+          "sector": "comm",
+          "region": "us",
+          "weight": 0.01062
+        },
+        {
+          "ticker": "LEN",
+          "cusip": "526057104",
+          "name": {
+            "ko": "레나",
+            "en": "Lennar"
+          },
+          "sector": "discretionary",
+          "region": "us",
+          "weight": 0.00713
+        },
+        {
+          "ticker": "KR",
+          "cusip": "501044101",
+          "name": {
+            "ko": "크로거",
+            "en": "Kroger"
+          },
+          "sector": "staples",
+          "region": "us",
+          "weight": 0.00674
+        }
+      ]
+    },
+    {
+      "id": "nps",
+      "person": {
+        "ko": "국민연금",
+        "en": "Korea NPS"
+      },
+      "entity": "National Pension Service",
+      "cik": "1608046",
+      "accession": "0001193125-26-456954",
+      "url": "https://www.sec.gov/Archives/edgar/data/1608046/000119312526456954/",
+      "period": "2026-09-30",
+      "filed": "2026-11-12",
+      "totalValueUsd": 158738850567,
+      "holdingsCount": 547,
+      "effectiveHoldings": 48.14,
+      "top1": 0.0734,
+      "top5": 0.2738,
+      "holdings": [
+        {
+          "ticker": "NVDA",
+          "cusip": "67066G104",
+          "name": {
+            "ko": "엔비디아",
+            "en": "NVIDIA"
+          },
+          "sector": "tech",
+          "region": "us",
+          "weight": 0.07342
+        },
+        {
+          "ticker": "AAPL",
+          "cusip": "037833100",
+          "name": {
+            "ko": "애플",
+            "en": "Apple"
+          },
+          "sector": "tech",
+          "region": "us",
+          "weight": 0.06644
+        },
+        {
+          "ticker": "GOOGL",
+          "cusip": "02079K107",
+          "name": {
+            "ko": "알파벳",
+            "en": "Alphabet"
+          },
+          "sector": "comm",
+          "region": "us",
+          "weight": 0.05131
+        },
+        {
+          "ticker": "MSFT",
+          "cusip": "594918104",
+          "name": {
+            "ko": "마이크로소프트",
+            "en": "Microsoft"
+          },
+          "sector": "tech",
+          "region": "us",
+          "weight": 0.04949
+        },
+        {
+          "ticker": "AMZN",
+          "cusip": "023135106",
+          "name": {
+            "ko": "아마존",
+            "en": "Amazon"
+          },
+          "sector": "discretionary",
+          "region": "us",
+          "weight": 0.03309
+        },
+        {
+          "ticker": "PBUS",
+          "cusip": "46138E461",
+          "name": {
+            "ko": "Invesco 미국 대형주 ETF",
+            "en": "Invesco PureBeta US ETF"
+          },
+          "sector": "etf",
+          "region": "us",
+          "weight": 0.02285
+        },
+        {
+          "ticker": "META",
+          "cusip": "30303M102",
+          "name": {
+            "ko": "메타",
+            "en": "Meta Platforms"
+          },
+          "sector": "comm",
+          "region": "us",
+          "weight": 0.02226
+        },
+        {
+          "ticker": "AVGO",
+          "cusip": "11135F101",
+          "name": {
+            "ko": "브로드컴",
+            "en": "Broadcom"
+          },
+          "sector": "tech",
+          "region": "us",
+          "weight": 0.02138
+        },
+        {
+          "ticker": "IVV",
+          "cusip": "464287200",
+          "name": {
+            "ko": "iShares S&P500 ETF",
+            "en": "iShares Core S&P 500"
+          },
+          "sector": "etf",
+          "region": "us",
+          "weight": 0.01987
+        },
+        {
+          "ticker": "MU",
+          "cusip": "595112103",
+          "name": {
+            "ko": "마이크론",
+            "en": "Micron"
+          },
+          "sector": "tech",
+          "region": "us",
+          "weight": 0.01944
+        },
+        {
+          "ticker": "AMD",
+          "cusip": "007903107",
+          "name": {
+            "ko": "AMD",
+            "en": "AMD"
+          },
+          "sector": "tech",
+          "region": "us",
+          "weight": 0.01397
+        },
+        {
+          "ticker": "TSLA",
+          "cusip": "88160R101",
+          "name": {
+            "ko": "테슬라",
+            "en": "Tesla"
+          },
+          "sector": "discretionary",
+          "region": "us",
+          "weight": 0.01356
+        },
+        {
+          "ticker": "LLY",
+          "cusip": "532457108",
+          "name": {
+            "ko": "일라이 릴리",
+            "en": "Eli Lilly"
+          },
+          "sector": "health",
+          "region": "us",
+          "weight": 0.01231
+        },
+        {
+          "ticker": "JPM",
+          "cusip": "46625H100",
+          "name": {
+            "ko": "JP모건",
+            "en": "JPMorgan Chase"
+          },
+          "sector": "financials",
+          "region": "us",
+          "weight": 0.01159
+        },
+        {
+          "ticker": "XOM",
+          "cusip": "30233Q108",
+          "name": {
+            "ko": "엑슨모빌",
+            "en": "ExxonMobil"
+          },
+          "sector": "energy",
+          "region": "us",
+          "weight": 0.00995
+        }
+      ]
+    },
+    {
+      "id": "appaloosa",
+      "person": {
+        "ko": "데이비드 테퍼",
+        "en": "David Tepper"
+      },
+      "entity": "Appaloosa LP",
+      "cik": "1656456",
+      "accession": "0001656456-26-000004",
+      "url": "https://www.sec.gov/Archives/edgar/data/1656456/000165645626000004/",
+      "period": "2026-09-30",
+      "filed": "2026-11-16",
+      "totalValueUsd": 7559628593,
+      "holdingsCount": 24,
+      "effectiveHoldings": 11.43,
+      "top1": 0.1761,
+      "top5": 0.5586,
+      "holdings": [
+        {
+          "ticker": "MU",
+          "cusip": "595112103",
+          "name": {
+            "ko": "마이크론",
+            "en": "Micron"
+          },
+          "sector": "tech",
+          "region": "us",
+          "weight": 0.17612
+        },
+        {
+          "ticker": "AMZN",
+          "cusip": "023135106",
+          "name": {
+            "ko": "아마존",
+            "en": "Amazon"
+          },
+          "sector": "discretionary",
+          "region": "us",
+          "weight": 0.14749
+        },
+        {
+          "ticker": "TSM",
+          "cusip": "874039100",
+          "name": {
+            "ko": "TSMC",
+            "en": "TSMC"
+          },
+          "sector": "tech",
+          "region": "tw",
+          "weight": 0.09504
+        },
+        {
+          "ticker": "SPCX",
+          "cusip": "84615Q103",
+          "name": {
+            "ko": "스페이스X",
+            "en": "SpaceX"
+          },
+          "sector": "industrials",
+          "region": "us",
+          "weight": 0.07362
+        },
+        {
+          "ticker": "UBER",
+          "cusip": "90353T100",
+          "name": {
+            "ko": "우버",
+            "en": "Uber"
+          },
+          "sector": "industrials",
+          "region": "us",
+          "weight": 0.06629
+        },
+        {
+          "ticker": "NVDA",
+          "cusip": "67066G104",
+          "name": {
+            "ko": "엔비디아",
+            "en": "NVIDIA"
+          },
+          "sector": "tech",
+          "region": "us",
+          "weight": 0.06042
+        },
+        {
+          "ticker": "EWY",
+          "cusip": "464286772",
+          "name": {
+            "ko": "iShares 한국 ETF",
+            "en": "iShares MSCI South Korea"
+          },
+          "sector": "etf",
+          "region": "kr",
+          "weight": 0.05092
+        },
+        {
+          "ticker": "META",
+          "cusip": "30303M102",
+          "name": {
+            "ko": "메타",
+            "en": "Meta Platforms"
+          },
+          "sector": "comm",
+          "region": "us",
+          "weight": 0.05036
+        },
+        {
+          "ticker": "GOOGL",
+          "cusip": "02079K107",
+          "name": {
+            "ko": "알파벳",
+            "en": "Alphabet"
+          },
+          "sector": "comm",
+          "region": "us",
+          "weight": 0.04507
+        },
+        {
+          "ticker": "VST",
+          "cusip": "92840M102",
+          "name": {
+            "ko": "비스트라",
+            "en": "Vistra"
+          },
+          "sector": "utilities",
+          "region": "us",
+          "weight": 0.03871
+        },
+        {
+          "ticker": "LRCX",
+          "cusip": "512807306",
+          "name": {
+            "ko": "램리서치",
+            "en": "Lam Research"
+          },
+          "sector": "tech",
+          "region": "us",
+          "weight": 0.02716
+        },
+        {
+          "ticker": "BABA",
+          "cusip": "01609W102",
+          "name": {
+            "ko": "알리바바",
+            "en": "Alibaba"
+          },
+          "sector": "discretionary",
+          "region": "cn",
+          "weight": 0.02632
+        },
+        {
+          "ticker": "ORCL",
+          "cusip": "68389X105",
+          "name": {
+            "ko": "오라클",
+            "en": "Oracle"
+          },
+          "sector": "tech",
+          "region": "us",
+          "weight": 0.02277
+        },
+        {
+          "ticker": "BA",
+          "cusip": "097023105",
+          "name": {
+            "ko": "보잉",
+            "en": "Boeing"
+          },
+          "sector": "industrials",
+          "region": "us",
+          "weight": 0.0187
+        },
+        {
+          "ticker": "NRG",
+          "cusip": "629377508",
+          "name": {
+            "ko": "NRG 에너지",
+            "en": "NRG Energy"
+          },
+          "sector": "utilities",
+          "region": "us",
+          "weight": 0.01803
+        }
+      ]
+    },
+    {
+      "id": "himalaya",
+      "person": {
+        "ko": "리 루",
+        "en": "Li Lu"
+      },
+      "entity": "Himalaya Capital",
+      "cik": "1709323",
+      "accession": "0002043585-26-000030",
+      "url": "https://www.sec.gov/Archives/edgar/data/1709323/000204358526000030/",
+      "period": "2026-09-30",
+      "filed": "2026-11-16",
+      "totalValueUsd": 3781431260,
+      "holdingsCount": 7,
+      "effectiveHoldings": 3.39,
+      "top1": 0.4523,
+      "top5": 0.9627,
+      "holdings": [
+        {
+          "ticker": "GOOGL",
+          "cusip": "02079K305",
+          "name": {
+            "ko": "알파벳",
+            "en": "Alphabet"
+          },
+          "sector": "comm",
+          "region": "us",
+          "weight": 0.4523
+        },
+        {
+          "ticker": "PDD",
+          "cusip": "722304102",
+          "name": {
+            "ko": "PDD(테무)",
+            "en": "PDD Holdings"
+          },
+          "sector": "discretionary",
+          "region": "cn",
+          "weight": 0.24241
+        },
+        {
+          "ticker": "BRK.B",
+          "cusip": "084670702",
+          "name": {
+            "ko": "버크셔 해서웨이",
+            "en": "Berkshire Hathaway"
+          },
+          "sector": "financials",
+          "region": "us",
+          "weight": 0.14595
+        },
+        {
+          "ticker": "EWBC",
+          "cusip": "27579R104",
+          "name": {
+            "ko": "이스트웨스트 뱅코프",
+            "en": "East West Bancorp"
+          },
+          "sector": "financials",
+          "region": "us",
+          "weight": 0.09099
+        },
+        {
+          "ticker": "TME",
+          "cusip": "88034P109",
+          "name": {
+            "ko": "텐센트뮤직",
+            "en": "Tencent Music"
+          },
+          "sector": "comm",
+          "region": "cn",
+          "weight": 0.03109
+        },
+        {
+          "ticker": "CROX",
+          "cusip": "227046109",
+          "name": {
+            "ko": "크록스",
+            "en": "Crocs"
+          },
+          "sector": "discretionary",
+          "region": "us",
+          "weight": 0.02752
+        },
+        {
+          "ticker": "AAPL",
+          "cusip": "037833100",
+          "name": {
+            "ko": "애플",
+            "en": "Apple"
+          },
+          "sector": "tech",
+          "region": "us",
+          "weight": 0.00974
+        }
+      ]
+    },
+    {
+      "id": "duquesne",
+      "person": {
+        "ko": "스탠리 드러켄밀러",
+        "en": "Stanley Druckenmiller"
+      },
+      "entity": "Duquesne Family Office",
+      "cik": "1536411",
+      "accession": "0001536411-26-000011",
+      "url": "https://www.sec.gov/Archives/edgar/data/1536411/000153641126000011/",
+      "period": "2026-09-30",
+      "filed": "2026-11-16",
+      "totalValueUsd": 4148873000,
+      "holdingsCount": 59,
+      "effectiveHoldings": 8.31,
+      "top1": 0.3149,
+      "top5": 0.5346,
+      "holdings": [
+        {
+          "ticker": "NTRA",
+          "cusip": "632307104",
+          "name": {
+            "ko": "나테라",
+            "en": "Natera"
+          },
+          "sector": "health",
+          "region": "us",
+          "weight": 0.31487
+        },
+        {
+          "ticker": "STX",
+          "cusip": "G7997R103",
+          "name": {
+            "ko": "시게이트",
+            "en": "Seagate"
+          },
+          "sector": "tech",
+          "region": "us",
+          "weight": 0.07598
+        },
+        {
+          "ticker": "FOXA",
+          "cusip": "35137L105",
+          "name": {
+            "ko": "폭스",
+            "en": "Fox"
+          },
+          "sector": "comm",
+          "region": "us",
+          "weight": 0.05458
+        },
+        {
+          "ticker": "AMZN",
+          "cusip": "023135106",
+          "name": {
+            "ko": "아마존",
+            "en": "Amazon"
+          },
+          "sector": "discretionary",
+          "region": "us",
+          "weight": 0.0464
+        },
+        {
+          "ticker": "YPF",
+          "cusip": "984245100",
+          "name": {
+            "ko": "YPF",
+            "en": "YPF"
+          },
+          "sector": "energy",
+          "region": "other",
+          "weight": 0.0428
+        },
+        {
+          "ticker": "U",
+          "cusip": "91332U101",
+          "name": {
+            "ko": "유니티",
+            "en": "Unity Software"
+          },
+          "sector": "tech",
+          "region": "us",
+          "weight": 0.03903
+        },
+        {
+          "ticker": "SE",
+          "cusip": "81141R100",
+          "name": {
+            "ko": "씨(Sea)",
+            "en": "Sea Ltd"
+          },
+          "sector": "discretionary",
+          "region": "other",
+          "weight": 0.03738
+        },
+        {
+          "ticker": "EWZ",
+          "cusip": "464286400",
+          "name": {
+            "ko": "iShares 브라질 ETF",
+            "en": "iShares MSCI Brazil"
+          },
+          "sector": "etf",
+          "region": "other",
+          "weight": 0.03032
+        },
+        {
+          "ticker": "INSM",
+          "cusip": "457669307",
+          "name": {
+            "ko": "인스메드",
+            "en": "Insmed"
+          },
+          "sector": "health",
+          "region": "us",
+          "weight": 0.03006
+        },
+        {
+          "ticker": "RVMD",
+          "cusip": "76155X100",
+          "name": {
+            "ko": "레볼루션 메디슨",
+            "en": "Revolution Medicines"
+          },
+          "sector": "health",
+          "region": "us",
+          "weight": 0.02158
+        },
+        {
+          "ticker": "TBBB",
+          "cusip": "G0896C103",
+          "name": {
+            "ko": "BBB Foods",
+            "en": "BBB Foods"
+          },
+          "sector": "staples",
+          "region": "other",
+          "weight": 0.0209
+        },
+        {
+          "ticker": "STM",
+          "cusip": "861012102",
+          "name": {
+            "ko": "ST마이크로",
+            "en": "STMicroelectronics"
+          },
+          "sector": "tech",
+          "region": "other",
+          "weight": 0.02078
+        },
+        {
+          "ticker": "NAMS",
+          "cusip": "N62509109",
+          "name": {
+            "ko": "뉴암스테르담 파마",
+            "en": "NewAmsterdam Pharma"
+          },
+          "sector": "health",
+          "region": "other",
+          "weight": 0.01968
+        },
+        {
+          "ticker": "CDW",
+          "cusip": "12514G108",
+          "name": {
+            "ko": "CDW",
+            "en": "CDW"
+          },
+          "sector": "tech",
+          "region": "us",
+          "weight": 0.01779
+        },
+        {
+          "ticker": "SGI",
+          "cusip": "88023U101",
+          "name": {
+            "ko": "솜니그룹",
+            "en": "Somnigroup"
+          },
+          "sector": "discretionary",
+          "region": "us",
+          "weight": 0.01487
+        }
+      ]
+    }
+  ]
+}
