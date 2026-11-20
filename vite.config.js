@@ -5,8 +5,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
+      // Follows the backend's PORT (server/dev.mjs passes the same env to both), so
+      // `PORT=8797 npm run dev` keeps the pair together when 8787 is taken by something else.
       '/api': {
-        target: 'http://127.0.0.1:8787',
+        target: `http://127.0.0.1:${process.env.PORT ?? 8787}`,
         changeOrigin: true,
       },
     },
