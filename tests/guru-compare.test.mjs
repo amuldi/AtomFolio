@@ -119,9 +119,10 @@ test('bundled snapshot covers the whole directory and is well formed', () => {
     if (entry.kind === 'etf') assert.match(entry.symbol, /^[A-Z]{2,6}$/, entry.id);
     if (entry.kind === 'buzz') assert.ok(entry.filter, entry.id);
     assert.ok(entry.person.ko && entry.person.en, entry.id);
-    assert.ok(['investor', 'community', 'institution', 'executive', 'korea'].includes(entry.category), entry.id);
+    assert.ok(['investor', 'community', 'institution', 'executive', 'korea', 'fund'].includes(entry.category), entry.id);
     if (entry.kind === 'dart') assert.match(entry.corpCode, /^\d{8}$/, entry.id);
     if (entry.kind !== 'insider' && entry.kind !== 'dart') {
+      if (entry.kind === 'snapshot' && !snapshot.funds[entry.id]) continue; // filled by its own script
       const fund = snapshot.funds[entry.id];
       assert.ok(fund, `${entry.id} missing from snapshot.funds`);
       assert.match(fund.period, /^\d{4}-\d{2}-\d{2}$/);

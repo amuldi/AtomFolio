@@ -565,5 +565,96 @@
     "author": "KRX 259960 · 최대주주·임원 매매",
     "license": "Trademark of its owner — shown for identification",
     "sourceUrl": "https://krafton.com"
+  },
+  "nps_kr": {
+    "kind": "logo",
+    "src": "/gurus/nps_kr.png",
+    "author": "National Pension Service · 미국 주식",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://nps.or.kr"
+  },
+  "arkk": {
+    "kind": "logo",
+    "src": "/gurus/arkk.png",
+    "author": "ARK · 캐시 우드 대표 ETF",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://ark-invest.com"
+  },
+  "arkw": {
+    "kind": "logo",
+    "src": "/gurus/arkw.png",
+    "author": "ARK · 인터넷·AI",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://ark-invest.com"
+  },
+  "arkg": {
+    "kind": "logo",
+    "src": "/gurus/arkg.png",
+    "author": "ARK · 바이오",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://ark-invest.com"
+  },
+  "arkq": {
+    "kind": "logo",
+    "src": "/gurus/arkq.png",
+    "author": "ARK · 로봇",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://ark-invest.com"
+  },
+  "fmagx": {
+    "kind": "logo",
+    "src": "/gurus/fmagx.png",
+    "author": "Fidelity · 피터 린치의 그 펀드",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://fidelity.com"
+  },
+  "fcntx": {
+    "kind": "logo",
+    "src": "/gurus/fcntx.png",
+    "author": "Fidelity · 대형 성장 펀드",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://fidelity.com"
+  },
+  "vfiax": {
+    "kind": "logo",
+    "src": "/gurus/vfiax.ico",
+    "author": "Vanguard · S&P500 대표 펀드",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://vanguard.com"
+  },
+  "vtsax": {
+    "kind": "logo",
+    "src": "/gurus/vtsax.ico",
+    "author": "Vanguard · 미국 전체",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://vanguard.com"
+  },
+  "agthx": {
+    "kind": "logo",
+    "src": "/gurus/agthx.png",
+    "author": "Capital Group · 대형 성장",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://capitalgroup.com"
+  },
+  "prgfx": {
+    "kind": "logo",
+    "src": "/gurus/prgfx.png",
+    "author": "T. Rowe Price · 성장주",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://troweprice.com"
+  },
+  "swppx": {
+    "kind": "logo",
+    "src": "/gurus/swppx.png",
+    "author": "Schwab · S&P500",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://schwab.com"
+  },
+  "fbgrx": {
+    "kind": "logo",
+    "src": "/gurus/fbgrx.png",
+    "author": "Fidelity · 블루칩",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://fidelity.com"
   }
 }

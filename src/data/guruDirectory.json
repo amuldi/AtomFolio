@@ -1,5 +1,5 @@
 {
-  "note": "Curated list for the 유명인 tab. kind=fund → SEC 13F (cik); kind=insider → SEC Form 4 (cik); kind=etf → SEC N-PORT holdings of a fund (symbol); kind=buzz → most-mentioned stocks on a community (ApeWisdom filter, not holdings). category drives the filter chips; aliases widen search. domain gives the logo when there is no free-licensed portrait; wiki is the English Wikipedia article for the portrait. kind=dart → Korean listed company from OpenDART (corpCode): largest shareholders, 5% blockholders, executive trades.",
+  "note": "Curated list for the 유명인 tab. kind=fund → SEC 13F (cik); kind=insider → SEC Form 4 (cik); kind=etf → SEC N-PORT holdings of a fund (symbol); kind=buzz → most-mentioned stocks on a community (ApeWisdom filter, not holdings). category drives the filter chips; aliases widen search. domain gives the logo when there is no free-licensed portrait; wiki is the English Wikipedia article for the portrait. kind=dart → Korean listed company from OpenDART (corpCode): largest shareholders, 5% blockholders, executive trades. kind=snapshot → bundled data only, no live lookup.",
   "people": [
     {
       "id": "berkshire",
@@ -719,6 +719,213 @@
       "domain": "krafton.com"
     },
     {
+      "id": "arkk",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "ARKK",
+      "person": {
+        "ko": "ARK 이노베이션",
+        "en": "ARK Innovation ETF"
+      },
+      "entity": "ARK · 캐시 우드 대표 ETF",
+      "aliases": [
+        "캐시우드",
+        "cathie",
+        "ark"
+      ],
+      "wiki": null,
+      "domain": "ark-invest.com"
+    },
+    {
+      "id": "arkw",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "ARKW",
+      "person": {
+        "ko": "ARK 넥스트 인터넷",
+        "en": "ARK Next Gen Internet ETF"
+      },
+      "entity": "ARK · 인터넷·AI",
+      "aliases": [
+        "캐시우드",
+        "ark"
+      ],
+      "wiki": null,
+      "domain": "ark-invest.com"
+    },
+    {
+      "id": "arkg",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "ARKG",
+      "person": {
+        "ko": "ARK 게노믹스",
+        "en": "ARK Genomic Revolution ETF"
+      },
+      "entity": "ARK · 바이오",
+      "aliases": [
+        "캐시우드",
+        "ark"
+      ],
+      "wiki": null,
+      "domain": "ark-invest.com"
+    },
+    {
+      "id": "arkq",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "ARKQ",
+      "person": {
+        "ko": "ARK 자율주행·로보틱스",
+        "en": "ARK Autonomous Tech & Robotics ETF"
+      },
+      "entity": "ARK · 로봇",
+      "aliases": [
+        "캐시우드",
+        "ark"
+      ],
+      "wiki": null,
+      "domain": "ark-invest.com"
+    },
+    {
+      "id": "fmagx",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "FMAGX",
+      "person": {
+        "ko": "피델리티 마젤란",
+        "en": "Fidelity Magellan Fund"
+      },
+      "entity": "Fidelity · 피터 린치의 그 펀드",
+      "aliases": [
+        "피터린치",
+        "린치",
+        "magellan",
+        "마젤란"
+      ],
+      "wiki": null,
+      "domain": "fidelity.com"
+    },
+    {
+      "id": "fcntx",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "FCNTX",
+      "person": {
+        "ko": "피델리티 콘트라펀드",
+        "en": "Fidelity Contrafund"
+      },
+      "entity": "Fidelity · 대형 성장 펀드",
+      "aliases": [
+        "콘트라",
+        "contrafund"
+      ],
+      "wiki": null,
+      "domain": "fidelity.com"
+    },
+    {
+      "id": "vfiax",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "VFIAX",
+      "person": {
+        "ko": "뱅가드 S&P500 인덱스",
+        "en": "Vanguard 500 Index Fund"
+      },
+      "entity": "Vanguard · S&P500 대표 펀드",
+      "aliases": [
+        "s&p",
+        "sp500",
+        "인덱스",
+        "보글"
+      ],
+      "wiki": null,
+      "domain": "vanguard.com"
+    },
+    {
+      "id": "vtsax",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "VTSAX",
+      "person": {
+        "ko": "뱅가드 미국 전체 시장",
+        "en": "Vanguard Total Stock Market"
+      },
+      "entity": "Vanguard · 미국 전체",
+      "aliases": [
+        "토탈",
+        "total market"
+      ],
+      "wiki": null,
+      "domain": "vanguard.com"
+    },
+    {
+      "id": "agthx",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "AGTHX",
+      "person": {
+        "ko": "아메리칸 펀드 그로스",
+        "en": "Growth Fund of America"
+      },
+      "entity": "Capital Group · 대형 성장",
+      "aliases": [
+        "캐피털",
+        "growth fund"
+      ],
+      "wiki": null,
+      "domain": "capitalgroup.com"
+    },
+    {
+      "id": "prgfx",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "PRGFX",
+      "person": {
+        "ko": "T. 로우 프라이스 성장주",
+        "en": "T. Rowe Price Growth Stock"
+      },
+      "entity": "T. Rowe Price · 성장주",
+      "aliases": [
+        "로우프라이스"
+      ],
+      "wiki": null,
+      "domain": "troweprice.com"
+    },
+    {
+      "id": "swppx",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "SWPPX",
+      "person": {
+        "ko": "슈왑 S&P500 인덱스",
+        "en": "Schwab S&P 500 Index"
+      },
+      "entity": "Schwab · S&P500",
+      "aliases": [
+        "슈왑",
+        "s&p"
+      ],
+      "wiki": null,
+      "domain": "schwab.com"
+    },
+    {
+      "id": "fbgrx",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "FBGRX",
+      "person": {
+        "ko": "피델리티 블루칩 그로스",
+        "en": "Fidelity Blue Chip Growth"
+      },
+      "entity": "Fidelity · 블루칩",
+      "aliases": [
+        "블루칩"
+      ],
+      "wiki": null,
+      "domain": "fidelity.com"
+    },
+    {
       "id": "nps",
       "kind": "fund",
       "category": "institution",
@@ -728,6 +935,24 @@
         "en": "Korea NPS"
       },
       "entity": "National Pension Service · 미국 주식",
+      "wiki": null,
+      "domain": "nps.or.kr"
+    },
+    {
+      "id": "nps_kr",
+      "kind": "snapshot",
+      "category": "korea",
+      "person": {
+        "ko": "국민연금 · 국내 주식",
+        "en": "Korea NPS · Domestic"
+      },
+      "entity": "국민연금공단 · 5% 이상 보유 종목",
+      "aliases": [
+        "국민연금",
+        "nps",
+        "연금",
+        "국내"
+      ],
       "wiki": null,
       "domain": "nps.or.kr"
     },

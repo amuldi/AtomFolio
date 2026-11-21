@@ -216,19 +216,29 @@ export function PortfolioAllocationRing({
   );
 }
 
+const COLLAPSED_ROWS = 5;
+
+// Donut + legend. The legend opens in two steps: the top few rows first ("전체 N개 펼치기" shows
+// the rest), and any row can be pressed to open what is behind that slice — its share, how it has
+// done and what it is worth.
 export function PortfolioAllocationCard({
   allocation,
   language,
   onInteract,
   onPointerDown,
+  formatValue = null,
+  collapsedRows = COLLAPSED_ROWS,
   className = 'allocation-panel',
 }) {
   const panelRef = useRef(null);
   const text = textFor(language);
+  const en = language === 'en';
   // Just which segment, no cursor position to track — the hover effect is the donut's own center
   // text swapping plus the segment/legend highlight (see PortfolioAllocationRing), not a
   // cursor-anchored floating box, so there's nothing here that needs a coordinate.
   const [hoverInfo, setHoverInfo] = useState(null);
+  const [showAll, setShowAll] = useState(false);
+  const [openId, setOpenId] = useState(null);
 
   const setSegmentHover = (segment) => {
     setHoverInfo({ segmentId: segment.id });
@@ -237,6 +247,14 @@ export function PortfolioAllocationCard({
   const clearSegmentHover = () => {
     setHoverInfo(null);
   };
+
+  const total = allocation.segments.length;
+  const canFold = total > collapsedRows + 1;
+  const visible = canFold && !showAll ? allocation.segments.slice(0, collapsedRows) : allocation.segments;
+  const hiddenWeight = canFold && !showAll
+    ? allocation.segments.slice(collapsedRows).reduce((sum, segment) => sum + segment.weight, 0)
+    : 0;
+  const maxWeight = Math.max(0.0001, ...allocation.segments.map((segment) => segment.weight));
 
   return (
     <aside
@@ -260,35 +278,94 @@ export function PortfolioAllocationCard({
       </div>
 
       <div className="allocation-panel__legend">
-        {allocation.segments.map((segment, index) => {
+        {visible.map((segment) => {
+          const index = allocation.segments.indexOf(segment);
           const palette = ALLOCATION_SEGMENT_PALETTE[index % ALLOCATION_SEGMENT_PALETTE.length];
           const label = segment.isUnknown
             ? text.allocationUnknown
             : translateDisplayValue(segment.label, language);
           const isHovered = hoverInfo?.segmentId === segment.id;
           const isDimmed = hoverInfo?.segmentId && !isHovered;
+          const isOpen = openId === segment.id;
+          const hasReturn = Number.isFinite(segment.returnRate);
+          const returnTone = !hasReturn || Math.abs(segment.returnRate) < 0.005 ? '' : segment.returnRate > 0 ? 'positive' : 'negative';
 
           return (
             <div
               key={`legend-${segment.id}`}
-              className={`allocation-panel__legend-row${isHovered ? ' is-active' : ''}${
+              className={`allocation-panel__legend-item${isOpen ? ' is-open' : ''}${isHovered ? ' is-active' : ''}${
                 isDimmed ? ' is-dimmed' : ''
               }`}
+              style={{ '--segment-color': palette.main, '--segment-shadow': palette.glow }}
               onPointerEnter={() => setSegmentHover(segment)}
               onPointerLeave={clearSegmentHover}
             >
-              <span
-                className="allocation-panel__swatch"
-                style={{ '--segment-color': palette.main, '--segment-shadow': palette.glow }}
-                aria-hidden="true"
-              />
-              <span className="allocation-panel__legend-label">{label}</span>
-              <span className="allocation-panel__legend-value">{formatAllocationPercent(segment.weight)}</span>
+              <button
+                type="button"
+                className="allocation-panel__legend-row"
+                aria-expanded={isOpen}
+                onClick={() => {
+                  onInteract?.();
+                  setOpenId(isOpen ? null : segment.id);
+                }}
+              >
+                <span className="allocation-panel__swatch" aria-hidden="true" />
+                <span className="allocation-panel__legend-label" title={label}>
+                  {label}
+                </span>
+                <span className="allocation-panel__legend-value">{formatAllocationPercent(segment.weight)}</span>
+                <i className="allocation-panel__chevron" aria-hidden="true" />
+              </button>
+              {isOpen ? (
+                <dl className="allocation-panel__detail">
+                  <div className="allocation-panel__detail-bar" aria-hidden="true">
+                    <i style={{ width: `${Math.max(3, (segment.weight / maxWeight) * 100)}%` }} />
+                  </div>
+                  {Number.isFinite(segment.value) && formatValue ? (
+                    <div>
+                      <dt>{en ? 'Value' : '평가금액'}</dt>
+                      <dd>{formatValue(segment.value)}</dd>
+                    </div>
+                  ) : null}
+                  <div>
+                    <dt>{en ? 'Return' : '수익률'}</dt>
+                    <dd className={returnTone}>
+                      {hasReturn
+                        ? `${segment.returnRate > 0.005 ? '▲' : segment.returnRate < -0.005 ? '▼' : ''}${Math.abs(segment.returnRate).toFixed(1)}%`
+                        : '-'}
+                    </dd>
+                  </div>
+                  {segment.count > 1 ? (
+                    <div>
+                      <dt>{en ? 'Holdings' : '포함 종목'}</dt>
+                      <dd>{en ? segment.count : `${segment.count}개`}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+              ) : null}
             </div>
           );
         })}
+        {canFold ? (
+          <button
+            type="button"
+            className="allocation-panel__more"
+            aria-expanded={showAll}
+            onClick={() => {
+              onInteract?.();
+              setShowAll((value) => !value);
+            }}
+          >
+            {showAll
+              ? en
+                ? 'Show fewer'
+                : '접기'
+              : en
+                ? `Show all ${total} · ${formatAllocationPercent(hiddenWeight)} more`
+                : `전체 ${total}개 펼치기 · 나머지 ${formatAllocationPercent(hiddenWeight)}`}
+          </button>
+        ) : null}
       </div>
     </aside>
   );
 }
-

@@ -45,6 +45,7 @@ const CATEGORY_FILTERS = [
   ['investor', '투자자', 'Investors'],
   ['community', '커뮤니티·밈', 'Community'],
   ['korea', '한국', 'Korea'],
+  ['fund', '펀드·ETF', 'Funds'],
   ['institution', '기관', 'Institutions'],
   ['executive', '기업인', 'Executives'],
 ];
@@ -55,6 +56,7 @@ function liveKeyOf(entry) {
   if (entry.kind === 'etf') return `etf:${entry.symbol}`;
   if (entry.kind === 'buzz') return `buzz:${entry.filter}`;
   if (entry.kind === 'dart') return `dart:${entry.corpCode}`;
+  if (entry.kind === 'snapshot') return `static:${entry.id}`;
   return `cik:${entry.cik}`;
 }
 
@@ -315,6 +317,8 @@ export function GuruPanel({ analyticsSummary, activePortfolio, language, onInter
   }, [selection]);
 
   const loadLive = (key, { force = false } = {}) => {
+    // Snapshot-only entries (e.g. NPS domestic) have no live source.
+    if (key.startsWith('static:')) return;
     const current = liveRef.current[key];
     if (
       !force &&

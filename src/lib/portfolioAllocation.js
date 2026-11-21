@@ -477,9 +477,11 @@ export function createPortfolioAllocation(items, options = {}) {
   const groupingMode = resolveGroupingMode(items, weightMode, classificationMode);
   const grouped = new Map();
 
+  const itemKeys = [];
   items.forEach((item, index) => {
     const descriptor = resolveGroupDescriptor(item, groupingMode, classificationMode, index);
     const key = descriptor.key || '__unknown__';
+    itemKeys.push(key);
     const previous = grouped.get(key) ?? {
       key,
       label: descriptor.label,
@@ -493,16 +495,6 @@ export function createPortfolioAllocation(items, options = {}) {
     grouped.set(key, previous);
   });
 
-  const segments = [...grouped.values()]
-    .filter((segment) => segment.weight > 0)
-    .sort((left, right) => right.weight - left.weight)
-    .map((segment, index) => ({
-      ...segment,
-      id: `${segment.key}-${index}`,
-    }));
-
-  let returnWeight = 0;
-  let returnTotal = 0;
   // Portfolio return = Σ profit / Σ cost, i.e. per-holding returns averaged by *cost* weight.
   // Averaging them by market-value weight (the display weights above) inflates winners: a +1840%
   // holding is 11% of market value but under 1% of cost, which showed +213.6% for a -28.9%
@@ -513,9 +505,20 @@ export function createPortfolioAllocation(items, options = {}) {
       : null;
   const returnWeights = costWeights ?? weights;
 
+  let returnWeight = 0;
+  let returnTotal = 0;
+  // The same sums per segment, so a segment can say how it did and what it is worth.
+  const perSegment = new Map();
+  const hasValues = Array.isArray(marketValues) && marketValues.length === items.length;
+
   items.forEach((item, index) => {
     const parsedReturn = parseItemReturn(item);
     const weight = returnWeights[index] ?? 0;
+    const entry = perSegment.get(itemKeys[index]) ?? { returnWeight: 0, returnTotal: 0, value: 0 };
+    if (hasValues && Number.isFinite(marketValues[index])) {
+      entry.value += marketValues[index];
+    }
+    perSegment.set(itemKeys[index], entry);
 
     if (!Number.isFinite(parsedReturn) || weight <= 0) {
       return;
@@ -523,7 +526,23 @@ export function createPortfolioAllocation(items, options = {}) {
 
     returnWeight += weight;
     returnTotal += parsedReturn * weight;
+    entry.returnWeight += weight;
+    entry.returnTotal += parsedReturn * weight;
   });
+
+  const segments = [...grouped.values()]
+    .filter((segment) => segment.weight > 0)
+    .sort((left, right) => right.weight - left.weight)
+    .map((segment, index) => {
+      const sums = perSegment.get(segment.key);
+      return {
+        ...segment,
+        id: `${segment.key}-${index}`,
+        returnRate: sums?.returnWeight > 0 ? sums.returnTotal / sums.returnWeight : null,
+        value: hasValues && sums ? sums.value : null,
+      };
+    });
+
 
   return {
     holdingsCount: items.length,
