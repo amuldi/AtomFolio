@@ -278,9 +278,17 @@ The six axis scores don't depend on investing style; a style only changes the we
 
 - The Compare tab puts every portfolio in one table: return, score, largest holding, and concentration (effective number of holdings).
 - Clicking a row switches to that portfolio. (Shown once there are two or more portfolios.)
-- **Famous investors**: pick Warren Buffett, Korea's NPS (US stocks), David Tepper, Li Lu or Stanley Druckenmiller from their SEC 13F filings to preview their atom; pressing **Compare** fuses it with yours in an animation and opens the common share, common holdings, sector, region and concentration comparison (`src/lib/guruCompare.js`, `src/components/tool-drawer/GuruComparePanel.jsx`).
-- Common share = for each common holding, the smaller of your weight and theirs, summed. Only each investor's top 15 are compared by name.
-- 13F filings reflect quarter-end holdings filed up to 45 days later, so the as-of date and its age are always shown. Refresh the data with `npm run data:gurus` (mid Feb/May/Aug/Nov; set `SEC_USER_AGENT`).
+
+### 10-1. Famous portfolios
+
+The **Famous** tab on the left rail (`src/components/tool-drawer/GuruPanel.jsx`).
+
+- Search 30 investors (Buffett, Dalio, Cathie Wood, Soros, Griffin, Tepper…), 22 institutions (Korea's NPS, KIC and Bank of Korea, BlackRock, Vanguard, Fidelity, Goldman Sachs, Norway's and Saudi Arabia's sovereign funds…) and 15 executives (Jensen Huang, Musk, Zuckerberg…) by name, fund or holding; anyone else loads straight from an SEC-wide search.
+- The pick is drawn **on the main stage as the app's own atom** (`GuruStage.jsx`, the same `AtomSketch`). **Compare** brings my atom in, joins shared holdings with bonds, and opens the common-share, sector, region and concentration cards.
+- 13F filers: what they bought and sold since last quarter. Executives: latest Form 4 trades (filed within 2 business days).
+- Avatars are free-licensed Wikimedia Commons photos, otherwise the organisation's own logo (`npm run data:guru-photos`).
+- Sectors and regions not in the hand-made table come from the issuer's SEC industry code (SIC) and business address.
+- The server needs `SEC_CONTACT_EMAIL` (sec.gov requirement). Refresh with `npm run data:gurus`.
 
 ### 11. This month
 

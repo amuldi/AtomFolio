@@ -131,6 +131,162 @@ export const SECURITY_META = {
   ARKK: ['ARKK', 'ARK Innovation ETF', 'etf', 'us'],
   EWY: ['iShares 한국 ETF', 'iShares MSCI South Korea', 'etf', 'kr'],
   EWZ: ['iShares 브라질 ETF', 'iShares MSCI Brazil', 'etf', 'other'],
+  // Added for the wider 13F / Form 4 directory (src/data/guruDirectory.json).
+  AMAT: ['어플라이드 머티어리얼즈', 'Applied Materials', 'tech', 'us'],
+  APH: ['암페놀', 'Amphenol', 'tech', 'us'],
+  APP: ['앱러빈', 'AppLovin', 'tech', 'us'],
+  CRWV: ['코어위브', 'CoreWeave', 'tech', 'us'],
+  DDOG: ['데이터독', 'Datadog', 'tech', 'us'],
+  FLEX: ['플렉스', 'Flex', 'tech', 'us'],
+  GDS: ['GDS홀딩스', 'GDS Holdings', 'tech', 'cn'],
+  NATL: ['NCR 아틀레오스', 'NCR Atleos', 'tech', 'us'],
+  QCOM: ['퀄컴', 'Qualcomm', 'tech', 'us'],
+  SNDK: ['샌디스크', 'SanDisk', 'tech', 'us'],
+  VRSN: ['베리사인', 'VeriSign', 'tech', 'us'],
+  FICO: ['페어아이작', 'Fair Isaac', 'tech', 'us'],
+  FTNT: ['포티넷', 'Fortinet', 'tech', 'us'],
+  KEYS: ['키사이트', 'Keysight', 'tech', 'us'],
+  ROP: ['로퍼 테크놀로지스', 'Roper Technologies', 'tech', 'us'],
+  NOW: ['서비스나우', 'ServiceNow', 'tech', 'us'],
+  TXN: ['텍사스 인스트루먼트', 'Texas Instruments', 'tech', 'us'],
+  CCCS: ['CCC 인텔리전트', 'CCC Intelligent Solutions', 'tech', 'us'],
+  CCC: ['CCC 인텔리전트', 'CCC Intelligent Solutions', 'tech', 'us'],
+  SMCI: ['슈퍼마이크로', 'Super Micro Computer', 'tech', 'us'],
+  SUNB: ['선벨트 렌털스', 'Sunbelt Rentals', 'industrials', 'us'],
+  ACA: ['아르코사', 'Arcosa', 'industrials', 'us'],
+  NBIS: ['네비우스', 'Nebius', 'tech', 'other'],
+  ECHO: ['에코스타', 'EchoStar', 'comm', 'us'],
+  TKO: ['TKO그룹', 'TKO Group', 'comm', 'us'],
+  FWONK: ['리버티 포뮬러원', 'Liberty Formula One', 'comm', 'us'],
+  LYV: ['라이브네이션', 'Live Nation', 'comm', 'us'],
+  TDS: ['TDS', 'Telephone & Data Systems', 'comm', 'us'],
+  WBD: ['워너브라더스 디스커버리', 'Warner Bros. Discovery', 'comm', 'us'],
+  EA: ['일렉트로닉 아츠', 'Electronic Arts', 'comm', 'us'],
+  LBTYK: ['리버티 글로벌', 'Liberty Global', 'comm', 'other'],
+  CZR: ['시저스', 'Caesars Entertainment', 'discretionary', 'us'],
+  GPC: ['제뉴인 파츠', 'Genuine Parts', 'discretionary', 'us'],
+  HD: ['홈디포', 'Home Depot', 'discretionary', 'us'],
+  M: ['메이시스', "Macy's", 'discretionary', 'us'],
+  MNRO: ['먼로', 'Monro', 'discretionary', 'us'],
+  QSR: ['레스토랑 브랜즈', 'Restaurant Brands', 'discretionary', 'other'],
+  ABNB: ['에어비앤비', 'Airbnb', 'discretionary', 'us'],
+  MAR: ['메리어트', 'Marriott', 'discretionary', 'us'],
+  ORLY: ['오라일리', "O'Reilly Automotive", 'discretionary', 'us'],
+  TJX: ['TJX', 'TJX Companies', 'discretionary', 'us'],
+  YUM: ['얌브랜즈', 'Yum! Brands', 'discretionary', 'us'],
+  DASH: ['도어대시', 'DoorDash', 'discretionary', 'us'],
+  NCLH: ['노르웨이지안 크루즈', 'Norwegian Cruise Line', 'discretionary', 'us'],
+  DLTR: ['달러트리', 'Dollar Tree', 'staples', 'us'],
+  KOF: ['코카콜라 펨사', 'Coca-Cola FEMSA', 'staples', 'other'],
+  MNST: ['몬스터 베버리지', 'Monster Beverage', 'staples', 'us'],
+  WMT: ['월마트', 'Walmart', 'staples', 'us'],
+  PM: ['필립모리스', 'Philip Morris', 'staples', 'us'],
+  'BF.B': ['브라운포맨', 'Brown-Forman', 'staples', 'us'],
+  'BF.A': ['브라운포맨', 'Brown-Forman', 'staples', 'us'],
+  CASY: ['케이시스', "Casey's", 'staples', 'us'],
+  CHD: ['처치앤드와이트', 'Church & Dwight', 'staples', 'us'],
+  HLF: ['허벌라이프', 'Herbalife', 'staples', 'us'],
+  NSRGY: ['네슬레', 'Nestlé', 'staples', 'other'],
+  AON: ['에이온', 'Aon', 'financials', 'us'],
+  CME: ['CME그룹', 'CME Group', 'financials', 'us'],
+  COF: ['캐피털원', 'Capital One', 'financials', 'us'],
+  CRCL: ['서클', 'Circle', 'financials', 'us'],
+  HOOD: ['로빈후드', 'Robinhood', 'financials', 'us'],
+  MKTX: ['마켓액세스', 'MarketAxess', 'financials', 'us'],
+  V: ['비자', 'Visa', 'financials', 'us'],
+  MA: ['마스터카드', 'Mastercard', 'financials', 'us'],
+  BN: ['브룩필드', 'Brookfield', 'financials', 'other'],
+  GSHD: ['구스헤드', 'Goosehead Insurance', 'financials', 'us'],
+  KKR: ['KKR', 'KKR', 'financials', 'us'],
+  KSPI: ['카스피', 'Kaspi.kz', 'financials', 'other'],
+  UNM: ['유넘', 'Unum', 'financials', 'us'],
+  WBS: ['웹스터 파이낸셜', 'Webster Financial', 'financials', 'us'],
+  CVI: ['CVR 에너지', 'CVR Energy', 'energy', 'us'],
+  OKE: ['원오크', 'ONEOK', 'energy', 'us'],
+  RIG: ['트랜스오션', 'Transocean', 'energy', 'us'],
+  SD: ['샌드리지 에너지', 'SandRidge Energy', 'energy', 'us'],
+  SHEL: ['셸', 'Shell', 'energy', 'other'],
+  BLCO: ['바슈롬', 'Bausch + Lomb', 'health', 'us'],
+  ELV: ['엘레반스 헬스', 'Elevance Health', 'health', 'us'],
+  MOH: ['몰리나 헬스케어', 'Molina Healthcare', 'health', 'us'],
+  SDGR: ['슈뢰딩거', 'Schrödinger', 'health', 'us'],
+  TEM: ['템퍼스 AI', 'Tempus AI', 'health', 'us'],
+  TFX: ['텔레플렉스', 'Teleflex', 'health', 'us'],
+  TWST: ['트위스트 바이오사이언스', 'Twist Bioscience', 'health', 'us'],
+  TXG: ['10x 지노믹스', '10x Genomics', 'health', 'us'],
+  WST: ['웨스트 파마슈티컬', 'West Pharmaceutical', 'health', 'us'],
+  IDXX: ['아이덱스', 'IDEXX Labs', 'health', 'us'],
+  SYK: ['스트라이커', 'Stryker', 'health', 'us'],
+  VEEV: ['비바 시스템즈', 'Veeva Systems', 'health', 'us'],
+  WAT: ['워터스', 'Waters', 'health', 'us'],
+  CRSP: ['크리스퍼', 'CRISPR Therapeutics', 'health', 'other'],
+  TEVA: ['테바', 'Teva', 'health', 'other'],
+  CAT: ['캐터필러', 'Caterpillar', 'industrials', 'us'],
+  CNI: ['캐나디언 내셔널 철도', 'Canadian National Railway', 'industrials', 'other'],
+  CTRI: ['센추리', 'Centuri', 'industrials', 'us'],
+  DE: ['디어', 'Deere', 'industrials', 'us'],
+  DNOW: ['DNOW', 'DNOW', 'industrials', 'us'],
+  FDX: ['페덱스', 'FedEx', 'industrials', 'us'],
+  FERG: ['퍼거슨', 'Ferguson', 'industrials', 'us'],
+  GTLS: ['차트 인더스트리즈', 'Chart Industries', 'industrials', 'us'],
+  HONA: ['허니웰 에어로스페이스', 'Honeywell Aerospace', 'industrials', 'us'],
+  IEP: ['아이칸 엔터프라이즈', 'Icahn Enterprises', 'industrials', 'us'],
+  JBLU: ['제트블루', 'JetBlue', 'industrials', 'us'],
+  SITE: ['사이트원', 'SiteOne', 'industrials', 'us'],
+  UAL: ['유나이티드항공', 'United Airlines', 'industrials', 'us'],
+  UNP: ['유니언퍼시픽', 'Union Pacific', 'industrials', 'us'],
+  WCC: ['웨스코', 'WESCO', 'industrials', 'us'],
+  WCN: ['웨이스트 커넥션스', 'Waste Connections', 'industrials', 'us'],
+  WM: ['웨이스트 매니지먼트', 'Waste Management', 'industrials', 'us'],
+  ADP: ['ADP', 'Automatic Data Processing', 'industrials', 'us'],
+  APG: ['API그룹', 'APi Group', 'industrials', 'us'],
+  CPRT: ['코파트', 'Copart', 'industrials', 'us'],
+  GEV: ['GE 버노바', 'GE Vernova', 'industrials', 'us'],
+  NSC: ['노퍽 서던', 'Norfolk Southern', 'industrials', 'us'],
+  ROL: ['롤린스', 'Rollins', 'industrials', 'us'],
+  TDG: ['트랜스다임', 'TransDigm', 'industrials', 'us'],
+  AEP: ['아메리칸 일렉트릭 파워', 'American Electric Power', 'utilities', 'us'],
+  ETR: ['엔터지', 'Entergy', 'utilities', 'us'],
+  DLR: ['디지털 리얼티', 'Digital Realty', 'realestate', 'us'],
+  AVB: ['애벌론베이', 'AvalonBay', 'realestate', 'us'],
+  CSGP: ['코스타', 'CoStar', 'realestate', 'us'],
+  CRH: ['CRH', 'CRH', 'materials', 'other'],
+  ECL: ['에코랩', 'Ecolab', 'materials', 'us'],
+  IFF: ['IFF', 'International Flavors & Fragrances', 'materials', 'us'],
+  NEM: ['뉴몬트', 'Newmont', 'materials', 'us'],
+  NUE: ['뉴코어', 'Nucor', 'materials', 'us'],
+  UAN: ['CVR 파트너스', 'CVR Partners', 'materials', 'us'],
+  MLM: ['마틴 마리에타', 'Martin Marietta', 'materials', 'us'],
+  HCC: ['워리어 멧 콜', 'Warrior Met Coal', 'materials', 'us'],
+  AMR: ['알파 메탈러지컬', 'Alpha Metallurgical', 'materials', 'us'],
+  CRS: ['카펜터 테크놀로지', 'Carpenter Technology', 'materials', 'us'],
+  AXTA: ['액살타', 'Axalta', 'materials', 'us'],
+  LIN: ['린데', 'Linde', 'materials', 'us'],
+  // Community / meme favourites.
+  GME: ['게임스탑', 'GameStop', 'discretionary', 'us'],
+  AMC: ['AMC 엔터테인먼트', 'AMC Entertainment', 'comm', 'us'],
+  MSTR: ['스트래티지', 'Strategy (MicroStrategy)', 'tech', 'us'],
+  ASTS: ['AST 스페이스모바일', 'AST SpaceMobile', 'comm', 'us'],
+  RKLB: ['로켓랩', 'Rocket Lab', 'industrials', 'us'],
+  SOFI: ['소파이', 'SoFi', 'financials', 'us'],
+  QBTS: ['디웨이브', 'D-Wave Quantum', 'tech', 'us'],
+  IONQ: ['아이온큐', 'IonQ', 'tech', 'us'],
+  RGTI: ['리게티', 'Rigetti Computing', 'tech', 'us'],
+  OKLO: ['오클로', 'Oklo', 'utilities', 'us'],
+  MARA: ['마라 홀딩스', 'MARA Holdings', 'financials', 'us'],
+  MRNA: ['모더나', 'Moderna', 'health', 'us'],
+  LULU: ['룰루레몬', 'Lululemon', 'discretionary', 'us'],
+  SLM: ['샐리메이', 'Sallie Mae', 'financials', 'us'],
+  BRKR: ['브루커', 'Bruker', 'health', 'us'],
+  AAOI: ['어플라이드 옵토', 'Applied Optoelectronics', 'tech', 'us'],
+  CRDO: ['크레도', 'Credo Technology', 'tech', 'us'],
+  BE: ['블룸에너지', 'Bloom Energy', 'industrials', 'us'],
+  COHR: ['코히어런트', 'Coherent', 'tech', 'us'],
+  DTE: ['DTE 에너지', 'DTE Energy', 'utilities', 'us'],
+  IT: ['가트너', 'Gartner', 'tech', 'us'],
+  EWW: ['iShares 멕시코 ETF', 'iShares MSCI Mexico', 'etf', 'other'],
+  IEMG: ['iShares 신흥국 ETF', 'iShares Core MSCI EM', 'etf', 'other'],
+  VWO: ['Vanguard 신흥국 ETF', 'Vanguard FTSE Emerging Markets', 'etf', 'other'],
   '005930': ['삼성전자', 'Samsung Electronics', 'tech', 'kr'],
   '000660': ['SK하이닉스', 'SK hynix', 'tech', 'kr'],
   '035420': ['NAVER', 'NAVER', 'comm', 'kr'],
@@ -145,7 +301,19 @@ export const SECURITY_META = {
   '005490': ['POSCO홀딩스', 'POSCO Holdings', 'materials', 'kr'],
 };
 
-const TICKER_ALIASES = { GOOG: 'GOOGL', 'BRK/B': 'BRK.B', 'BRK-B': 'BRK.B', BRKB: 'BRK.B' };
+// Share classes of the same company compare as one holding.
+const TICKER_ALIASES = {
+  GOOG: 'GOOGL',
+  'BRK/B': 'BRK.B',
+  'BRK-B': 'BRK.B',
+  BRKB: 'BRK.B',
+  'BRK/A': 'BRK.B',
+  'BRK-A': 'BRK.B',
+  'BRK.A': 'BRK.B',
+  'BF/B': 'BF.B',
+  'BF/A': 'BF.B',
+  'BF.A': 'BF.B',
+};
 
 export function normalizeTicker(value) {
   const raw = String(value ?? '')
@@ -312,6 +480,44 @@ export function compareWithGuru(userHoldings = [], guru) {
     guruRegions: bucketWeights(guruHoldings, 'region', rest),
     userConcentration: concentrationOf(userHoldings.map((holding) => holding.weight)),
   };
+}
+
+const searchKey = (value) => String(value ?? '').toLowerCase().replace(/[\s·.,'&()-]/g, '');
+
+// Directory search for the 유명인 tab: matches names (Korean or English), the fund/company, and
+// — so "애플" or "NVDA" finds who holds or trades it — the bundled holdings and Form 4 issuers.
+// Name matches come first; holding matches are ordered by how much of the portfolio it is.
+export function searchGuruDirectory(people = [], snapshot = null, query = '') {
+  const needle = searchKey(query);
+  if (!needle) {
+    return people.map((entry) => ({ entry, holding: null }));
+  }
+  const nameHits = [];
+  const holdingHits = [];
+  for (const entry of people) {
+    const names = [entry.person?.ko, entry.person?.en, entry.entity, entry.id, ...(entry.aliases ?? [])].map(searchKey);
+    if (names.some((name) => name.includes(needle))) {
+      nameHits.push({ entry, holding: null });
+      continue;
+    }
+    const fund = snapshot?.funds?.[entry.id];
+    const insider = snapshot?.insiders?.[entry.id];
+    const candidates = [
+      ...(fund?.holdings ?? []).map((holding) => ({ ...holding, source: 'holding' })),
+      ...(insider?.issuers ?? []).map((issuer) => ({
+        ticker: issuer.ticker,
+        name: { ko: issuer.name, en: issuer.name },
+        weight: 0,
+        source: 'issuer',
+      })),
+    ];
+    const hit = candidates.find((holding) =>
+      [holding.ticker, holding.name?.ko, holding.name?.en].map(searchKey).some((key) => key && key.includes(needle)),
+    );
+    if (hit) holdingHits.push({ entry, holding: hit });
+  }
+  holdingHits.sort((a, b) => (b.holding.weight ?? 0) - (a.holding.weight ?? 0));
+  return [...nameHits, ...holdingHits];
 }
 
 export function daysSince(dateText, today = new Date()) {

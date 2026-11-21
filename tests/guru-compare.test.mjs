@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 import {
@@ -13,9 +13,13 @@ import {
   normalizeTicker,
   resolveUserRegion,
   resolveUserSector,
+  searchGuruDirectory,
 } from '../src/lib/guruCompare.js';
 
-const guruData = JSON.parse(readFileSync(new URL('../src/data/guruPortfolios.json', import.meta.url)));
+const readJson = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url)));
+const snapshot = readJson('../src/data/guruPortfolios.json');
+const directory = readJson('../src/data/guruDirectory.json');
+const photos = readJson('../src/data/guruPhotos.json');
 
 const guru = {
   id: 'test',
@@ -107,18 +111,61 @@ test('concentration and date helpers', () => {
   assert.equal(daysSince('not a date'), null);
 });
 
-test('bundled 13F data is well formed', () => {
-  assert.ok(guruData.gurus.length >= 1);
-  for (const entry of guruData.gurus) {
-    assert.match(entry.period, /^\d{4}-\d{2}-\d{2}$/);
+test('bundled snapshot covers the whole directory and is well formed', () => {
+  for (const entry of directory.people) {
+    if (entry.kind === 'fund' || entry.kind === 'insider') assert.match(entry.cik, /^\d+$/, entry.id);
+    if (entry.kind === 'etf') assert.match(entry.symbol, /^[A-Z]{2,6}$/, entry.id);
+    if (entry.kind === 'buzz') assert.ok(entry.filter, entry.id);
     assert.ok(entry.person.ko && entry.person.en, entry.id);
-    assert.ok(entry.holdings.length > 0 && entry.holdings.length <= guruData.topN, entry.id);
-    const total = entry.holdings.reduce((sum, holding) => sum + holding.weight, 0);
-    assert.ok(total > 0 && total <= 1.0001, `${entry.id} weights sum to ${total}`);
-    for (const holding of entry.holdings) {
-      assert.ok(holding.ticker, `${entry.id} has a holding without a ticker`);
-      assert.ok(SECTOR_LABELS[holding.sector], `${entry.id} ${holding.ticker}: sector ${holding.sector}`);
-      assert.ok(REGION_LABELS[holding.region], `${entry.id} ${holding.ticker}: region ${holding.region}`);
+    assert.ok(['investor', 'community', 'institution', 'executive'].includes(entry.category), entry.id);
+    if (entry.kind !== 'insider') {
+      const fund = snapshot.funds[entry.id];
+      assert.ok(fund, `${entry.id} missing from snapshot.funds`);
+      assert.match(fund.period, /^\d{4}-\d{2}-\d{2}$/);
+      assert.ok(fund.holdings.length > 0 && fund.holdings.length <= snapshot.topN, entry.id);
+      const total = fund.holdings.reduce((sum, holding) => sum + holding.weight, 0);
+      assert.ok(total > 0 && total <= 1.0001, `${entry.id} weights sum to ${total}`);
+      for (const holding of [...fund.holdings, ...fund.changes]) {
+        assert.ok(holding.ticker, `${entry.id} has a holding without a ticker`);
+        assert.ok(SECTOR_LABELS[holding.sector], `${entry.id} ${holding.ticker}: sector ${holding.sector}`);
+        assert.ok(REGION_LABELS[holding.region], `${entry.id} ${holding.ticker}: region ${holding.region}`);
+      }
+    } else {
+      const insider = snapshot.insiders[entry.id];
+      assert.ok(insider?.trades?.length, `${entry.id} missing Form 4 trades`);
     }
   }
+});
+
+test('every avatar is a free-licensed photo or the organisation logo, with a credit and a file', () => {
+  for (const [id, image] of Object.entries(photos)) {
+    assert.ok(directory.people.some((entry) => entry.id === id), `${id} not in directory`);
+    assert.ok(['photo', 'logo'].includes(image.kind), id);
+    if (image.kind === 'photo') {
+      assert.match(image.license, /^(cc[ -]?by|cc0|public domain|pd|ogl)/i, id);
+    }
+    assert.ok(image.author && image.sourceUrl, id);
+    assert.ok(existsSync(new URL(`../public${image.src}`, import.meta.url)), `${id}: ${image.src} missing`);
+  }
+  // Almost everyone has a face or a logo; the few without a free photo or a usable logo
+  // (Druckenmiller, Li Lu, Tom Russo, Michael Burry) get a monogram.
+  const missing = directory.people.filter((entry) => !photos[entry.id]);
+  assert.ok(missing.length <= 5, `missing avatars: ${missing.map((entry) => entry.id).join(', ')}`);
+});
+
+test('directory search matches names in either language, funds, and holdings', () => {
+  const ids = (query) => searchGuruDirectory(directory.people, snapshot, query).map(({ entry }) => entry.id);
+  assert.equal(ids('').length, directory.people.length);
+  assert.deepEqual(ids('버핏'), ['berkshire']);
+  assert.deepEqual(ids('buffett'), ['berkshire']);
+  assert.deepEqual(ids('Bridgewater'), ['bridgewater']);
+  // "애플" is nobody's name: it finds who holds Apple, biggest position first.
+  const apple = searchGuruDirectory(directory.people, snapshot, '애플');
+  assert.ok(apple.length > 1);
+  assert.equal(apple[0].entry.id, 'berkshire');
+  assert.equal(apple[0].holding.ticker, 'AAPL');
+  // Form 4 issuers count too.
+  assert.ok(ids('NVDA').includes('huang'));
+  // Aliases: nobody is named "펠로시", but the congressional-trades ETF answers to it.
+  assert.equal(ids('펠로시')[0], 'nanc');
 });

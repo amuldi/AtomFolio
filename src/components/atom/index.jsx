@@ -452,6 +452,7 @@ export function AtomSketch({
   ariaLabel,
   maxLabelLength = null,
   highlightActive,
+  burstKey = 0,
   onCenterClick,
   onCenterPointerDown,
   onPointerDown,
@@ -718,6 +719,46 @@ export function AtomSketch({
           />
         ))}
       </g>
+
+      {/* Refresh feedback (center click): light runs from the nucleus out along every bond and
+          each electron flashes as it arrives. Keyed by burstKey so every click replays it once;
+          coordinates follow the atoms while they keep turning. */}
+      {burstKey ? (
+        <g className="refresh-burst" key={`burst-${burstKey}`} aria-hidden="true">
+          <circle className="refresh-burst__core" cx="0" cy="0" r="16" />
+          {atoms.map((atom) => {
+            const distance = Math.hypot(atom.x, atom.y);
+            // Farther electrons light up a little later, so the wave visibly travels outward.
+            const delay = `${Math.round(Math.min(distance, 320) * 1.1)}ms`;
+            return (
+              <g key={`burst-${atom.id}`} style={{ '--burst-delay': delay }}>
+                <line
+                  className="refresh-burst__ray-soft"
+                  x1="0"
+                  y1="0"
+                  x2={format(atom.x)}
+                  y2={format(atom.y)}
+                  pathLength="1"
+                />
+                <line
+                  className="refresh-burst__ray"
+                  x1="0"
+                  y1="0"
+                  x2={format(atom.x)}
+                  y2={format(atom.y)}
+                  pathLength="1"
+                />
+                <circle
+                  className="refresh-burst__flash"
+                  cx={format(atom.x)}
+                  cy={format(atom.y)}
+                  r={format(atom.node * 1.7)}
+                />
+              </g>
+            );
+          })}
+        </g>
+      ) : null}
 
       <g className="label-layer">
         {atoms.map((atom) => (

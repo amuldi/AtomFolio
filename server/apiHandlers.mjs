@@ -37,6 +37,14 @@ import {
 import { checkRateLimit } from './rateLimit.mjs';
 import { getProductionReadiness } from './productionReadiness.mjs';
 import {
+  SecNotConfiguredError,
+  fetchBuzzProfile,
+  fetchEtfProfile,
+  fetchSecProfile,
+  normalizeCik,
+  searchSecEntities,
+} from './secFilings.mjs';
+import {
   getLiveMarketDataWithCache,
   getMarketDataCacheStats,
 } from './marketDataCache.mjs';
@@ -46,6 +54,9 @@ const RATE_LIMITS = {
   'market-search': { limit: 30 },
   'market-news': { limit: 30 },
   'market-financials': { limit: 30 },
+  // Each profile can fan out to ~20 SEC requests on a cold cache; SEC's own cap is 10/s per IP.
+  'gurus-search': { limit: 30 },
+  'gurus-profile': { limit: 12 },
   'security-enrich': { limit: 10 },
   'portfolio-ingest': { limit: 10 },
 };
@@ -291,6 +302,60 @@ export async function handleMarketSearchRequest({ method, query, clientKey, send
     sendJson(200, { suggestions });
   } catch (error) {
     sendProviderError(sendJson, error, 'Market search failed.', 'market-search-failed');
+  }
+}
+
+function sendSecError(sendJson, error, code) {
+  if (error instanceof SecNotConfiguredError) {
+    sendJson(503, { error: error.message, code: error.code });
+    return;
+  }
+  sendProviderError(sendJson, error, 'SEC EDGAR lookup failed.', code);
+}
+
+// 유명인 tab: find any SEC filer (fund, company or person) by name.
+export async function handleGuruSearchRequest({ method, query, clientKey, sendJson }) {
+  if (method !== 'GET') {
+    sendMethodNotAllowed(sendJson);
+    return;
+  }
+  if (!enforceRateLimit('gurus-search', clientKey, sendJson)) {
+    return;
+  }
+  const text = cleanQueryText(queryValue(query, 'q'), 80);
+  if (text.length < 2) {
+    sendJson(400, { error: 'Type at least 2 characters.' });
+    return;
+  }
+  try {
+    sendJson(200, { results: await searchSecEntities(text) });
+  } catch (error) {
+    sendSecError(sendJson, error, 'gurus-search-failed');
+  }
+}
+
+// 유명인 tab: a filer's latest 13F portfolio (with quarter-over-quarter changes) and/or recent
+// Form 4 trades, read from EDGAR behind a short cache.
+export async function handleGuruProfileRequest({ method, query, clientKey, sendJson }) {
+  if (method !== 'GET') {
+    sendMethodNotAllowed(sendJson);
+    return;
+  }
+  if (!enforceRateLimit('gurus-profile', clientKey, sendJson)) {
+    return;
+  }
+  const cik = normalizeCik(queryValue(query, 'cik'));
+  const etf = cleanQueryText(queryValue(query, 'etf'), 12).replace(/[^A-Za-z.]/g, '');
+  const buzz = cleanQueryText(queryValue(query, 'buzz'), 40).replace(/[^a-z0-9-]/gi, '');
+  if (!cik && !etf && !buzz) {
+    sendJson(400, { error: 'Provide cik, etf or buzz.' });
+    return;
+  }
+  try {
+    const profile = buzz ? await fetchBuzzProfile(buzz) : etf ? await fetchEtfProfile(etf) : await fetchSecProfile(cik);
+    sendJson(200, profile, { 'Cache-Control': 'public, max-age=300' });
+  } catch (error) {
+    sendSecError(sendJson, error, 'gurus-profile-failed');
   }
 }
 

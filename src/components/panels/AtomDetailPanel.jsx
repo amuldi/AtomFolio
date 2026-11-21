@@ -1,17 +1,63 @@
-// Pure presentational panel — App.jsx computes `fields`/`returnValue`/`returnToneClass` via its
-// existing buildAtomInfoFields/getSignedValueToneClass/formatFieldLabel/translateDisplayValue
-// helpers (kept local to App.jsx, not duplicated here) and passes the already-formatted result.
-// This is the eventual cross-fade target for the Stage D black-hole transition — not a copy of
-// HoverCard (a cursor-following tooltip unrelated to selection state).
+// The one detail card for a clicked electron. App.jsx resolves the holding's real numbers
+// (resolveHoldingPosition: market value, P/L, return, shares, prices in the security's own
+// currency, weight in the portfolio) and passes them as `metrics`; the raw CSV fields stay
+// available underneath, folded away. Draggable; remembers where it was dropped.
 import { useCallback, useRef, useState } from 'react';
 
 // Where the user last dragged the card, kept across selections so picking another holding
 // doesn't snap it back.
 let lastDragOffset = { x: 0, y: 0 };
 
+function formatNumber(value, language, options = {}) {
+  if (!Number.isFinite(value)) return '-';
+  return value.toLocaleString(language === 'en' ? 'en-US' : 'ko-KR', options);
+}
+
+function formatPrice(value, currency, language) {
+  if (!Number.isFinite(value)) return '-';
+  if (currency === 'KRW') return `₩${formatNumber(Math.round(value), language)}`;
+  if (currency === 'USD') return `$${formatNumber(value, language, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${formatNumber(value, language, { maximumFractionDigits: 2 })} ${currency ?? ''}`.trim();
+}
+
+// Buy price vs current price on one track: where you got in, where it is now.
+function PriceTrack({ buy, current, currency, language }) {
+  if (!Number.isFinite(buy) || !Number.isFinite(current) || buy <= 0 || current <= 0) return null;
+  const low = Math.min(buy, current) * 0.92;
+  const high = Math.max(buy, current) * 1.08;
+  const at = (value) => ((value - low) / (high - low)) * 100;
+  const up = current >= buy;
+  const en = language === 'en';
+  return (
+    <div className="atom-detail-panel__track" aria-label={en ? 'Buy price to current price' : '매수가에서 현재가까지'}>
+      <div className="atom-detail-panel__track-bar">
+        <span
+          className={`atom-detail-panel__track-fill ${up ? 'is-positive' : 'is-negative'}`}
+          style={{ left: `${Math.min(at(buy), at(current))}%`, width: `${Math.abs(at(current) - at(buy))}%` }}
+        />
+        <i className="is-buy" style={{ left: `${at(buy)}%` }} />
+        <i className={`is-now ${up ? 'is-positive' : 'is-negative'}`} style={{ left: `${at(current)}%` }} />
+      </div>
+      <div className="atom-detail-panel__track-labels">
+        <span>
+          <em>{en ? 'Bought' : '매수가'}</em>
+          {formatPrice(buy, currency, language)}
+        </span>
+        <span>
+          <em>{en ? 'Now' : '현재가'}</em>
+          {formatPrice(current, currency, language)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function AtomDetailPanel({
   atom,
   fields,
+  metrics = null,
+  language = 'ko',
+  formatMoney,
   returnValue,
   returnToneClass,
   issue,
@@ -24,10 +70,11 @@ export function AtomDetailPanel({
   const [dragging, setDragging] = useState(false);
   const dragRef = useRef(null);
   const panelRef = useRef(null);
+  const en = language === 'en';
 
   const handlePointerDown = useCallback(
     (event) => {
-      if (event.button !== 0 || event.target.closest('button')) {
+      if (event.button !== 0 || event.target.closest('button, summary, details')) {
         return;
       }
       event.stopPropagation();
@@ -74,6 +121,13 @@ export function AtomDetailPanel({
     return null;
   }
 
+  const money = (value, signed = false) =>
+    Number.isFinite(value) && formatMoney ? formatMoney(value, { signed }) : '-';
+  const weight = metrics?.weight;
+  const chips = [metrics?.region, metrics?.sector, metrics?.style, metrics?.risk].filter(
+    (value) => value && value !== '미분류' && value !== '-',
+  );
+
   return (
     <aside
       ref={panelRef}
@@ -102,12 +156,19 @@ export function AtomDetailPanel({
         ) : null}
       </div>
 
-      {returnValue ? (
-        <span
-          className={`atom-detail-panel__return${returnToneClass ? ` ${returnToneClass}` : ''}`}
-        >
-          {returnValue}
-        </span>
+      {returnValue || Number.isFinite(metrics?.profitAmount) ? (
+        <div className="atom-detail-panel__hero">
+          {returnValue ? (
+            <span className={`atom-detail-panel__return${returnToneClass ? ` ${returnToneClass}` : ''}`}>
+              {returnValue}
+            </span>
+          ) : null}
+          {Number.isFinite(metrics?.profitAmount) ? (
+            <span className={`atom-detail-panel__profit${returnToneClass ? ` ${returnToneClass}` : ''}`}>
+              {money(metrics.profitAmount, true)}
+            </span>
+          ) : null}
+        </div>
       ) : null}
 
       {issue ? (
@@ -126,15 +187,54 @@ export function AtomDetailPanel({
         </div>
       ) : null}
 
-      {fields.length ? (
-        <div className="atom-detail-panel__list">
-          {fields.map((field, index) => (
-            <div className="atom-detail-panel__row" key={`${atom.id}-${field.label}-${index}`}>
-              <span className="atom-detail-panel__label">{field.label}</span>
-              <span className="atom-detail-panel__value">{field.value}</span>
-            </div>
+      {metrics ? (
+        <div className="atom-detail-panel__metrics">
+          <div>
+            <em>{en ? 'Market value' : '평가금액'}</em>
+            <b>{money(metrics.marketValue)}</b>
+          </div>
+          <div>
+            <em>{en ? 'Weight' : '비중'}</em>
+            <b>{Number.isFinite(weight) ? `${(weight * 100).toFixed(1)}%` : '-'}</b>
+            {Number.isFinite(weight) ? (
+              <i className="atom-detail-panel__weight" style={{ '--w': `${Math.min(100, weight * 100)}%` }} />
+            ) : null}
+          </div>
+          <div>
+            <em>{en ? 'Shares' : '보유수량'}</em>
+            <b>{formatNumber(metrics.shares, language, { maximumFractionDigits: 4 })}</b>
+          </div>
+          <div>
+            <em>{en ? 'Cost' : '매입금액'}</em>
+            <b>{money(metrics.buyAmount)}</b>
+          </div>
+        </div>
+      ) : null}
+
+      {metrics ? (
+        <PriceTrack buy={metrics.buyPrice} current={metrics.currentPrice} currency={metrics.currency} language={language} />
+      ) : null}
+
+      {chips.length ? (
+        <div className="atom-detail-panel__chips">
+          {chips.map((chip) => (
+            <span key={chip}>{chip}</span>
           ))}
         </div>
+      ) : null}
+
+      {fields.length ? (
+        <details className="atom-detail-panel__raw" open={!metrics}>
+          <summary>{en ? 'All fields' : '전체 항목'}</summary>
+          <div className="atom-detail-panel__list">
+            {fields.map((field, index) => (
+              <div className="atom-detail-panel__row" key={`${atom.id}-${field.label}-${index}`}>
+                <span className="atom-detail-panel__label">{field.label}</span>
+                <span className="atom-detail-panel__value">{field.value}</span>
+              </div>
+            ))}
+          </div>
+        </details>
       ) : null}
     </aside>
   );

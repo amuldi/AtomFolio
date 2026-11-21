@@ -12,6 +12,7 @@
     "dev:server": "node server/index.mjs",
     "db:migrate": "node scripts/migrate-db.mjs",
     "data:gurus": "node scripts/fetch-guru-portfolios.mjs",
+    "data:guru-photos": "node scripts/fetch-guru-photos.mjs",
     "test": "node --test",
     "lint": "eslint .",
     "knip": "knip",

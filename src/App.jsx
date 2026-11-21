@@ -83,7 +83,7 @@ import {
   projectPoint,
   trackballVector,
 } from './utils/scene.js';
-import { DEFAULT_USD_KRW_RATE, collectExtraQuoteCurrencies } from './utils/currency.js';
+import { DEFAULT_USD_KRW_RATE, collectExtraQuoteCurrencies, formatCurrencyAmount } from './utils/currency.js';
 import {
   AtomSketch as AtomSketchView,
   PortfolioPreviewAtom as PortfolioPreviewAtomView,
@@ -2210,6 +2210,7 @@ function SceneAtomLayer({
   svgRef,
   ariaLabel,
   maxLabelLength,
+  burstKey,
   onCenterClick,
   onPointerDown,
   onPointerEnter,
@@ -2276,6 +2277,7 @@ function SceneAtomLayer({
         ariaLabel={ariaLabel}
         maxLabelLength={maxLabelLength}
         highlightActive={highlightActive}
+        burstKey={burstKey}
         centerFocusActive={Boolean(selectedAtomId)}
         onCenterClick={onCenterClick}
         onPointerDown={onPointerDown}
@@ -2290,22 +2292,25 @@ function SceneAtomLayer({
 
 const MemoPortfolioPreviewAtom = memo(PortfolioPreviewAtomView);
 
+// A quick peek while hovering: name, return, weight and where it sits. The full numbers live in
+// the detail card a click opens (AtomDetailPanel), so they aren't repeated here.
 function HoverCard({ atom, position, language }) {
-  const infoFields = buildAtomInfoFields(atom, language);
-
-  if (!atom || !infoFields.length || !position) {
+  if (!atom || !position) {
     return null;
   }
 
   const returnRaw = atom.detail ?? '';
   const returnToneClass = getSignedValueToneClass(returnRaw, 'is-positive', 'is-negative');
-  const displayFields = returnRaw
-    ? infoFields.filter((field) => resolveFieldLabelKey(field.label) !== 'return')
-    : infoFields;
+  const share = Number.isFinite(atom.weightShare) ? atom.weightShare * 100 : null;
+  const meta = [
+    share === null ? null : `${language === 'en' ? 'Weight' : '비중'} ${share >= 10 ? Math.round(share) : share.toFixed(1)}%`,
+    translateDisplayValue(atom.region, language),
+    translateDisplayValue(atom.sector, language),
+  ].filter((value) => value && value !== '미분류' && value !== '-');
 
   return (
     <aside
-      className="hover-card"
+      className="hover-card is-compact"
       style={{
         left: `${position.x}px`,
         top: `${position.y}px`,
@@ -2321,17 +2326,8 @@ function HoverCard({ atom, position, language }) {
           ) : null}
         </div>
       </div>
-
-      <div className="hover-card__list">
-        {displayFields.map((field, index) => (
-          <div className="hover-card__row" key={`${atom.id}-${field.label}-${index}`}>
-            <span className="hover-card__label">{formatFieldLabel(field.label, language)}</span>
-            <span className="hover-card__value">
-              {translateDisplayValue(field.value, language)}
-            </span>
-          </div>
-        ))}
-      </div>
+      {meta.length ? <p className="hover-card__meta">{meta.join(' · ')}</p> : null}
+      <p className="hover-card__hint">{language === 'en' ? 'Click for details' : '클릭하면 자세히'}</p>
     </aside>
   );
 }
@@ -2560,6 +2556,8 @@ export default function App() {
   const [, setScoreDockSpawn] = useState(null);
   const [activeGroupKey, setActiveGroupKey] = useState(null);
   const [selectedAtomId, setSelectedAtomId] = useState(null);
+  // Bumped by a center click with nothing selected: replays AtomSketch's refresh light burst.
+  const [refreshBurstKey, setRefreshBurstKey] = useState(0);
   // First-visit-only hint on the atom stage — dismissed on first interaction or after a few
   // seconds either way, then remembered so it never comes back. Same copy/timing as the desktop
   // popover's own atom hint (desktop/src/renderer/atom-view.jsx).
@@ -5423,10 +5421,25 @@ export default function App() {
     });
   }, [allPortfolioItems, language, scoreWeightPreset]);
   const showCenterClearHit = Boolean(selectedAtomId || activeGroupKey);
+  // Center click: with something selected it clears the selection (as before); with nothing
+  // selected it refreshes live prices, shown as light running out from the nucleus.
   const clearCenterSelection = () => {
     noteInteraction();
-    setSelectedAtomId(null);
-    setActiveGroupKey(null);
+    if (selectedAtomId || activeGroupKey) {
+      setSelectedAtomId(null);
+      setActiveGroupKey(null);
+      return;
+    }
+    setRefreshBurstKey((value) => value + 1);
+    const portfolioId = activePortfolio?.id;
+    const sourceItems = selectLatestRowPerHolding(
+      activePortfolioLiveItemsRef.current,
+      holdingIdentityKey,
+      LIVE_QUOTE_REFRESH_MAX_ITEMS,
+    );
+    if (portfolioId && sourceItems.length) {
+      scheduleLiveQuoteEnrichment(portfolioId, sourceItems);
+    }
   };
   const handleFocusPortfolioHolding = useCallback(
     async ({ entryId, item, itemIndex }) => {
@@ -5491,6 +5504,40 @@ export default function App() {
           : holdingIdentityKey(item) === holdingIdentityKey(selectedAtomData),
       ) ?? null
     : null;
+  // Real numbers for the detail card: market value / P&L in the display currency, prices in the
+  // security's own currency, weight from the same analytics summary the 요약 tab uses.
+  const selectedAtomMetrics = useMemo(() => {
+    if (!selectedSourceItem) {
+      return null;
+    }
+    const position = resolveHoldingPosition(selectedSourceItem, { baseCurrency, fxRates: displayFxRates });
+    const positions = portfolioAnalyticsSummary?.positions ?? [];
+    const match =
+      positions.find((candidate) => position.code && candidate.code === position.code) ??
+      positions.find((candidate) => candidate.label === position.label);
+    return {
+      marketValue: position.marketValue,
+      buyAmount: position.buyAmount,
+      profitAmount: position.profitAmount,
+      returnRate: position.returnRate,
+      shares: position.shares,
+      buyPrice: position.buyPriceInNativeCurrency,
+      currentPrice: position.currentPrice,
+      currency: position.nativeCurrency,
+      weight: match?.weight ?? selectedAtomData?.weightShare ?? null,
+      region: translateDisplayValue(selectedAtomData?.region || position.region, language),
+      sector: translateDisplayValue(selectedAtomData?.sector || position.sector, language),
+      style: translateDisplayValue(selectedAtomData?.style, language),
+      risk: translateDisplayValue(selectedAtomData?.risk, language),
+    };
+  }, [selectedSourceItem, selectedAtomData, baseCurrency, displayFxRates, portfolioAnalyticsSummary, language]);
+  const formatDisplayMoney = useCallback(
+    (value, { signed = false } = {}) => {
+      const text = formatCurrencyAmount(value, baseCurrency);
+      return signed && value > 0 ? `+${text}` : text;
+    },
+    [baseCurrency],
+  );
   const selectedHoldingFix = selectedAtomData?.issue ? holdingFixFor(selectedSourceItem, language) : null;
   const handleApplyHoldingFix = () => {
     if (!selectedHoldingFix || !selectedSourceItem || !activePortfolio) {
@@ -5665,6 +5712,7 @@ export default function App() {
             heatmap={drawerHeatmap}
             allocation={portfolioAllocation}
             analyticsSummary={portfolioAnalyticsSummary}
+            stageSelectionKey={selectedAtomId}
             scorecard={portfolioScorecard}
             overallScorecard={overallPortfolioScorecard}
             scoreAxes={scoreAxes}
@@ -5744,6 +5792,7 @@ export default function App() {
                     svgRef={svgRef}
                     ariaLabel={text.atomAria}
                     maxLabelLength={atomLabelMaxLength}
+                    burstKey={refreshBurstKey}
                     onCenterClick={
                       hasPortfolioItems ? clearCenterSelection : triggerIntroCenterBurst
                     }
@@ -5822,11 +5871,20 @@ export default function App() {
         </div>
       </div>
 
-      <HoverCard atom={hoveredAtom} position={hoverInfo} language={language} />
+      {/* The hover card is a quick peek; once a holding is open in the detail card, hovering it
+          again would only repeat the same thing next to it. */}
+      <HoverCard
+        atom={hoveredAtom && hoveredAtom.id !== selectedAtomId ? hoveredAtom : null}
+        position={hoverInfo}
+        language={language}
+      />
       {selectedAtomData ? (
         <AtomDetailPanel
           atom={selectedAtomData}
           fields={selectedAtomDisplayFields}
+          metrics={selectedAtomMetrics}
+          language={language}
+          formatMoney={formatDisplayMoney}
           returnValue={selectedAtomReturnRaw}
           returnToneClass={selectedAtomReturnToneClass}
           issue={selectedAtomData.issue}

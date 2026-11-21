@@ -35,10 +35,11 @@ import {
   SketchAccountStackIcon,
   SketchManualAccountIcon,
   SketchNewsIcon,
+  SketchFamousIcon,
 } from './icons.jsx';
 import { MarketLivePreview, StockDetailCard } from './MarketPreview.jsx';
 import { MarketNewsPanel } from './MarketNewsPanel.jsx';
-import { GuruComparePanel } from './GuruComparePanel.jsx';
+import { GuruPanel } from './GuruPanel.jsx';
 import { HeatmapCard as HeatmapCardView } from '../cards/HeatmapCard.jsx';
 import { PortfolioScoreCard as PortfolioScoreCardView } from '../cards/PortfolioScoreCard.jsx';
 import { PortfolioAllocationCard as PortfolioAllocationCardView } from '../allocation/index.jsx';
@@ -301,6 +302,7 @@ export function ToolSideDrawer({
   heatmap,
   allocation,
   analyticsSummary,
+  stageSelectionKey = null,
   scorecard,
   overallScorecard,
   scoreAxes,
@@ -361,6 +363,13 @@ export function ToolSideDrawer({
   const [manualSuggestionLocked, setManualSuggestionLocked] = useState(false);
   const [editingHolding, setEditingHolding] = useState(null);
   const [selectedHolding, setSelectedHolding] = useState(null);
+  // Clicking an electron on the stage opens its own detail card; a different holding left open
+  // here would put two stocks' details side by side, so this one steps aside.
+  useEffect(() => {
+    if (stageSelectionKey) {
+      setSelectedHolding(null);
+    }
+  }, [stageSelectionKey]);
   // Whether the user has explicitly picked a 자산군 themselves for the *current* stock name/ticker
   // query — separate from what manualAssetClass currently equals, because equality alone can't
   // tell "the user chose 리츠 on purpose" apart from "리츠 is just left over from the previous
@@ -458,9 +467,15 @@ export function ToolSideDrawer({
       label: language === 'en' ? 'Compare' : '비교',
       shortLabel: language === 'en' ? 'Compare' : '비교',
       icon: <SketchAccountStackIcon />,
-      // Always available: the famous-investor comparison works with a single portfolio (and
-      // shows investors even with none). The portfolio-vs-portfolio table inside only renders
-      // once there are two.
+      available: portfolioEntries.length >= 2,
+    },
+    {
+      // Famous investors (SEC 13F) and executives (Form 4): its own tab, available with any
+      // number of portfolios — comparing needs one, browsing and searching need none.
+      key: 'gurus',
+      label: language === 'en' ? 'Famous Portfolios' : '유명인 포트폴리오',
+      shortLabel: language === 'en' ? 'Famous' : '유명인',
+      icon: <SketchFamousIcon />,
       available: true,
     },
     {
@@ -1541,13 +1556,6 @@ export function ToolSideDrawer({
 
   const renderComparePanel = () => (
     <div className="tool-drawer__compare-panel">
-      <GuruComparePanel
-        analyticsSummary={analyticsSummary}
-        activePortfolio={activePortfolio}
-        language={language}
-        onInteract={onInteract}
-      />
-      {portfolioComparisonRows.length >= 2 ? (
       <section className="tool-drawer__overview-card tool-drawer__overview-card--wide">
         <p>{language === 'en' ? 'Portfolio Comparison' : '포트폴리오 비교'}</p>
         <div className="tool-drawer__compare-table">
@@ -1602,7 +1610,6 @@ export function ToolSideDrawer({
           })}
         </div>
       </section>
-      ) : null}
     </div>
   );
 
@@ -2230,6 +2237,17 @@ export function ToolSideDrawer({
 
     if (resolvedTool.key === 'compare') {
       return renderComparePanel();
+    }
+
+    if (resolvedTool.key === 'gurus') {
+      return (
+        <GuruPanel
+          analyticsSummary={analyticsSummary}
+          activePortfolio={activePortfolio}
+          language={language}
+          onInteract={onInteract}
+        />
+      );
     }
 
     if (resolvedTool.key === 'twin') {
