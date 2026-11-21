@@ -50,7 +50,7 @@ export const UI_TEXT = {
       diversification: '분산투자',
       riskManagement: '위험관리',
       composition: '포트폴리오 구성',
-      timing: '투자 타이밍',
+      timing: '매수 시점 분산',
       stability: '수익 안정성',
     },
     fieldLabels: {
@@ -221,7 +221,7 @@ export const UI_TEXT = {
       diversification: 'Diversification',
       riskManagement: 'Risk Control',
       composition: 'Composition',
-      timing: 'Timing',
+      timing: 'Buy-date spread',
       stability: 'Stability',
     },
     fieldLabels: {

@@ -2,6 +2,11 @@
 // (resolveHoldingPosition: market value, P/L, return, shares, prices in the security's own
 // currency, weight in the portfolio) and passes them as `metrics`; the raw CSV fields stay
 // listed in full underneath (no folding). Draggable; remembers where it was dropped.
+//
+// The 유명인 tab opens this same card for an investor's holding, so the two look identical. It
+// fills the same slots itself instead of `metrics`: `metricCells` (the four number tiles),
+// `track` (a price track with its own end labels), `chips`, and `profitText` (the line beside
+// the big return).
 import { useCallback, useRef, useState } from 'react';
 
 // Where the user last dragged the card, kept across selections so picking another holding
@@ -21,7 +26,7 @@ function formatPrice(value, currency, language) {
 }
 
 // Buy price vs current price on one track: where you got in, where it is now.
-function PriceTrack({ buy, current, currency, language }) {
+function PriceTrack({ buy, current, currency, language, labels = null }) {
   if (!Number.isFinite(buy) || !Number.isFinite(current) || buy <= 0 || current <= 0) return null;
   const low = Math.min(buy, current) * 0.92;
   const high = Math.max(buy, current) * 1.08;
@@ -40,11 +45,11 @@ function PriceTrack({ buy, current, currency, language }) {
       </div>
       <div className="atom-detail-panel__track-labels">
         <span>
-          <em>{en ? 'Bought' : '매수가'}</em>
+          <em>{labels?.buy ?? (en ? 'Bought' : '매수가')}</em>
           {formatPrice(buy, currency, language)}
         </span>
         <span>
-          <em>{en ? 'Now' : '현재가'}</em>
+          <em>{labels?.current ?? (en ? 'Now' : '현재가')}</em>
           {formatPrice(current, currency, language)}
         </span>
       </div>
@@ -65,6 +70,10 @@ export function AtomDetailPanel({
   onApplyFix,
   text,
   onClose,
+  metricCells = null,
+  track = null,
+  chips: chipsOverride = null,
+  profitText = null,
 }) {
   const [offset, setOffset] = useState(lastDragOffset);
   const [dragging, setDragging] = useState(false);
@@ -124,9 +133,33 @@ export function AtomDetailPanel({
   const money = (value, signed = false) =>
     Number.isFinite(value) && formatMoney ? formatMoney(value, { signed }) : '-';
   const weight = metrics?.weight;
-  const chips = [metrics?.region, metrics?.sector, metrics?.style, metrics?.risk].filter(
-    (value) => value && value !== '미분류' && value !== '-',
-  );
+  const chips =
+    chipsOverride ??
+    [metrics?.region, metrics?.sector, metrics?.style, metrics?.risk].filter(
+      (value) => value && value !== '미분류' && value !== '-',
+    );
+  const cells =
+    metricCells ??
+    (metrics
+      ? [
+          { label: en ? 'Market value' : '평가금액', value: money(metrics.marketValue) },
+          {
+            label: en ? 'Weight' : '비중',
+            value: Number.isFinite(weight) ? `${(weight * 100).toFixed(1)}%` : '-',
+            bar: Number.isFinite(weight) ? weight : null,
+          },
+          {
+            label: en ? 'Shares' : '보유수량',
+            value: formatNumber(metrics.shares, language, { maximumFractionDigits: 4 }),
+          },
+          { label: en ? 'Cost' : '매입금액', value: money(metrics.buyAmount) },
+        ]
+      : null);
+  const priceTrack =
+    track ??
+    (metrics
+      ? { buy: metrics.buyPrice, current: metrics.currentPrice, currency: metrics.currency }
+      : null);
 
   return (
     <aside
@@ -156,14 +189,16 @@ export function AtomDetailPanel({
         ) : null}
       </div>
 
-      {returnValue || Number.isFinite(metrics?.profitAmount) ? (
+      {returnValue || profitText || Number.isFinite(metrics?.profitAmount) ? (
         <div className="atom-detail-panel__hero">
           {returnValue ? (
             <span className={`atom-detail-panel__return${returnToneClass ? ` ${returnToneClass}` : ''}`}>
               {returnValue}
             </span>
           ) : null}
-          {Number.isFinite(metrics?.profitAmount) ? (
+          {profitText ? (
+            <span className="atom-detail-panel__profit atom-detail-panel__profit--note">{profitText}</span>
+          ) : Number.isFinite(metrics?.profitAmount) ? (
             <span className={`atom-detail-panel__profit${returnToneClass ? ` ${returnToneClass}` : ''}`}>
               {money(metrics.profitAmount, true)}
             </span>
@@ -187,32 +222,28 @@ export function AtomDetailPanel({
         </div>
       ) : null}
 
-      {metrics ? (
+      {cells?.length ? (
         <div className="atom-detail-panel__metrics">
-          <div>
-            <em>{en ? 'Market value' : '평가금액'}</em>
-            <b>{money(metrics.marketValue)}</b>
-          </div>
-          <div>
-            <em>{en ? 'Weight' : '비중'}</em>
-            <b>{Number.isFinite(weight) ? `${(weight * 100).toFixed(1)}%` : '-'}</b>
-            {Number.isFinite(weight) ? (
-              <i className="atom-detail-panel__weight" style={{ '--w': `${Math.min(100, weight * 100)}%` }} />
-            ) : null}
-          </div>
-          <div>
-            <em>{en ? 'Shares' : '보유수량'}</em>
-            <b>{formatNumber(metrics.shares, language, { maximumFractionDigits: 4 })}</b>
-          </div>
-          <div>
-            <em>{en ? 'Cost' : '매입금액'}</em>
-            <b>{money(metrics.buyAmount)}</b>
-          </div>
+          {cells.map((cell) => (
+            <div key={cell.label}>
+              <em>{cell.label}</em>
+              <b className={cell.tone ? `is-${cell.tone}` : undefined}>{cell.value}</b>
+              {Number.isFinite(cell.bar) ? (
+                <i className="atom-detail-panel__weight" style={{ '--w': `${Math.min(100, cell.bar * 100)}%` }} />
+              ) : null}
+            </div>
+          ))}
         </div>
       ) : null}
 
-      {metrics ? (
-        <PriceTrack buy={metrics.buyPrice} current={metrics.currentPrice} currency={metrics.currency} language={language} />
+      {priceTrack ? (
+        <PriceTrack
+          buy={priceTrack.buy}
+          current={priceTrack.current}
+          currency={priceTrack.currency}
+          labels={priceTrack.labels}
+          language={language}
+        />
       ) : null}
 
       {chips.length ? (

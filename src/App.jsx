@@ -5493,8 +5493,17 @@ export default function App() {
   // Atom data without per-frame positions: enough for the hover card and detail panel.
   // atomsVersion makes this re-read after atomsRef.current is rebuilt.
   const atoms = useMemo(() => atomsRef.current, [atomsVersion]);
-  const hoveredAtom = atoms.find((atom) => atom.id === hoverInfo?.atomId) ?? null;
-  const selectedAtomData = atoms.find((atom) => atom.id === selectedAtomId) ?? null;
+  // While the 유명인 tab owns the stage, my own atom is hidden: its hover and detail cards must
+  // not stay on screen (an open detail card used to linger next to the investor's atom).
+  const guruStageActive = toolTrayOpen && activeDrawerTool === 'gurus';
+  useEffect(() => {
+    if (guruStageActive) {
+      setSelectedAtomId(null);
+      setHoverInfo(null);
+    }
+  }, [guruStageActive]);
+  const hoveredAtom = guruStageActive ? null : (atoms.find((atom) => atom.id === hoverInfo?.atomId) ?? null);
+  const selectedAtomData = guruStageActive ? null : (atoms.find((atom) => atom.id === selectedAtomId) ?? null);
   // CSV-parsed items often have no id (sourceItemId is then ''), so fall back to the holding's
   // ticker/name identity.
   const selectedSourceItem = selectedAtomData

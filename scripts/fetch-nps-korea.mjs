@@ -24,7 +24,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const num = (v) => Number(String(v ?? '').replace(/,/g, ''));
 const found = [];
 let done = 0;
-let failed = 0;
+let failedCorps = [];
 
 async function scan(corp) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -40,7 +40,7 @@ async function scan(corp) {
       await sleep(1500);
     }
   }
-  failed += 1;
+  failedCorps.push(corp);
 }
 
 let cursor = 0;
@@ -55,6 +55,18 @@ await Promise.all(
     }
   }),
 );
+
+// Slow retry rounds for the companies DART did not answer in time.
+for (let round = 1; round <= 3 && failedCorps.length; round += 1) {
+  const again = failedCorps;
+  failedCorps = [];
+  console.log(`retry round ${round}: ${again.length} companies`);
+  for (const corp of again) {
+    await scan(corp);
+    await sleep(400);
+  }
+}
+const failed = failedCorps.length;
 
 found.sort((a, b) => num(b.row.stkrt) - num(a.row.stkrt));
 const total = found.reduce((sum, { row }) => sum + num(row.stkrt), 0);

@@ -12,6 +12,7 @@
 // The bundled snapshot (src/data/guruPortfolios.json, lazy-loaded) paints instantly; the server
 // then reads EDGAR live (/api/gurus/profile) and replaces it.
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import directory from '../../data/guruDirectory.json';
 import photos from '../../data/guruPhotos.json';
 import {
@@ -28,7 +29,9 @@ import {
   quoteTickers,
 } from '../../lib/guruLive.js';
 import { BuzzCard, TradeSummaryCard, TradesCard } from './GuruActivity.jsx';
-import { GuruHoldingCard, GuruHoverCard, holdingDetail } from './GuruHoldingCards.jsx';
+import { GuruHoverCard, guruDetailProps, holdingDetail } from './GuruHoldingCards.jsx';
+import { AtomDetailPanel } from '../panels/AtomDetailPanel.jsx';
+import { textFor } from '../../utils/format.js';
 import { DartCards } from './GuruDart.jsx';
 import { GuruResultCards } from './GuruResultCards.jsx';
 import { Move, ResizeBox, TRADE_KIND, useFormatters } from './GuruShared.jsx';
@@ -405,7 +408,11 @@ export function GuruPanel({ analyticsSummary, activePortfolio, language, onInter
   const profile = liveState?.status === 'ok' ? liveState.profile : null;
   const dart = entry.kind === 'dart' && profile?.owners ? profile : null;
   const fund = dart ? null : profile ? profile.fund : (snapshot?.funds?.[entry.id] ?? null);
-  const insider = dart ? null : profile ? profile.insider : (snapshot?.insiders?.[entry.id] ?? null);
+  const insider = dart
+    ? null
+    : profile
+      ? profile.insider
+      : (snapshot?.insiders?.[entry.id] ?? null);
   const guru = fund ? { ...fund, id: entry.id, person: entry.person, entity: entry.entity } : null;
 
   const userHoldings = useMemo(
@@ -531,10 +538,10 @@ export function GuruPanel({ analyticsSummary, activePortfolio, language, onInter
           note: dart
             ? `${entry.entity} · DART ${dart.owners.settled ?? ''}`
             : fund
-            ? `${entry.entity} · ${fund.source === 'ApeWisdom' ? (en ? 'live' : '실시간') : en ? `${fund.source ?? '13F'} ${fund.period} → now` : `${fund.source ?? '13F'} ${fund.period} 이후`}`
-            : insider
-              ? `${entry.entity} · Form 4 ${insider.latestFiled}`
-              : entry.entity,
+              ? `${entry.entity} · ${fund.source === 'ApeWisdom' ? (en ? 'live' : '실시간') : en ? `${fund.source ?? '13F'} ${fund.period} → now` : `${fund.source ?? '13F'} ${fund.period} 이후`}`
+              : insider
+                ? `${entry.entity} · Form 4 ${insider.latestFiled}`
+                : entry.entity,
         }
       : {
           title: en ? 'Common' : '공통',
@@ -599,16 +606,25 @@ export function GuruPanel({ analyticsSummary, activePortfolio, language, onInter
         />
       ) : null}
 
-      {pickedDetail ? (
-        <GuruHoldingCard
-          picked={picked}
-          detail={pickedDetail}
-          fund={fund}
-          language={language}
-          onClose={() => setPicked(null)}
-        />
-      ) : null}
-      <GuruHoverCard hovered={hovered} detail={hoveredDetail} language={language} />
+      {pickedDetail
+        ? // Through a portal: the drawer is transformed, which would make this fixed card
+          // position itself against the drawer instead of the window.
+          createPortal(
+            <AtomDetailPanel
+              {...guruDetailProps({ detail: pickedDetail, fund, isFiling, language, fmt })}
+              language={language}
+              text={textFor(language)}
+              onClose={() => setPicked(null)}
+            />,
+            document.body,
+          )
+        : null}
+      <GuruHoverCard
+        hovered={hovered}
+        detail={hoveredDetail}
+        language={language}
+        isFiling={isFiling}
+      />
 
       <div className="guru-panel__search">
         <input

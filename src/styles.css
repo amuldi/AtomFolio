@@ -1837,7 +1837,7 @@ body::after {
 }
 
 .twin-scenario-grid--compact {
-  grid-template-columns: repeat(auto-fit, minmax(7.8rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(9.4rem, 1fr));
 }
 
 .twin-control-row {
@@ -8001,7 +8001,10 @@ html.guru-stage-dragging .guru-stage .node-hit {
   position: relative;
   width: 100%;
   height: 100%;
-  transform: scale(var(--materialize, 1));
+  /* --atom-size-boost: .stage-breath is 78% of the stage square, while the 유명인 stage draws its
+     atom across the whole square. 1 / 0.78 brings my atom to exactly that size, so the two read
+     as the same atom; only the atom scales (the orbiting portfolio previews stay where they are). */
+  transform: scale(calc(var(--materialize, 1) * var(--atom-size-boost, 1.282)));
   transform-origin: 50% 50%;
 }
 
@@ -10043,135 +10046,6 @@ html.guru-stage-dragging .guru-stage .node-hit {
   }
 }
 
-/* Electron detail on the 유명인 stage. */
-.guru-card {
-  position: fixed;
-  z-index: var(--z-floating-ui);
-  display: grid;
-  gap: 0.55rem;
-  padding: 0.85rem 0.9rem 0.8rem;
-  border: 1px solid rgba(var(--frame-hairline), 0.16);
-  border-radius: 14px;
-  background: rgba(10, 10, 9, 0.88);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
-  color: rgba(var(--frame-ink-a), 0.92);
-  font-family: var(--ui-font);
-  animation: guru-card-in 0.22s ease-out both;
-}
-
-.guru-card header {
-  display: grid;
-  gap: 0.12rem;
-  padding-right: 1.2rem;
-}
-
-.guru-card header strong {
-  font-family: 'Bradley Hand', 'Gaegu', cursive;
-  font-size: 1.05rem;
-  line-height: 1.2;
-}
-
-.guru-card header span {
-  color: rgba(var(--frame-ink-a), 0.48);
-  font-size: 0.6rem;
-  font-weight: 650;
-}
-
-.guru-card__close {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.55rem;
-  width: 1.4rem;
-  height: 1.4rem;
-  border: 0;
-  border-radius: 50%;
-  background: rgba(var(--frame-ink-a), 0.08);
-  color: rgba(var(--frame-ink-a), 0.7);
-  cursor: pointer;
-}
-
-.guru-card__metric {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.2rem 0.5rem;
-  align-items: baseline;
-}
-
-.guru-card__metric span {
-  overflow: hidden;
-  color: rgba(var(--frame-ink-a), 0.56);
-  font-size: 0.6rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.guru-card__metric b {
-  font-size: 0.86rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.guru-card__metric i {
-  grid-column: 1 / -1;
-  display: block;
-  height: 3px;
-  border-radius: 3px;
-  background: linear-gradient(90deg, rgba(var(--frame-ink-a), 0.85) var(--w), rgba(var(--frame-ink-a), 0.08) var(--w));
-}
-
-.guru-card__metric.is-mine i {
-  background: linear-gradient(90deg, rgba(var(--frame-ink-a), 0.45) var(--w), rgba(var(--frame-ink-a), 0.08) var(--w));
-}
-
-.guru-card__metric em {
-  grid-column: 1 / -1;
-  color: rgba(var(--frame-ink-a), 0.46);
-  font-size: 0.58rem;
-  font-style: normal;
-}
-
-.guru-card__metric em.positive {
-  color: var(--profit-color-strong);
-}
-
-.guru-card__metric em.negative {
-  color: var(--loss-color-strong);
-}
-
-.guru-card__shared {
-  margin: 0;
-  color: rgba(var(--frame-ink-a), 0.8);
-  font-size: 0.6rem;
-  font-weight: 700;
-}
-
-.guru-card__line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem;
-  margin: 0;
-  color: rgba(var(--frame-ink-a), 0.8);
-  font-size: 0.62rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.guru-card__line small {
-  margin-left: auto;
-  color: rgba(var(--frame-ink-a), 0.4);
-  font-size: 0.54rem;
-}
-
-@keyframes guru-card-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
 
 .guru-panel__rank {
   justify-self: start;
@@ -10511,204 +10385,6 @@ html.guru-stage-dragging .guru-stage .node-hit {
 
 .guru-resizable.is-dragging {
   user-select: none;
-}
-
-/* Hover peek over an electron (the click card is .guru-card). */
-.guru-hover {
-  position: fixed;
-  z-index: var(--z-floating-ui);
-  display: grid;
-  gap: 0.34rem;
-  padding: 0.62rem 0.7rem 0.55rem;
-  border: 1px solid rgba(var(--frame-hairline), 0.14);
-  border-radius: 12px;
-  background: rgba(10, 10, 9, 0.9);
-  backdrop-filter: blur(8px);
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
-  color: rgba(var(--frame-ink-a), 0.9);
-  font-family: var(--ui-font);
-  pointer-events: none;
-  animation: guru-card-in 0.14s ease-out both;
-}
-
-.guru-hover header {
-  display: grid;
-  gap: 0.08rem;
-}
-
-.guru-hover header strong {
-  font-family: 'Bradley Hand', 'Gaegu', cursive;
-  font-size: 1rem;
-  line-height: 1.15;
-}
-
-.guru-hover header span {
-  color: rgba(var(--frame-ink-a), 0.46);
-  font-size: 0.56rem;
-  font-weight: 650;
-}
-
-.guru-hover__moves {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.2rem 0.65rem;
-  font-size: 0.7rem;
-}
-
-.guru-hover__moves b {
-  font-size: 0.86rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.guru-hover__line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem;
-  margin: 0;
-  color: rgba(var(--frame-ink-a), 0.78);
-  font-size: 0.6rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.guru-hover__shared {
-  margin: 0;
-  color: rgba(var(--frame-ink-a), 0.85);
-  font-size: 0.58rem;
-  font-weight: 700;
-}
-
-.guru-hover small {
-  color: rgba(var(--frame-ink-a), 0.36);
-  font-size: 0.52rem;
-}
-
-/* Click card: price block and this-quarter trade. */
-.guru-card__price {
-  display: grid;
-  gap: 0.35rem;
-  padding: 0.55rem 0.6rem;
-  border-radius: 10px;
-  background: rgba(var(--frame-ink-a), 0.045);
-}
-
-.guru-card__price-now {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.guru-card__price-now b {
-  font-size: 1.05rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.guru-card__price-now span {
-  color: rgba(var(--frame-ink-a), 0.38);
-  font-size: 0.52rem;
-}
-
-.guru-card__price-moves {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.2rem 0.8rem;
-  font-size: 0.72rem;
-}
-
-.guru-card__track > div {
-  position: relative;
-  height: 4px;
-  margin: 0.3rem 0 0.4rem;
-  border-radius: 3px;
-  background: rgba(var(--frame-ink-a), 0.09);
-}
-
-.guru-card__track > div span {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  border-radius: 3px;
-  background: rgba(var(--frame-ink-a), 0.4);
-}
-
-.guru-card__track > div span.positive {
-  background: var(--profit-color-strong);
-}
-
-.guru-card__track > div span.negative {
-  background: var(--loss-color-strong);
-}
-
-.guru-card__track i {
-  position: absolute;
-  top: 50%;
-  width: 7px;
-  height: 7px;
-  border: 1px solid rgba(var(--frame-ink-a), 0.7);
-  border-radius: 50%;
-  background: #0b0b0a;
-  transform: translate(-50%, -50%);
-}
-
-.guru-card__track i.is-now.positive {
-  border-color: var(--profit-color-strong);
-  background: var(--profit-color-strong);
-}
-
-.guru-card__track i.is-now.negative {
-  border-color: var(--loss-color-strong);
-  background: var(--loss-color-strong);
-}
-
-.guru-card__track small {
-  display: flex;
-  justify-content: space-between;
-  color: rgba(var(--frame-ink-a), 0.46);
-  font-size: 0.54rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.guru-card__trade {
-  display: grid;
-  gap: 0.22rem;
-  padding: 0.5rem 0.6rem;
-  border-left: 2px solid currentColor;
-  border-radius: 4px 10px 10px 4px;
-  background: rgba(var(--frame-ink-a), 0.04);
-  color: rgba(var(--frame-ink-a), 0.5);
-}
-
-.guru-card__trade.is-buy {
-  color: var(--profit-color-strong);
-}
-
-.guru-card__trade.is-sell {
-  color: var(--loss-color-strong);
-}
-
-.guru-card__trade > div {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.guru-card__trade b {
-  font-size: 0.74rem;
-}
-
-.guru-card__trade small {
-  margin-left: auto;
-  color: rgba(var(--frame-ink-a), 0.4);
-  font-size: 0.52rem;
-}
-
-.guru-card__trade p {
-  margin: 0;
-  color: rgba(var(--frame-ink-a), 0.74);
-  font-size: 0.6rem;
-  font-variant-numeric: tabular-nums;
 }
 
 /* Live status card under the profile. */
@@ -11452,4 +11128,202 @@ html.guru-stage-dragging .guru-stage .node-hit {
   .tool-drawer__digest-columns {
     grid-template-columns: 1fr;
   }
+}
+
+/* Detail card slots the 유명인 tab fills (AtomDetailPanel): a toned number tile and the plain note
+   that sits beside the big return. */
+.atom-detail-panel__metrics b.is-positive {
+  color: var(--profit-color-strong);
+}
+
+.atom-detail-panel__metrics b.is-negative {
+  color: var(--loss-color-strong);
+}
+
+.atom-detail-panel__profit--note {
+  color: rgba(var(--frame-ink-a), 0.5);
+  font-size: 0.64rem;
+  font-weight: 600;
+}
+
+/* ── 모의: 실험 결과 카드, 면책, 입력 보조 ─────────────────────────────────────────────── */
+.twin-chip.is-active {
+  border-color: rgba(var(--frame-ink-b), 0.4);
+  background: rgba(var(--frame-ink-a), 0.14);
+  color: rgba(var(--frame-ink-b), 0.98);
+}
+
+.twin-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.twin-action-row .twin-action {
+  flex: 1 1 auto;
+}
+
+.twin-hint,
+.twin-projection-range,
+.twin-disclaimer {
+  margin: 0;
+  color: rgba(var(--frame-ink-a), 0.56);
+  font-family: var(--ui-font);
+  font-size: 0.62rem;
+  font-weight: 560;
+  line-height: 1.55;
+  word-break: keep-all;
+}
+
+.twin-projection-range {
+  color: rgba(var(--frame-ink-a), 0.74);
+  font-variant-numeric: tabular-nums;
+}
+
+.twin-disclaimer {
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(var(--frame-hairline), 0.08);
+  color: rgba(var(--frame-ink-a), 0.42);
+  font-size: 0.58rem;
+}
+
+.twin-outcome {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.8rem 0.85rem 0.85rem;
+  border: 1px solid rgba(var(--frame-ink-b), 0.2);
+  border-radius: 12px;
+  background: rgba(var(--frame-ink-a), 0.055);
+  font-family: var(--ui-font);
+  scroll-margin: 0.5rem;
+}
+
+.twin-outcome > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.twin-outcome > header span {
+  color: rgba(var(--frame-ink-a), 0.7);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.twin-outcome > header strong {
+  color: rgba(var(--frame-ink-a), 0.95);
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.twin-outcome > header strong.is-up,
+.twin-outcome em.is-up {
+  color: var(--profit-color-strong);
+}
+
+.twin-outcome > header strong.is-down,
+.twin-outcome em.is-down {
+  color: var(--loss-color-strong);
+}
+
+.twin-outcome p {
+  margin: 0;
+}
+
+.twin-outcome__amount {
+  color: rgba(var(--frame-ink-a), 0.9);
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+.twin-outcome__amount em {
+  font-style: normal;
+}
+
+.twin-outcome__assumption,
+.twin-outcome__note {
+  color: rgba(var(--frame-ink-a), 0.52);
+  font-size: 0.6rem;
+  line-height: 1.55;
+  word-break: keep-all;
+}
+
+.twin-outcome__warnings {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0.4rem 0.55rem;
+  border-radius: 8px;
+  background: rgba(var(--frame-ink-a), 0.05);
+  color: rgba(var(--frame-ink-a), 0.82);
+  font-size: 0.62rem;
+  list-style: none;
+}
+
+.twin-outcome__warnings li::before {
+  content: '! ';
+  font-weight: 800;
+}
+
+.twin-outcome__rows {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.twin-outcome__rows li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.15rem 0.6rem;
+  align-items: baseline;
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.twin-outcome__rows li span {
+  overflow: hidden;
+  color: rgba(var(--frame-ink-a), 0.9);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.twin-outcome__rows li b {
+  color: rgba(var(--frame-ink-a), 0.62);
+  font-weight: 600;
+}
+
+.twin-outcome__rows li em {
+  min-width: 3.4rem;
+  color: rgba(var(--frame-ink-a), 0.5);
+  font-style: normal;
+  font-weight: 700;
+  text-align: right;
+}
+
+.twin-outcome__rows li i {
+  grid-column: 1 / -1;
+  display: block;
+  height: 3px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, currentColor var(--w), rgba(var(--frame-ink-a), 0.07) var(--w));
+}
+
+.twin-outcome__rows li i.is-up {
+  color: var(--profit-color-strong);
+}
+
+.twin-outcome__rows li i.is-down {
+  color: var(--loss-color-strong);
+}
+
+.twin-outcome .twin-loss-grid strong {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+  word-break: keep-all;
 }

@@ -1,13 +1,19 @@
-// Stock detail on the 유명인 stage, in two steps like the app's own atom:
-//   GuruHoverCard    a compact peek that follows the cursor over an electron
-//   GuruHoldingCard  the full card a click opens (the peek disappears when it does)
-// Both read the same numbers: weight, price now, today's move, the move since the filing's period
-// end (colored red up / blue down) and what the person bought or sold.
-import { useEffect, useRef } from 'react';
+// Stock detail on the 유명인 stage, built to behave exactly like my own atom's:
+//   GuruHoverCard      the compact peek that follows the cursor (same markup and styles as the
+//                      app's HoverCard: name, return, weight · region · sector, "click for details")
+//   guruDetailProps    the numbers for AtomDetailPanel — the very card a click opens on my own
+//                      account — so a click here shows the same panel, filled with the investor's
+//                      weight, live price, today's move, move since the filing and last quarter's
+//                      trade.
 import { createPortal } from 'react-dom';
 import { REGION_LABELS, SECTOR_LABELS } from '../../lib/guruCompare.js';
 import { describeChange, isBuyKind } from '../../lib/guruLive.js';
-import { KindBadge, Move, toneOf, useFormatters } from './GuruShared.jsx';
+import { toneOf } from './GuruShared.jsx';
+
+// Same clamping as the app's own hover card (App.jsx updateHoverInfo).
+const TOOLTIP_WIDTH = 320;
+const TOOLTIP_HEIGHT = 260;
+const clamp = (value, min, max) => Math.min(Math.max(value, min), Math.max(min, max));
 
 export function holdingDetail({
   picked,
@@ -29,6 +35,7 @@ export function holdingDetail({
   return {
     lang,
     ticker,
+    label: picked.label,
     theirs,
     mine,
     base,
@@ -44,227 +51,199 @@ export function holdingDetail({
 }
 
 const realTicker = (ticker) => (ticker && !ticker.startsWith('CUSIP:') ? ticker : null);
+const signedPercent = (value, digits = 1) =>
+  Number.isFinite(value) ? `${value > 0 ? '+' : ''}${value.toFixed(digits)}%` : null;
+const toneClass = (value) => {
+  const tone = toneOf(value);
+  return tone === 'positive' ? 'is-positive' : tone === 'negative' ? 'is-negative' : '';
+};
 
-// Where the price stood at the filing's period end versus now, on one track.
-function PriceTrack({ quote, language }) {
-  if (!Number.isFinite(quote?.periodClose) || !Number.isFinite(quote?.price)) return null;
-  const en = language === 'en';
-  const low = Math.min(quote.periodClose, quote.price) * 0.96;
-  const high = Math.max(quote.periodClose, quote.price) * 1.04;
-  const at = (value) => ((value - low) / (high - low)) * 100;
-  const tone = toneOf(quote.price - quote.periodClose);
-  return (
-    <div className="guru-card__track" aria-hidden="true">
-      <div>
-        <span
-          className={tone}
-          style={{
-            left: `${Math.min(at(quote.periodClose), at(quote.price))}%`,
-            width: `${Math.abs(at(quote.price) - at(quote.periodClose))}%`,
-          }}
-        />
-        <i style={{ left: `${at(quote.periodClose)}%` }} />
-        <i className={`is-now ${tone}`} style={{ left: `${at(quote.price)}%` }} />
-      </div>
-      <small>
-        <span>{`${en ? 'Period end' : '기준일'} $${quote.periodClose.toFixed(2)}`}</span>
-        <span>{`${en ? 'Now' : '지금'} $${quote.price.toFixed(2)}`}</span>
-      </small>
-    </div>
-  );
+// The move that colors this electron: since the filing's period end for a 13F / N-PORT, today's
+// otherwise. A holding that is only in my portfolio shows my own return.
+function headlineMove(detail, isFiling, en) {
+  const { quote, theirs, mine } = detail;
+  if (theirs && quote) {
+    if (isFiling && Number.isFinite(quote.sincePct))
+      return { value: quote.sincePct, note: en ? 'since filing' : '기준일 이후' };
+    if (Number.isFinite(quote.dayPct)) return { value: quote.dayPct, note: en ? 'today' : '오늘' };
+  }
+  if (mine?.returnRate != null)
+    return { value: mine.returnRate, note: en ? 'my return' : '내 수익률' };
+  if (quote && Number.isFinite(quote.dayPct))
+    return { value: quote.dayPct, note: en ? 'today' : '오늘' };
+  return null;
 }
 
-export function GuruHoverCard({ hovered, detail, language }) {
-  const en = language === 'en';
-  const fmt = useFormatters(en);
+export function GuruHoverCard({ hovered, detail, language, isFiling }) {
   if (!hovered || !detail) return null;
-  const { theirs, mine, change, quote, trades, shared } = detail;
-  const width = 232;
-  const left = Math.min(Math.max(12, hovered.x + 18), window.innerWidth - width - 12);
-  const top = Math.min(Math.max(12, hovered.y + 14), window.innerHeight - 190);
-  const trade = trades[0];
+  const en = language === 'en';
+  const move = headlineMove(detail, isFiling, en);
+  const weight = detail.theirs?.weight ?? detail.mine?.weight;
+  const meta = [
+    Number.isFinite(weight)
+      ? `${en ? 'Weight' : '비중'} ${weight * 100 >= 10 ? Math.round(weight * 100) : (weight * 100).toFixed(1)}%`
+      : null,
+    detail.region,
+    detail.sector,
+    detail.change ? describeChange(detail.change, language) : null,
+  ].filter(Boolean);
+  const x = Math.round(clamp(hovered.x + 18, 16, window.innerWidth - TOOLTIP_WIDTH - 16));
+  const y = Math.round(clamp(hovered.y + 18, 16, window.innerHeight - TOOLTIP_HEIGHT - 16));
   return createPortal(
-    <aside className="guru-hover" style={{ left, top, width }} role="tooltip">
-      <header>
-        <strong>{detail.name}</strong>
-        <span>{[realTicker(detail.ticker), detail.sector].filter(Boolean).join(' · ')}</span>
-      </header>
-      {quote ? (
-        <div className="guru-hover__moves">
-          <b>{`$${quote.price.toFixed(2)}`}</b>
-          <Move value={quote.dayPct} label={en ? 'Today' : '오늘'} />
-          {Number.isFinite(quote.sincePct) ? (
-            <Move value={quote.sincePct} label={en ? 'Since filing' : '기준일 이후'} />
+    <aside className="hover-card is-compact" style={{ left: `${x}px`, top: `${y}px` }}>
+      <div className="hover-card__header">
+        <div className="hover-card__title-wrap">
+          <strong className="hover-card__title">{detail.name}</strong>
+          {move ? (
+            <span
+              className={`hover-card__return${toneClass(move.value) ? ` ${toneClass(move.value)}` : ''}`}
+            >
+              {signedPercent(move.value)}
+            </span>
           ) : null}
         </div>
-      ) : null}
-      {mine?.returnRate != null ? (
-        <div className="guru-hover__moves">
-          <Move value={mine.returnRate} label={en ? 'My return' : '내 수익률'} />
-        </div>
-      ) : null}
-      <p className="guru-hover__line">
-        {theirs ? `${detail.person} ${fmt.percent(theirs.weight)}` : null}
-        {theirs && mine ? ' · ' : null}
-        {mine ? `${en ? 'Me' : '나'} ${fmt.percent(mine.weight)}` : null}
-      </p>
-      {change ? (
-        <p className="guru-hover__line">
-          <KindBadge kind={change.kind} lang={detail.lang} />
-          {[describeChange(change, language), `≈${fmt.usd(Math.abs(change.tradeValueUsd))}`]
-            .filter(Boolean)
-            .join(' · ')}
-        </p>
-      ) : null}
-      {!change && trade ? (
-        <p className="guru-hover__line">
-          <KindBadge kind={trade.kind} lang={detail.lang} />
-          {`${fmt.shares(trade.shares)}${en ? ' sh' : '주'}${trade.averagePrice ? ` @ ${fmt.price(trade.averagePrice)}` : ''} · ${trade.date}`}
-        </p>
-      ) : null}
-      {shared ? (
-        <p className="guru-hover__shared">{en ? 'Held by both' : '둘 다 보유 중'}</p>
-      ) : null}
-      <small>{en ? 'Click for details' : '클릭하면 자세히'}</small>
+      </div>
+      {meta.length ? <p className="hover-card__meta">{meta.join(' · ')}</p> : null}
+      <p className="hover-card__hint">{en ? 'Click for details' : '클릭하면 자세히'}</p>
     </aside>,
     document.body,
   );
 }
 
-export function GuruHoldingCard({ picked, detail, fund, language, onClose }) {
+// Everything AtomDetailPanel needs, as the same slots it fills for my own holdings.
+export function guruDetailProps({ detail, fund, isFiling, language, fmt }) {
   const en = language === 'en';
-  const fmt = useFormatters(en);
-  const cardRef = useRef(null);
-
-  useEffect(() => {
-    const close = (event) => {
-      if (event.type === 'keydown' && event.key !== 'Escape') return;
-      if (event.type === 'pointerdown' && cardRef.current?.contains(event.target)) return;
-      onClose();
-    };
-    // Next tick, so the click that opened the card doesn't close it.
-    const timer = window.setTimeout(() => {
-      window.addEventListener('pointerdown', close);
-      window.addEventListener('keydown', close);
-    }, 0);
-    return () => {
-      window.clearTimeout(timer);
-      window.removeEventListener('pointerdown', close);
-      window.removeEventListener('keydown', close);
-    };
-  }, [onClose]);
-
   const { theirs, mine, change, trades, shared, quote } = detail;
-  const width = 276;
-  const left = Math.min(Math.max(12, picked.x + 18), window.innerWidth - width - 12);
-  const top = Math.min(Math.max(12, picked.y - 40), Math.max(12, window.innerHeight - 440));
+  const move = headlineMove(detail, isFiling, en);
+  const period = fund?.period;
+  const estimatedValue = theirs && fund?.totalValueUsd ? theirs.weight * fund.totalValueUsd : null;
+  const weight = theirs?.weight ?? mine?.weight ?? null;
 
-  return createPortal(
-    <aside
-      ref={cardRef}
-      className="guru-card"
-      style={{ left, top, width }}
-      role="dialog"
-      aria-label={detail.name}
-    >
-      <button
-        type="button"
-        className="guru-card__close"
-        onClick={onClose}
-        aria-label={en ? 'Close' : '닫기'}
-      >
-        ×
-      </button>
-      <header>
-        <strong>{detail.name}</strong>
-        <span>
-          {[realTicker(detail.ticker), detail.sector, detail.region].filter(Boolean).join(' · ')}
-        </span>
-      </header>
+  const cells = [];
+  if (estimatedValue != null)
+    cells.push({
+      label: en ? 'Est. value' : '평가금액(추정)',
+      value: `≈${fmt.usd(estimatedValue)}`,
+    });
+  else if (theirs?.mentions)
+    cells.push({ label: en ? 'Mentions' : '언급 수', value: theirs.mentions.toLocaleString() });
+  if (weight != null)
+    cells.push({ label: en ? 'Weight' : '비중', value: fmt.percent(weight), bar: weight });
+  if (quote && Number.isFinite(quote.dayPct)) {
+    cells.push({
+      label: en ? 'Today' : '오늘',
+      value: signedPercent(quote.dayPct),
+      tone: toneOf(quote.dayPct),
+    });
+  }
+  if (isFiling && quote && Number.isFinite(quote.sincePct)) {
+    cells.push({
+      label: en ? 'Since filing' : '기준일 이후',
+      value: signedPercent(quote.sincePct),
+      tone: toneOf(quote.sincePct),
+    });
+  } else if (mine?.returnRate != null) {
+    cells.push({
+      label: en ? 'My return' : '내 수익률',
+      value: signedPercent(mine.returnRate),
+      tone: toneOf(mine.returnRate),
+    });
+  }
 
-      {quote ? (
-        <div className="guru-card__price">
-          <div className="guru-card__price-now">
-            <b>{`$${quote.price.toFixed(2)}`}</b>
-            <span>
-              {quote.asOf
-                ? new Date(quote.asOf).toLocaleString(en ? 'en-US' : 'ko-KR', {
-                    month: 'numeric',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })
-                : ''}
-            </span>
-          </div>
-          <div className="guru-card__price-moves">
-            <Move value={quote.dayPct} label={en ? 'Today' : '오늘'} />
-            {Number.isFinite(quote.sincePct) ? (
-              <Move value={quote.sincePct} label={en ? 'Since filing' : '기준일 이후'} />
-            ) : null}
-          </div>
-          <PriceTrack quote={quote} language={language} />
-        </div>
-      ) : null}
+  const fields = [
+    { label: en ? 'Ticker' : '종목 티커', value: realTicker(detail.ticker) },
+    { label: en ? 'Sector' : '분야', value: detail.sector },
+    { label: en ? 'Region' : '지역', value: detail.region },
+    theirs
+      ? {
+          label: detail.person,
+          value: `${fmt.percent(theirs.weight)}${estimatedValue != null ? ` · ≈${fmt.usd(estimatedValue)}` : ''}`,
+        }
+      : null,
+    mine ? { label: en ? 'My weight' : '내 비중', value: fmt.percent(mine.weight) } : null,
+    mine?.returnRate != null
+      ? { label: en ? 'My return' : '내 수익률', value: signedPercent(mine.returnRate) }
+      : null,
+    shared ? { label: en ? 'Held by' : '보유', value: en ? 'Both of us' : '둘 다 보유 중' } : null,
+    theirs?.mentions
+      ? {
+          label: en ? 'Mentions · 24h' : '언급 (24시간)',
+          value: `${theirs.mentions.toLocaleString()} · #${theirs.rank}`,
+        }
+      : null,
+    change
+      ? {
+          label: en ? 'Last quarter' : '지난 분기 매매',
+          value: `${describeChange(change, language)} · ≈${fmt.usd(Math.abs(change.tradeValueUsd))}`,
+        }
+      : null,
+    change
+      ? {
+          label: en ? 'Shares' : '주식 수',
+          value: `${fmt.shares(change.sharesBefore)} → ${fmt.shares(change.sharesAfter)}`,
+        }
+      : null,
+    change
+      ? {
+          label: en ? 'Weight change' : '비중 변화',
+          value: `${fmt.percent(change.weightBefore)} → ${fmt.percent(change.weightAfter)}`,
+        }
+      : null,
+    quote ? { label: en ? 'Price' : '현재가', value: `$${quote.price.toFixed(2)}` } : null,
+    quote && Number.isFinite(quote.dayPct)
+      ? { label: en ? 'Today' : '오늘', value: signedPercent(quote.dayPct) }
+      : null,
+    quote && isFiling && Number.isFinite(quote.sincePct)
+      ? { label: en ? 'Since filing' : '기준일 이후', value: signedPercent(quote.sincePct) }
+      : null,
+    quote && Number.isFinite(quote.periodClose)
+      ? {
+          label: en ? 'Price at period end' : '기준일 종가',
+          value: `$${quote.periodClose.toFixed(2)}`,
+        }
+      : null,
+    quote?.asOf
+      ? {
+          label: en ? 'Quote time' : '시세시각',
+          value: new Date(quote.asOf).toLocaleString(en ? 'en-US' : 'ko-KR', {
+            month: 'numeric',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+        }
+      : null,
+    ...trades.map((trade) => ({
+      label: `${trade.date}`,
+      value: `${trade.kind === 'buy' || isBuyKind(trade.kind) ? (en ? 'Buy' : '매수') : trade.kind === 'sell' ? (en ? 'Sell' : '매도') : trade.kind} ${fmt.shares(trade.shares)}${en ? ' sh' : '주'}${trade.averagePrice ? ` @ ${fmt.price(trade.averagePrice)}` : ''}`,
+    })),
+  ].filter((field) => field && field.value != null && field.value !== '');
 
-      {theirs ? (
-        <div className="guru-card__metric">
-          <span>{detail.person}</span>
-          <b>{fmt.percent(theirs.weight)}</b>
-          <i style={{ '--w': `${Math.min(100, theirs.weight * 100 * 2.5)}%` }} />
-          {fund?.totalValueUsd ? (
-            <em>{`≈ ${fmt.usd(theirs.weight * fund.totalValueUsd)}`}</em>
-          ) : null}
-          {theirs.mentions ? <em>{en ? 'share of mentions' : '언급 비중'}</em> : null}
-        </div>
-      ) : null}
-      {mine ? (
-        <div className="guru-card__metric is-mine">
-          <span>{en ? 'Me' : '나'}</span>
-          <b>{fmt.percent(mine.weight)}</b>
-          <i style={{ '--w': `${Math.min(100, mine.weight * 100 * 2.5)}%` }} />
-          {mine.returnRate != null ? (
-            <em className={toneOf(mine.returnRate)}>
-              {`${en ? 'My return' : '내 수익률'} ${mine.returnRate >= 0 ? '▲' : '▼'}${Math.abs(mine.returnRate).toFixed(1)}%`}
-            </em>
-          ) : null}
-        </div>
-      ) : null}
-      {theirs?.mentions ? (
-        <p className="guru-card__line">
-          {`${theirs.mentions.toLocaleString()}${en ? ' mentions in 24h' : '회 언급 (24시간)'}`}
-          <small>{`#${theirs.rank}`}</small>
-        </p>
-      ) : null}
-      {shared ? <p className="guru-card__shared">{en ? 'Held by both' : '둘 다 보유 중'}</p> : null}
-
-      {change ? (
-        <div className={`guru-card__trade ${isBuyKind(change.kind) ? 'is-buy' : 'is-sell'}`}>
-          <div>
-            <KindBadge kind={change.kind} lang={detail.lang} />
-            <b>{describeChange(change, language)}</b>
-            <small>{`${fund.previous.period} → ${fund.period}`}</small>
-          </div>
-          <p>
-            {`${fmt.shares(change.sharesBefore)} → ${fmt.shares(change.sharesAfter)}${en ? ' sh' : '주'} · ≈${fmt.usd(Math.abs(change.tradeValueUsd))}`}
-          </p>
-          <p>{`${en ? 'Weight' : '비중'} ${fmt.percent(change.weightBefore)} → ${fmt.percent(change.weightAfter)}`}</p>
-        </div>
-      ) : null}
-      {trades.map((trade) => (
-        <p key={`${trade.date}-${trade.kind}-${trade.filed}`} className="guru-card__line">
-          <KindBadge kind={trade.kind} lang={detail.lang} />
-          {`${fmt.shares(trade.shares)}${en ? ' sh' : '주'}${trade.averagePrice ? ` @ ${fmt.price(trade.averagePrice)}` : ''}`}
-          {quote && trade.averagePrice > 0 ? (
-            <Move
-              value={(quote.price / trade.averagePrice - 1) * 100}
-              label={en ? 'Now' : '지금'}
-            />
-          ) : null}
-          <small>{trade.date}</small>
-        </p>
-      ))}
-    </aside>,
-    document.body,
-  );
+  return {
+    atom: {
+      id: detail.ticker || detail.label,
+      label: detail.name,
+      ticker: realTicker(detail.ticker) ?? '',
+    },
+    fields,
+    returnValue: move ? signedPercent(move.value) : '',
+    returnToneClass: move ? toneClass(move.value) : '',
+    profitText: move ? move.note : null,
+    metricCells: cells,
+    track:
+      quote && Number.isFinite(quote.periodClose) && Number.isFinite(quote.price) && isFiling
+        ? {
+            buy: quote.periodClose,
+            current: quote.price,
+            currency: quote.currency ?? 'USD',
+            labels: {
+              buy: `${en ? 'At' : ''} ${period ?? (en ? 'period end' : '기준일')}`.trim(),
+              current: en ? 'Now' : '현재가',
+            },
+          }
+        : null,
+    chips: [detail.region, detail.sector, change ? describeChange(change, language) : null].filter(
+      Boolean,
+    ),
+  };
 }

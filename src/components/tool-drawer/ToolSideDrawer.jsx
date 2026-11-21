@@ -202,9 +202,10 @@ function formatRebalanceGap(gap, language = 'ko') {
     return language === 'en' ? 'On target' : '목표와 일치';
   }
   if (language === 'en') {
-    return `${name} ${amount}pp ${gap.gapWeightPercent < 0 ? 'over' : 'under'}`;
+    return `${name} ${amount}pp ${gap.gapWeightPercent < 0 ? 'over' : 'under'} (default target ${gap.targetWeightPercent.toFixed(0)}%)`;
   }
-  return `${name} ${amount}%p ${gap.gapWeightPercent < 0 ? '초과' : '부족'}`;
+  // The target is a built-in default (DEFAULT_REBALANCE_TARGET_WEIGHTS), so say so.
+  return `${name} ${amount}%p ${gap.gapWeightPercent < 0 ? '초과' : '부족'} (기본 목표 ${gap.targetWeightPercent.toFixed(0)}%)`;
 }
 
 function formatAnalyticsPercentValue(value) {
@@ -1110,6 +1111,11 @@ export function ToolSideDrawer({
         };
       }),
     [language, portfolioEntries, scoreWeightPreset],
+  );
+  // Same array identity across renders, so the simulation panel's own memoization holds.
+  const twinPositionValues = useMemo(
+    () => items.map((item) => resolveHoldingPosition(item, { baseCurrency: 'KRW', fxRates }).marketValue),
+    [items, fxRates],
   );
   const monthlyDigest = useMemo(() => buildMonthlyDigest(analyticsSummary, { moversLimit: 3 }), [analyticsSummary]);
 
@@ -2126,7 +2132,7 @@ export function ToolSideDrawer({
 
           {analyticsSummary ? (
             <section className="tool-drawer__overview-card tool-drawer__overview-card--wide tool-drawer__analytics-card">
-              <p>{language === 'en' ? 'Service Analytics' : '서비스 분석'}</p>
+              <p>{language === 'en' ? 'Portfolio Analysis' : '포트폴리오 분석'}</p>
               <div className="tool-drawer__analytics-grid">
                 {analyticsKpis.map((metric) => (
                   <div
@@ -2175,7 +2181,8 @@ export function ToolSideDrawer({
             </section>
           ) : null}
 
-          {heatmap ? (
+          {/* One dated day says nothing about "by date": the grid would be a single lit cell. */}
+          {heatmap && heatmap.cells.filter((cell) => cell.hasData).length >= 2 ? (
             <section className="tool-drawer__overview-card tool-drawer__overview-card--wide">
               <p>{language === 'en' ? 'Daily P/L' : '날짜별 손익률'}</p>
               <HeatmapCardView
@@ -2298,9 +2305,7 @@ export function ToolSideDrawer({
         <DigitalTwinPanel
           items={items}
           timelineItems={timelineItems}
-          positionValues={items.map(
-            (item) => resolveHoldingPosition(item, { baseCurrency: 'KRW', fxRates }).marketValue,
-          )}
+          positionValues={twinPositionValues}
           className="twin-panel--drawer"
         />
       );
