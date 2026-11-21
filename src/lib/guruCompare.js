@@ -293,11 +293,11 @@ export const SECURITY_META = {
   '035720': ['카카오', 'Kakao', 'comm', 'kr'],
   '005380': ['현대차', 'Hyundai Motor', 'discretionary', 'kr'],
   '000270': ['기아', 'Kia', 'discretionary', 'kr'],
-  '105560': ['KB금융', 'KB Financial', 'financials', 'kr'],
+  105560: ['KB금융', 'KB Financial', 'financials', 'kr'],
   '055550': ['신한지주', 'Shinhan Financial', 'financials', 'kr'],
-  '373220': ['LG에너지솔루션', 'LG Energy Solution', 'industrials', 'kr'],
+  373220: ['LG에너지솔루션', 'LG Energy Solution', 'industrials', 'kr'],
   '068270': ['셀트리온', 'Celltrion', 'health', 'kr'],
-  '207940': ['삼성바이오로직스', 'Samsung Biologics', 'health', 'kr'],
+  207940: ['삼성바이오로직스', 'Samsung Biologics', 'health', 'kr'],
   '005490': ['POSCO홀딩스', 'POSCO Holdings', 'materials', 'kr'],
 };
 
@@ -396,7 +396,10 @@ export function buildUserHoldings(positions = []) {
     }
     merged.set(key, {
       ticker,
-      name: { ko: meta?.[0] ?? position?.label ?? ticker, en: meta?.[1] ?? position?.label ?? ticker },
+      name: {
+        ko: meta?.[0] ?? position?.label ?? ticker,
+        en: meta?.[1] ?? position?.label ?? ticker,
+      },
       weight,
       returnRate: Number.isFinite(position?.returnRate) ? position.returnRate : null,
       sector: resolveUserSector(position),
@@ -452,17 +455,15 @@ export function compareWithGuru(userHoldings = [], guru) {
       userWeight: holding.weight,
       guruWeight: guruByTicker.get(holding.ticker).weight,
     }))
-    .sort(
-      (a, b) => Math.max(b.userWeight, b.guruWeight) - Math.max(a.userWeight, a.guruWeight),
-    );
+    .sort((a, b) => Math.max(b.userWeight, b.guruWeight) - Math.max(a.userWeight, a.guruWeight));
   const commonShare = shared.reduce((sum, h) => sum + Math.min(h.userWeight, h.guruWeight), 0);
   const covered = guruHoldings.reduce((sum, holding) => sum + holding.weight, 0);
   const rest = Math.max(0, 1 - covered);
   const userSectors = bucketWeights(userHoldings, 'sector');
   const guruSectors = bucketWeights(guruHoldings, 'sector', rest);
-  const sectorKeys = [...new Set([...Object.keys(userSectors), ...Object.keys(guruSectors)])].filter(
-    (key) => key !== 'rest',
-  );
+  const sectorKeys = [
+    ...new Set([...Object.keys(userSectors), ...Object.keys(guruSectors)]),
+  ].filter((key) => key !== 'rest');
   const sectors = sectorKeys
     .map((key) => ({ key, user: userSectors[key] ?? 0, guru: guruSectors[key] ?? 0 }))
     .sort((a, b) => Math.max(b.user, b.guru) - Math.max(a.user, a.guru));
@@ -473,7 +474,9 @@ export function compareWithGuru(userHoldings = [], guru) {
   return {
     shared,
     commonShare,
-    userOnly: userHoldings.filter((holding) => !holding.ticker || !guruByTicker.has(holding.ticker)),
+    userOnly: userHoldings.filter(
+      (holding) => !holding.ticker || !guruByTicker.has(holding.ticker),
+    ),
     guruOnly: guruHoldings.filter((holding) => !userTickers.has(holding.ticker)),
     sectors,
     userRegions: bucketWeights(userHoldings, 'region'),
@@ -482,7 +485,10 @@ export function compareWithGuru(userHoldings = [], guru) {
   };
 }
 
-const searchKey = (value) => String(value ?? '').toLowerCase().replace(/[\s·.,'&()-]/g, '');
+const searchKey = (value) =>
+  String(value ?? '')
+    .toLowerCase()
+    .replace(/[\s·.,'&()-]/g, '');
 
 // Directory search for the 유명인 tab: matches names (Korean or English), the fund/company, and
 // — so "애플" or "NVDA" finds who holds or trades it — the bundled holdings and Form 4 issuers.
@@ -495,7 +501,13 @@ export function searchGuruDirectory(people = [], snapshot = null, query = '') {
   const nameHits = [];
   const holdingHits = [];
   for (const entry of people) {
-    const names = [entry.person?.ko, entry.person?.en, entry.entity, entry.id, ...(entry.aliases ?? [])].map(searchKey);
+    const names = [
+      entry.person?.ko,
+      entry.person?.en,
+      entry.entity,
+      entry.id,
+      ...(entry.aliases ?? []),
+    ].map(searchKey);
     if (names.some((name) => name.includes(needle))) {
       nameHits.push({ entry, holding: null });
       continue;
@@ -512,7 +524,9 @@ export function searchGuruDirectory(people = [], snapshot = null, query = '') {
       })),
     ];
     const hit = candidates.find((holding) =>
-      [holding.ticker, holding.name?.ko, holding.name?.en].map(searchKey).some((key) => key && key.includes(needle)),
+      [holding.ticker, holding.name?.ko, holding.name?.en]
+        .map(searchKey)
+        .some((key) => key && key.includes(needle)),
     );
     if (hit) holdingHits.push({ entry, holding: hit });
   }
@@ -532,40 +546,59 @@ export function daysSince(dateText, today = new Date()) {
 const pct = (value) => `${(value * 100).toFixed(1)}%`;
 const points = (value) => `${(value * 100).toFixed(1)}%p`;
 
-function withTopic(word, en) {
-  if (en) {
-    return word;
-  }
-  const code = word.charCodeAt(word.length - 1);
-  if (code < 0xac00 || code > 0xd7a3) {
-    return `${word}는`;
-  }
-  return `${word}${(code - 0xac00) % 28 ? '은' : '는'}`;
-}
+// Korean particles follow the last syllable; names that don't end in Hangul (ARK, SPDR…) fall
+// back to the vowel-ending form.
+const finalConsonant = (word) => {
+  const code = String(word).charCodeAt(String(word).length - 1);
+  return code >= 0xac00 && code <= 0xd7a3 ? (code - 0xac00) % 28 !== 0 : false;
+};
+const topic = (word) => `${word}${finalConsonant(word) ? '은' : '는'}`;
+const withPerson = (word) => `${word}${finalConsonant(word) ? '과' : '와'}`;
 
-// Plain descriptive sentences — what differs, never what to buy or sell.
-export function buildGuruInsights(result, guru, language = 'ko') {
+// A comparison read-out in plain words — what is alike, what differs, never what to buy or sell.
+// Returns a headline plus a few short items the UI lays out as cards; each item is one idea in
+// one or two sentences, the way you'd tell a friend.
+export function buildGuruSummary(result, guru, language = 'ko') {
   const en = language === 'en';
   const person = guru?.person?.[en ? 'en' : 'ko'] ?? '';
   const sectorName = (key) => SECTOR_LABELS[key]?.[en ? 'en' : 'ko'] ?? key;
   const nameOf = (holding) => holding.name?.[en ? 'en' : 'ko'] ?? holding.ticker;
-  const lines = [];
   const topCount = guru?.holdings?.length ?? 0;
+  const items = [];
+
+  const level =
+    result.commonShare >= 0.3
+      ? 'close'
+      : result.commonShare >= 0.08
+        ? 'some'
+        : result.shared.length
+          ? 'little'
+          : 'none';
+  const headline = {
+    close: en ? `Quite similar to ${person}` : `${withPerson(person)} 꽤 비슷하게 담고 있어요`,
+    some: en ? `Partly overlaps with ${person}` : `${withPerson(person)} 일부가 겹쳐요`,
+    little: en ? `Barely overlaps with ${person}` : `${withPerson(person)} 거의 겹치지 않아요`,
+    none: en ? `Nothing in common with ${person}` : `${withPerson(person)} 겹치는 종목이 없어요`,
+  }[level];
 
   if (result.shared.length) {
     const names = result.shared.slice(0, 3).map(nameOf).join(', ');
     const more = result.shared.length > 3 ? (en ? ' and more' : ' 등') : '';
-    lines.push(
-      en
-        ? `Common share is ${pct(result.commonShare)}: you hold ${result.shared.length} of ${person}'s top ${topCount} (${names}${more}).`
-        : `공통 비중은 ${pct(result.commonShare)}입니다. ${person}의 상위 ${topCount}종목 가운데 ${result.shared.length}종목(${names}${more})을 나도 갖고 있습니다.`,
-    );
+    items.push({
+      key: 'overlap',
+      label: en ? 'Same stocks' : '같은 종목',
+      text: en
+        ? `${result.shared.length} of the stocks you hold are in ${person}'s top ${topCount} (${names}${more}). The two portfolios overlap by ${pct(result.commonShare)}.`
+        : `내가 가진 종목 중 ${result.shared.length}개가 ${person}의 상위 ${topCount}종목과 같아요 (${names}${more}). 두 포트폴리오가 겹치는 비중은 ${pct(result.commonShare)}예요.`,
+    });
   } else {
-    lines.push(
-      en
+    items.push({
+      key: 'overlap',
+      label: en ? 'Same stocks' : '같은 종목',
+      text: en
         ? `You hold none of ${person}'s top ${topCount}. Compare by sector and region instead.`
-        : `${person}의 상위 ${topCount}종목과 내 포트폴리오 사이에 공통 종목이 없습니다. 종목 대신 섹터와 지역으로 비교해 보세요.`,
-    );
+        : `${person}의 상위 ${topCount}종목 중 내가 가진 종목은 없어요. 종목 대신 업종과 지역으로 비교해 보세요.`,
+    });
   }
 
   const comparable = result.sectors.filter((row) => row.key !== 'rest');
@@ -577,37 +610,81 @@ export function buildGuruInsights(result, guru, language = 'ko') {
     (best, row) => (row.user - row.guru > (best ? best.user - best.guru : 0) ? row : best),
     null,
   );
-  if (guruHeavier && guruHeavier.guru - guruHeavier.user > 0.02) {
-    lines.push(
-      en
-        ? `${person} has ${pct(guruHeavier.guru)} in ${sectorName(guruHeavier.key)}, ${points(guruHeavier.guru - guruHeavier.user)} more than you (${pct(guruHeavier.user)}).`
-        : `${withTopic(person, en)} ${sectorName(guruHeavier.key)} 비중이 ${pct(guruHeavier.guru)}로 나(${pct(guruHeavier.user)})보다 ${points(guruHeavier.guru - guruHeavier.user)} 높습니다.`,
-    );
+  const guruGap = guruHeavier ? guruHeavier.guru - guruHeavier.user : 0;
+  const userGap = userHeavier ? userHeavier.user - userHeavier.guru : 0;
+  if (guruGap > 0.02) {
+    items.push({
+      key: 'sector-guru',
+      label: en ? 'Sector' : '업종',
+      text: en
+        ? `${person} puts ${pct(guruHeavier.guru)} in ${sectorName(guruHeavier.key)}; you have ${pct(guruHeavier.user)} (${points(guruGap)} apart).`
+        : `${topic(person)} ${sectorName(guruHeavier.key)}에 ${pct(guruHeavier.guru)}를 두는데, 나는 ${pct(guruHeavier.user)}예요 (${points(guruGap)} 차이).`,
+    });
   }
-  if (userHeavier && userHeavier.user - userHeavier.guru > 0.02) {
-    lines.push(
-      en
-        ? `You have ${pct(userHeavier.user)} in ${sectorName(userHeavier.key)}, ${points(userHeavier.user - userHeavier.guru)} more than ${person} (${pct(userHeavier.guru)}).`
-        : `나는 ${sectorName(userHeavier.key)} 비중이 ${pct(userHeavier.user)}로 ${person}(${pct(userHeavier.guru)})보다 ${points(userHeavier.user - userHeavier.guru)} 높습니다.`,
-    );
+  if (userGap > 0.02) {
+    items.push({
+      key: 'sector-user',
+      label: en ? 'Sector' : '업종',
+      text: en
+        ? `You put ${pct(userHeavier.user)} in ${sectorName(userHeavier.key)}; ${person} has ${pct(userHeavier.guru)} (${points(userGap)} apart).`
+        : `나는 ${sectorName(userHeavier.key)}에 ${pct(userHeavier.user)}를 두는데, ${topic(person)} ${pct(userHeavier.guru)}예요 (${points(userGap)} 차이).`,
+    });
+  }
+  if (guruGap <= 0.02 && userGap <= 0.02) {
+    items.push({
+      key: 'sector-alike',
+      label: en ? 'Sector' : '업종',
+      text: en
+        ? `The sector mix isn't far from ${person}'s.`
+        : `업종 구성은 ${withPerson(person)} 크게 다르지 않아요.`,
+    });
   }
 
   const korea = result.userRegions.kr ?? 0;
   if (korea > 0.5) {
-    lines.push(
-      en
-        ? `${pct(korea)} of your portfolio is Korean stocks. 13F filings only list US-listed securities, so common holdings are unlikely.`
-        : `내 포트폴리오는 한국 주식이 ${pct(korea)}입니다. 13F에는 미국 상장 종목만 나오므로 공통 종목이 나오기 어렵습니다.`,
-    );
+    items.push({
+      key: 'region',
+      label: en ? 'Region' : '지역',
+      text: en
+        ? `${pct(korea)} of your portfolio is Korean stocks. 13F filings list only US-listed securities, so few overlaps is expected.`
+        : `내 자산의 ${pct(korea)}가 한국 주식이에요. 13F에는 미국 상장 종목만 나와서, 겹치는 종목이 적은 건 자연스러워요.`,
+    });
   }
 
-  const mine = result.userConcentration.effectiveHoldings.toFixed(1);
-  const theirs = Number(guru?.effectiveHoldings ?? 0).toFixed(1);
-  lines.push(
-    en
-      ? `Effective number of holdings: you ${mine}, ${person} ${theirs}.`
-      : `유효 종목 수는 나 ${mine}개, ${person} ${theirs}개입니다.`,
-  );
+  const mine = result.userConcentration.effectiveHoldings;
+  const theirs = Number(guru?.effectiveHoldings ?? 0);
+  const mineText = mine.toFixed(1);
+  const theirsText = theirs.toFixed(1);
+  if (theirs > 0 && mine < theirs * 0.8) {
+    items.push({
+      key: 'focus',
+      label: en ? 'Spread' : '분산',
+      text: en
+        ? `Your money sits in effectively ${mineText} stocks, while ${person} spreads across ${theirsText}.`
+        : `나는 사실상 ${mineText}개 종목에 몰려 있고, ${topic(person)} ${theirsText}개 종목에 나눠 담고 있어요. (비중까지 따져 센 종목 수예요)`,
+    });
+  } else if (theirs > 0 && mine > theirs * 1.25) {
+    items.push({
+      key: 'focus',
+      label: en ? 'Spread' : '분산',
+      text: en
+        ? `${person} is concentrated in effectively ${theirsText} stocks; you spread across ${mineText}.`
+        : `${topic(person)} 사실상 ${theirsText}개 종목에 집중하는 반면, 나는 ${mineText}개 종목으로 더 넓게 나눠 담고 있어요. (비중까지 따져 센 종목 수예요)`,
+    });
+  } else {
+    items.push({
+      key: 'focus',
+      label: en ? 'Spread' : '분산',
+      text: en
+        ? `How spread out you are is similar: ${mineText} effective stocks for you, ${theirsText} for ${person}.`
+        : `분산 정도는 비슷해요. 비중까지 따져 센 종목 수가 나 ${mineText}개, ${person} ${theirsText}개예요.`,
+    });
+  }
 
-  return lines;
+  return { headline, level, items };
+}
+
+// Plain strings, for callers that only want the sentences.
+export function buildGuruInsights(result, guru, language = 'ko') {
+  return buildGuruSummary(result, guru, language).items.map((item) => item.text);
 }

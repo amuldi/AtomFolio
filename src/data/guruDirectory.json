@@ -1,5 +1,5 @@
 {
-  "note": "Curated list for the 유명인 tab. kind=fund → SEC 13F (cik); kind=insider → SEC Form 4 (cik); kind=etf → SEC N-PORT holdings of a fund (symbol); kind=buzz → most-mentioned stocks on a community (ApeWisdom filter, not holdings). category drives the filter chips; aliases widen search. domain gives the logo when there is no free-licensed portrait; wiki is the English Wikipedia article for the portrait.",
+  "note": "Curated list for the 유명인 tab. kind=fund → SEC 13F (cik); kind=insider → SEC Form 4 (cik); kind=etf → SEC N-PORT holdings of a fund (symbol); kind=buzz → most-mentioned stocks on a community (ApeWisdom filter, not holdings). category drives the filter chips; aliases widen search. domain gives the logo when there is no free-licensed portrait; wiki is the English Wikipedia article for the portrait. kind=dart → Korean listed company from OpenDART (corpCode): largest shareholders, 5% blockholders, executive trades.",
   "people": [
     {
       "id": "berkshire",
@@ -509,6 +509,214 @@
       ],
       "wiki": "Michael_Burry",
       "domain": null
+    },
+    {
+      "id": "samsung",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "00126380",
+      "person": {
+        "ko": "삼성전자",
+        "en": "Samsung Electronics"
+      },
+      "entity": "KRX 005930 · 최대주주·임원 매매",
+      "aliases": [
+        "이재용",
+        "삼성",
+        "홍라희",
+        "삼성생명"
+      ],
+      "wiki": null,
+      "domain": "samsung.com"
+    },
+    {
+      "id": "skhynix",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "00164779",
+      "person": {
+        "ko": "SK하이닉스",
+        "en": "SK hynix"
+      },
+      "entity": "KRX 000660 · 최대주주·임원 매매",
+      "aliases": [
+        "sk",
+        "최태원",
+        "하이닉스"
+      ],
+      "wiki": null,
+      "domain": "skhynix.com"
+    },
+    {
+      "id": "hyundai",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "00164742",
+      "person": {
+        "ko": "현대자동차",
+        "en": "Hyundai Motor"
+      },
+      "entity": "KRX 005380 · 최대주주·임원 매매",
+      "aliases": [
+        "정의선",
+        "현대차",
+        "현대"
+      ],
+      "wiki": null,
+      "domain": "hyundai.com"
+    },
+    {
+      "id": "kia",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "00106641",
+      "person": {
+        "ko": "기아",
+        "en": "Kia"
+      },
+      "entity": "KRX 000270 · 최대주주·임원 매매",
+      "aliases": [
+        "기아차",
+        "정의선"
+      ],
+      "wiki": null,
+      "domain": "kia.com"
+    },
+    {
+      "id": "naver",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "00266961",
+      "person": {
+        "ko": "NAVER",
+        "en": "NAVER"
+      },
+      "entity": "KRX 035420 · 최대주주·임원 매매",
+      "aliases": [
+        "이해진",
+        "네이버"
+      ],
+      "wiki": null,
+      "domain": "navercorp.com"
+    },
+    {
+      "id": "kakao",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "00258801",
+      "person": {
+        "ko": "카카오",
+        "en": "Kakao"
+      },
+      "entity": "KRX 035720 · 최대주주·임원 매매",
+      "aliases": [
+        "김범수",
+        "카톡"
+      ],
+      "wiki": null,
+      "domain": "kakaocorp.com"
+    },
+    {
+      "id": "lges",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "01515323",
+      "person": {
+        "ko": "LG에너지솔루션",
+        "en": "LG Energy Solution"
+      },
+      "entity": "KRX 373220 · 최대주주·임원 매매",
+      "aliases": [
+        "lg",
+        "구광모",
+        "엘지"
+      ],
+      "wiki": null,
+      "domain": "lgensol.com"
+    },
+    {
+      "id": "celltrion",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "00413046",
+      "person": {
+        "ko": "셀트리온",
+        "en": "Celltrion"
+      },
+      "entity": "KRX 068270 · 최대주주·임원 매매",
+      "aliases": [
+        "서정진"
+      ],
+      "wiki": null,
+      "domain": "celltrion.com"
+    },
+    {
+      "id": "sbio",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "00877059",
+      "person": {
+        "ko": "삼성바이오로직스",
+        "en": "Samsung Biologics"
+      },
+      "entity": "KRX 207940 · 최대주주·임원 매매",
+      "aliases": [
+        "삼성",
+        "이재용"
+      ],
+      "wiki": null,
+      "domain": "samsungbiologics.com"
+    },
+    {
+      "id": "posco",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "00155319",
+      "person": {
+        "ko": "POSCO홀딩스",
+        "en": "POSCO Holdings"
+      },
+      "entity": "KRX 005490 · 최대주주·임원 매매",
+      "aliases": [
+        "포스코"
+      ],
+      "wiki": null,
+      "domain": "posco-inc.com"
+    },
+    {
+      "id": "hanwha",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "00126566",
+      "person": {
+        "ko": "한화에어로스페이스",
+        "en": "Hanwha Aerospace"
+      },
+      "entity": "KRX 012450 · 최대주주·임원 매매",
+      "aliases": [
+        "한화",
+        "김승연",
+        "김동관"
+      ],
+      "wiki": null,
+      "domain": "hanwha.com"
+    },
+    {
+      "id": "krafton",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "00760971",
+      "person": {
+        "ko": "크래프톤",
+        "en": "Krafton"
+      },
+      "entity": "KRX 259960 · 최대주주·임원 매매",
+      "aliases": [
+        "배틀그라운드",
+        "장병규"
+      ],
+      "wiki": null,
+      "domain": "krafton.com"
     },
     {
       "id": "nps",

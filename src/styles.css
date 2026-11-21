@@ -5615,10 +5615,7 @@ body::after {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(9.6rem, 1fr));
   gap: 0.32rem;
-  max-height: 15rem;
-  overflow-y: auto;
   padding-right: 0.15rem;
-  scrollbar-width: thin;
 }
 
 .guru-panel__person {
@@ -6295,11 +6292,22 @@ html.guru-stage-on .atom-tag:not(.guru-stage__tag) {
   animation: guru-stage-in 0.6s ease both;
 }
 
-/* Electrons and the nucleus stay clickable; the rest of the layer lets clicks through. */
+/* Electrons and the nucleus stay clickable; empty space turns the atom (see .guru-stage__layer). */
 .guru-stage .node-hit,
 .guru-stage .center-hit {
   pointer-events: auto;
   cursor: pointer;
+}
+
+html.guru-stage-dragging,
+html.guru-stage-dragging .guru-stage__layer,
+html.guru-stage-dragging .guru-stage .node-hit {
+  cursor: grabbing;
+}
+
+/* Until 비교하기 brings it in, my atom is invisible and must not catch the pointer. */
+.guru-stage:not(.is-compare) .guru-stage__layer.is-mine {
+  pointer-events: none;
 }
 
 .guru-stage .node-hit:focus:not(:focus-visible),
@@ -6322,6 +6330,11 @@ html.guru-stage-on .atom-tag:not(.guru-stage__tag) {
 .guru-stage__layer {
   position: absolute;
   inset: 0;
+  /* Grab anywhere on an atom's own square to turn it. */
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
   transition:
     transform 1.25s cubic-bezier(0.65, 0, 0.25, 1),
     opacity 0.9s ease,
@@ -7596,27 +7609,35 @@ html.guru-stage-on .atom-tag:not(.guru-stage__tag) {
 
 .atom-detail-panel__list {
   display: grid;
-  gap: 0.35rem;
-  padding-top: 0.55rem;
-  border-top: 1px solid rgba(var(--frame-hairline), 0.08);
+  margin: 0;
+  padding: 0;
 }
 
 .atom-detail-panel__row {
   display: grid;
-  grid-template-columns: minmax(4.3rem, 5.4rem) minmax(0, 1fr);
-  gap: 0.5rem;
-  align-items: start;
+  grid-template-columns: minmax(3.6rem, 4.8rem) minmax(0, 1fr);
+  gap: 0.6rem;
+  align-items: baseline;
+  padding: 0.34rem 0;
+  border-top: 1px solid rgba(var(--frame-hairline), 0.06);
+}
+
+.atom-detail-panel__row:first-child {
+  border-top: 0;
 }
 
 .atom-detail-panel__label {
+  margin: 0;
   color: rgba(var(--frame-ink-c), 0.46);
-  font-size: 0.6rem;
-  font-weight: 540;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-size: 0.58rem;
+  font-weight: 560;
+  letter-spacing: 0.02em;
 }
 
 .atom-detail-panel__value {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
   color: rgba(var(--frame-ink-c), 0.88);
   font-size: 0.68rem;
   font-weight: 470;
@@ -9937,8 +9958,9 @@ html.guru-stage-on .atom-tag:not(.guru-stage__tag) {
   font-variant-numeric: tabular-nums;
 }
 
-/* Center-click refresh (AtomSketch burstKey): a ring leaves the nucleus, light runs out along
-   every bond (farther electrons slightly later), and each electron flashes as it is reached. */
+/* Center-click refresh (AtomSketch burstKey): the nucleus brightens a touch, a short soft light
+   slides out along every bond (longer bonds take longer, so it flows rather than bursts) and the
+   electron it reaches takes on a faint glow that fades slowly. No rings, no flashes. */
 .refresh-burst {
   pointer-events: none;
 }
@@ -9946,49 +9968,47 @@ html.guru-stage-on .atom-tag:not(.guru-stage__tag) {
 .refresh-burst line {
   fill: none;
   stroke-linecap: round;
-  stroke-dasharray: 0.16 1.3;
-  stroke-dashoffset: 0.16;
-  animation: refresh-burst-ray 0.95s cubic-bezier(0.22, 0.7, 0.2, 1) both;
+  stroke-dasharray: 0.2 2;
+  stroke-dashoffset: 0.2;
+  animation: refresh-burst-ray var(--burst-travel, 1400ms) cubic-bezier(0.45, 0.05, 0.35, 1) both;
   animation-delay: var(--burst-delay, 0ms);
 }
 
 .refresh-burst__ray {
-  stroke: rgba(var(--atom-ink), 0.95);
-  stroke-width: 1.6;
+  stroke: rgba(var(--atom-ink), 0.7);
+  stroke-width: 1.3;
 }
 
 .refresh-burst__ray-soft {
-  stroke: rgba(var(--atom-ink), 0.35);
-  stroke-width: 7;
+  stroke: rgba(var(--atom-ink), 0.2);
+  stroke-width: 6;
   filter: blur(3px);
 }
 
 .refresh-burst__flash {
-  fill: rgba(var(--atom-ink), 0.32);
+  fill: rgba(var(--atom-ink), 0.2);
   opacity: 0;
-  transform-box: fill-box;
-  transform-origin: center;
-  filter: blur(2px);
-  animation: refresh-burst-flash 0.7s ease-out both;
-  animation-delay: calc(var(--burst-delay, 0ms) + 0.42s);
+  filter: blur(4px);
+  animation: refresh-burst-flash 1.6s ease-in-out both;
+  animation-delay: calc(var(--burst-delay, 0ms) + var(--burst-travel, 1400ms) * 0.78);
 }
 
 .refresh-burst__core {
-  fill: none;
-  stroke: rgba(var(--atom-ink), 0.9);
-  stroke-width: 1.4;
+  fill: rgba(var(--atom-ink), 0.16);
   opacity: 0;
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: refresh-burst-core 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  filter: blur(7px);
+  animation: refresh-burst-core 1.5s ease-in-out both;
 }
 
 @keyframes refresh-burst-ray {
   0% {
-    stroke-dashoffset: 0.16;
+    stroke-dashoffset: 0.2;
+    opacity: 0;
+  }
+  15% {
     opacity: 1;
   }
-  85% {
+  80% {
     opacity: 1;
   }
   100% {
@@ -9998,28 +10018,22 @@ html.guru-stage-on .atom-tag:not(.guru-stage__tag) {
 }
 
 @keyframes refresh-burst-flash {
-  0% {
-    opacity: 0;
-    transform: scale(0.4);
-  }
-  35% {
-    opacity: 0.95;
-    transform: scale(1);
-  }
+  0%,
   100% {
     opacity: 0;
-    transform: scale(1.5);
+  }
+  35% {
+    opacity: 0.8;
   }
 }
 
 @keyframes refresh-burst-core {
-  0% {
-    opacity: 0.95;
-    transform: scale(0.5);
-  }
+  0%,
   100% {
     opacity: 0;
-    transform: scale(3.2);
+  }
+  30% {
+    opacity: 0.9;
   }
 }
 
@@ -10027,35 +10041,6 @@ html.guru-stage-on .atom-tag:not(.guru-stage__tag) {
   .refresh-burst {
     display: none;
   }
-}
-
-/* 유명인 list resize handle: a short grip under the list; drag to resize, double-click to toggle. */
-.guru-panel__resize {
-  position: relative;
-  height: 0.9rem;
-  margin-top: -0.4rem;
-  cursor: ns-resize;
-  touch-action: none;
-}
-
-.guru-panel__resize::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 2.4rem;
-  height: 3px;
-  border-radius: 3px;
-  background: rgba(var(--frame-ink-a), 0.2);
-  transform: translate(-50%, -50%);
-  transition:
-    background 0.2s ease,
-    width 0.2s ease;
-}
-
-.guru-panel__resize:hover::after {
-  width: 3.4rem;
-  background: rgba(var(--frame-ink-a), 0.5);
 }
 
 /* Electron detail on the 유명인 stage. */
@@ -10205,7 +10190,7 @@ html.guru-stage-on .atom-tag:not(.guru-stage__tag) {
 
 /* ── Holding detail card (AtomDetailPanel): numbers first, raw CSV fields folded away ─────── */
 .atom-detail-panel {
-  width: min(17.5rem, calc(100vw - 2.4rem));
+  width: min(18.5rem, calc(100vw - 2.4rem));
 }
 
 .atom-detail-panel__hero {
@@ -10366,12 +10351,32 @@ html.guru-stage-on .atom-tag:not(.guru-stage__tag) {
   font-weight: 650;
 }
 
-.atom-detail-panel__raw summary {
-  margin-bottom: 0.4rem;
-  color: rgba(var(--frame-ink-a), 0.44);
+.atom-detail-panel__raw {
+  margin-top: 0.15rem;
+  padding: 0.6rem 0.65rem 0.35rem;
+  border: 1px solid rgba(var(--frame-hairline), 0.08);
+  border-radius: 12px;
+  background: rgba(var(--frame-ink-a), 0.025);
+}
+
+.atom-detail-panel__raw-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 0.3rem;
+  color: rgba(var(--frame-ink-a), 0.5);
   font-size: 0.58rem;
-  font-weight: 650;
-  cursor: pointer;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.atom-detail-panel__raw-title em {
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: rgba(var(--frame-ink-a), 0.07);
+  font-size: 0.54rem;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
 }
 
 .hover-card.is-compact {
@@ -10415,4 +10420,618 @@ html.guru-stage-on .atom-tag:not(.guru-stage__tag) {
 
 .guru-stage__caption.is-guru {
   left: 75%;
+}
+
+/* ── 유명인: live moves, resizable lists, hover peek, trade summary, comparison summary ────── */
+
+/* Red up / blue down, with the arrow so direction never relies on color alone. */
+.guru-move {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.28rem;
+  color: rgba(var(--frame-ink-a), 0.5);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.guru-move small {
+  color: rgba(var(--frame-ink-a), 0.42);
+  font-size: 0.52rem;
+  font-weight: 600;
+}
+
+.guru-move.positive {
+  color: var(--profit-color-strong);
+}
+
+.guru-move.negative {
+  color: var(--loss-color-strong);
+}
+
+/* Grab the strip under a list and pull, like dragging a split-pane divider. */
+.guru-resizable {
+  display: grid;
+  min-width: 0;
+}
+
+.guru-resizable__body {
+  min-width: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+.guru-resizable__grip {
+  position: relative;
+  height: 0.8rem;
+  margin-top: 0.1rem;
+  border-radius: 6px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.guru-resizable__grip i {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(var(--frame-hairline), 0.14);
+  transition:
+    background 0.18s ease,
+    height 0.18s ease;
+}
+
+.guru-resizable__grip::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2.2rem;
+  height: 3px;
+  border-radius: 3px;
+  background: rgba(var(--frame-ink-a), 0.22);
+  transform: translate(-50%, -50%);
+  transition:
+    width 0.18s ease,
+    background 0.18s ease;
+}
+
+.guru-resizable__grip:hover i,
+.guru-resizable.is-dragging .guru-resizable__grip i {
+  height: 2px;
+  background: rgba(var(--frame-ink-a), 0.4);
+}
+
+.guru-resizable__grip:hover::after,
+.guru-resizable.is-dragging .guru-resizable__grip::after {
+  width: 3.2rem;
+  background: rgba(var(--frame-ink-a), 0.7);
+}
+
+.guru-resizable.is-dragging {
+  user-select: none;
+}
+
+/* Hover peek over an electron (the click card is .guru-card). */
+.guru-hover {
+  position: fixed;
+  z-index: var(--z-floating-ui);
+  display: grid;
+  gap: 0.34rem;
+  padding: 0.62rem 0.7rem 0.55rem;
+  border: 1px solid rgba(var(--frame-hairline), 0.14);
+  border-radius: 12px;
+  background: rgba(10, 10, 9, 0.9);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+  color: rgba(var(--frame-ink-a), 0.9);
+  font-family: var(--ui-font);
+  pointer-events: none;
+  animation: guru-card-in 0.14s ease-out both;
+}
+
+.guru-hover header {
+  display: grid;
+  gap: 0.08rem;
+}
+
+.guru-hover header strong {
+  font-family: 'Bradley Hand', 'Gaegu', cursive;
+  font-size: 1rem;
+  line-height: 1.15;
+}
+
+.guru-hover header span {
+  color: rgba(var(--frame-ink-a), 0.46);
+  font-size: 0.56rem;
+  font-weight: 650;
+}
+
+.guru-hover__moves {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.65rem;
+  font-size: 0.7rem;
+}
+
+.guru-hover__moves b {
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.guru-hover__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  color: rgba(var(--frame-ink-a), 0.78);
+  font-size: 0.6rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.guru-hover__shared {
+  margin: 0;
+  color: rgba(var(--frame-ink-a), 0.85);
+  font-size: 0.58rem;
+  font-weight: 700;
+}
+
+.guru-hover small {
+  color: rgba(var(--frame-ink-a), 0.36);
+  font-size: 0.52rem;
+}
+
+/* Click card: price block and this-quarter trade. */
+.guru-card__price {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.55rem 0.6rem;
+  border-radius: 10px;
+  background: rgba(var(--frame-ink-a), 0.045);
+}
+
+.guru-card__price-now {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.guru-card__price-now b {
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.guru-card__price-now span {
+  color: rgba(var(--frame-ink-a), 0.38);
+  font-size: 0.52rem;
+}
+
+.guru-card__price-moves {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.8rem;
+  font-size: 0.72rem;
+}
+
+.guru-card__track > div {
+  position: relative;
+  height: 4px;
+  margin: 0.3rem 0 0.4rem;
+  border-radius: 3px;
+  background: rgba(var(--frame-ink-a), 0.09);
+}
+
+.guru-card__track > div span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+  background: rgba(var(--frame-ink-a), 0.4);
+}
+
+.guru-card__track > div span.positive {
+  background: var(--profit-color-strong);
+}
+
+.guru-card__track > div span.negative {
+  background: var(--loss-color-strong);
+}
+
+.guru-card__track i {
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border: 1px solid rgba(var(--frame-ink-a), 0.7);
+  border-radius: 50%;
+  background: #0b0b0a;
+  transform: translate(-50%, -50%);
+}
+
+.guru-card__track i.is-now.positive {
+  border-color: var(--profit-color-strong);
+  background: var(--profit-color-strong);
+}
+
+.guru-card__track i.is-now.negative {
+  border-color: var(--loss-color-strong);
+  background: var(--loss-color-strong);
+}
+
+.guru-card__track small {
+  display: flex;
+  justify-content: space-between;
+  color: rgba(var(--frame-ink-a), 0.46);
+  font-size: 0.54rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.guru-card__trade {
+  display: grid;
+  gap: 0.22rem;
+  padding: 0.5rem 0.6rem;
+  border-left: 2px solid currentColor;
+  border-radius: 4px 10px 10px 4px;
+  background: rgba(var(--frame-ink-a), 0.04);
+  color: rgba(var(--frame-ink-a), 0.5);
+}
+
+.guru-card__trade.is-buy {
+  color: var(--profit-color-strong);
+}
+
+.guru-card__trade.is-sell {
+  color: var(--loss-color-strong);
+}
+
+.guru-card__trade > div {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.guru-card__trade b {
+  font-size: 0.74rem;
+}
+
+.guru-card__trade small {
+  margin-left: auto;
+  color: rgba(var(--frame-ink-a), 0.4);
+  font-size: 0.52rem;
+}
+
+.guru-card__trade p {
+  margin: 0;
+  color: rgba(var(--frame-ink-a), 0.74);
+  font-size: 0.6rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Live status card under the profile. */
+.guru-live {
+  gap: 0.5rem;
+}
+
+.guru-live__moves {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.3rem 1.3rem;
+}
+
+.guru-live__moves > div {
+  display: grid;
+  gap: 0.08rem;
+}
+
+.guru-live__moves em {
+  color: rgba(var(--frame-ink-a), 0.46);
+  font-size: 0.56rem;
+  font-style: normal;
+  font-weight: 650;
+}
+
+.guru-live__moves .guru-move {
+  font-size: 1.2rem;
+}
+
+.guru-live__moves small {
+  margin-left: auto;
+  color: rgba(var(--frame-ink-a), 0.36);
+  font-size: 0.52rem;
+}
+
+.guru-live p {
+  margin: 0;
+  color: rgba(var(--frame-ink-a), 0.72);
+  font-size: 0.64rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.guru-live p.guru-live__key {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: rgba(var(--frame-ink-a), 0.5);
+  font-size: 0.56rem;
+}
+
+.guru-live__key i {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+}
+
+.guru-live__key i.is-up {
+  background: var(--profit-color-strong);
+}
+
+.guru-live__key i.is-down {
+  margin-left: 0.4rem;
+  background: var(--loss-color-strong);
+}
+
+.guru-live__filed {
+  color: rgba(var(--frame-ink-a), 0.34);
+  font-size: 0.52rem;
+}
+
+/* Last quarter's buys and sells. */
+.guru-trade__balance {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.guru-trade__balance > div {
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 9px;
+  background: rgba(var(--frame-ink-a), 0.04);
+}
+
+.guru-trade__balance em {
+  color: rgba(var(--frame-ink-a), 0.46);
+  font-size: 0.54rem;
+  font-style: normal;
+  font-weight: 650;
+}
+
+.guru-trade__balance b {
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.guru-trade__balance .is-buy b {
+  color: var(--profit-color-strong);
+}
+
+.guru-trade__balance .is-sell b {
+  color: var(--loss-color-strong);
+}
+
+.guru-trade__split {
+  display: flex;
+  height: 5px;
+  gap: 2px;
+  overflow: hidden;
+  border-radius: 3px;
+}
+
+.guru-trade__split i {
+  min-width: 2px;
+}
+
+.guru-trade__split .is-buy,
+.guru-trade__bar i {
+  background: var(--profit-color-strong);
+}
+
+.guru-trade__split .is-sell {
+  background: var(--loss-color-strong);
+}
+
+.guru-trade__section h4 {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.2rem 0 0.1rem;
+  color: rgba(var(--frame-ink-a), 0.56);
+  font-size: 0.6rem;
+  font-weight: 760;
+  letter-spacing: 0.04em;
+}
+
+.guru-trade__section.is-buy h4 {
+  color: var(--profit-color-strong);
+}
+
+.guru-trade__section.is-sell h4 {
+  color: var(--loss-color-strong);
+}
+
+.guru-trade__section h4 em {
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: rgba(var(--frame-ink-a), 0.07);
+  color: rgba(var(--frame-ink-a), 0.6);
+  font-size: 0.54rem;
+  font-style: normal;
+}
+
+.guru-trade__section ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guru-trade__row {
+  display: grid;
+  gap: 0.28rem;
+  padding: 0.46rem 0;
+  border-bottom: 1px solid rgba(var(--frame-hairline), 0.06);
+}
+
+.guru-trade__row:last-child {
+  border-bottom: 0;
+}
+
+.guru-trade__top {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.64rem;
+}
+
+.guru-trade__amount {
+  font-variant-numeric: tabular-nums;
+}
+
+.guru-trade__row.is-buy .guru-trade__amount {
+  color: var(--profit-color-strong);
+}
+
+.guru-trade__row.is-sell .guru-trade__amount {
+  color: var(--loss-color-strong);
+}
+
+.guru-trade__bar {
+  display: block;
+  height: 3px;
+  border-radius: 3px;
+  background: rgba(var(--frame-ink-a), 0.06);
+}
+
+.guru-trade__bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+}
+
+.guru-trade__row.is-sell .guru-trade__bar i {
+  background: var(--loss-color-strong);
+}
+
+.guru-trade__bottom {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.1rem 0.6rem;
+  color: rgba(var(--frame-ink-a), 0.5);
+  font-size: 0.54rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.guru-trade__bottom span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.guru-panel__how em .guru-move {
+  margin-left: 0.4rem;
+}
+
+/* Comparison summary: one big number, a headline, then one short card per idea. */
+.guru-summary {
+  gap: 0.6rem;
+}
+
+.guru-summary__hero {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.guru-summary__number {
+  font-size: 1.9rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 760;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.guru-summary__hero span {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.guru-summary__hero strong {
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.guru-summary__hero em {
+  color: rgba(var(--frame-ink-a), 0.46);
+  font-size: 0.56rem;
+  font-style: normal;
+}
+
+.guru-summary__meter {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: rgba(var(--frame-ink-a), 0.08);
+}
+
+.guru-summary__meter i {
+  display: block;
+  width: var(--w);
+  height: 100%;
+  border-radius: 3px;
+  background: rgba(var(--frame-ink-a), 0.8);
+  animation: guru-summary-fill 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes guru-summary-fill {
+  from {
+    width: 0;
+  }
+}
+
+.guru-summary__list {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guru-summary__list li {
+  display: grid;
+  grid-template-columns: 3.1rem minmax(0, 1fr);
+  gap: 0.55rem;
+  align-items: start;
+  padding: 0.5rem 0.6rem;
+  border-radius: 9px;
+  background: rgba(var(--frame-ink-a), 0.04);
+}
+
+.guru-summary__tag {
+  justify-self: start;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid rgba(var(--frame-hairline), 0.16);
+  border-radius: 6px;
+  color: rgba(var(--frame-ink-a), 0.62);
+  font-size: 0.52rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.guru-summary__list p {
+  margin: 0;
+  color: rgba(var(--frame-ink-a), 0.86);
+  font-size: 0.66rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
 }

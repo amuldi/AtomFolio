@@ -502,10 +502,13 @@ async function buildPortfolio({ current, previous, meta, prior, unit = 1, region
 }
 
 export async function fetchFundPortfolio(cik, { topN = TOP_N, maxChanges = 12 } = {}) {
-  return cached(`fund:${cik}`, 60 * 60_000, async () => {
-    const submissions = await fetchSubmissions(cik);
-    const filings = recentFilings(submissions, ['13F-HR']);
-    if (!filings.length) return null;
+  // The filing list is re-read every 5 minutes (fetchSubmissions), so a new 13F is picked up
+  // within minutes of SEC publishing it. The parsed portfolio is keyed by the newest accession:
+  // it is only rebuilt when that number changes, which is why it can be kept for a day.
+  const submissions = await fetchSubmissions(cik);
+  const filings = recentFilings(submissions, ['13F-HR']);
+  if (!filings.length) return null;
+  return cached(`fund:${cik}:${filings[0].accession}:${topN}:${maxChanges}`, 24 * 60 * 60_000, async () => {
     // Some filers send an empty placeholder table (one "NA" row) for a quarter; use the newest
     // filing that actually lists holdings, and compare it with the next one back.
     const loaded = [];

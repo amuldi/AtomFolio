@@ -6,6 +6,7 @@ import {
   REGION_LABELS,
   SECTOR_LABELS,
   buildGuruInsights,
+  buildGuruSummary,
   buildUserHoldings,
   compareWithGuru,
   concentrationOf,
@@ -94,9 +95,10 @@ test('insights describe differences and flag Korea-heavy portfolios, without adv
     { code: '105560', label: 'KB금융', weight: 0.3 },
   ]);
   const lines = buildGuruInsights(compareWithGuru(korean, guru), guru, 'ko');
-  assert.match(lines[0], /공통 종목이 없습니다/);
-  assert.ok(lines.some((line) => /한국 주식이 100\.0%/.test(line)));
+  assert.match(lines[0], /내가 가진 종목은 없어요/);
+  assert.ok(lines.some((line) => /한국 주식이에요/.test(line) && /100\.0%/.test(line)));
   assert.ok(lines.some((line) => /워런 버핏은/.test(line)));
+  assert.equal(buildGuruSummary(compareWithGuru(korean, guru), guru, 'ko').headline, '워런 버핏과 겹치는 종목이 없어요');
   assert.ok(lines.every((line) => !/(매수|매도|사세요|파세요)/.test(line)));
   const english = buildGuruInsights(compareWithGuru(korean, guru), guru, 'en');
   assert.match(english[0], /none of Warren Buffett's top 3/);
@@ -117,8 +119,9 @@ test('bundled snapshot covers the whole directory and is well formed', () => {
     if (entry.kind === 'etf') assert.match(entry.symbol, /^[A-Z]{2,6}$/, entry.id);
     if (entry.kind === 'buzz') assert.ok(entry.filter, entry.id);
     assert.ok(entry.person.ko && entry.person.en, entry.id);
-    assert.ok(['investor', 'community', 'institution', 'executive'].includes(entry.category), entry.id);
-    if (entry.kind !== 'insider') {
+    assert.ok(['investor', 'community', 'institution', 'executive', 'korea'].includes(entry.category), entry.id);
+    if (entry.kind === 'dart') assert.match(entry.corpCode, /^\d{8}$/, entry.id);
+    if (entry.kind !== 'insider' && entry.kind !== 'dart') {
       const fund = snapshot.funds[entry.id];
       assert.ok(fund, `${entry.id} missing from snapshot.funds`);
       assert.match(fund.period, /^\d{4}-\d{2}-\d{2}$/);
@@ -130,7 +133,7 @@ test('bundled snapshot covers the whole directory and is well formed', () => {
         assert.ok(SECTOR_LABELS[holding.sector], `${entry.id} ${holding.ticker}: sector ${holding.sector}`);
         assert.ok(REGION_LABELS[holding.region], `${entry.id} ${holding.ticker}: region ${holding.region}`);
       }
-    } else {
+    } else if (entry.kind === 'insider') {
       const insider = snapshot.insiders[entry.id];
       assert.ok(insider?.trades?.length, `${entry.id} missing Form 4 trades`);
     }

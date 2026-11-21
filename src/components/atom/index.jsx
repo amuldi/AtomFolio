@@ -316,7 +316,7 @@ function buildLabelDetail(atom) {
       : `${returnValue > 0.005 ? '▲' : returnValue < -0.005 ? '▼' : ''}${
           magnitude >= 100 ? magnitude.toFixed(0) : magnitude >= 10 ? magnitude.toFixed(1) : magnitude.toFixed(2)
         }%`;
-  return [shareText, returnText].filter(Boolean).join(' · ');
+  return [shareText, returnText, atom.labelExtra].filter(Boolean).join(' · ');
 }
 
 export function PortfolioPreviewAtom({ entry, slot, onSelect, returnFor }) {
@@ -720,18 +720,22 @@ export function AtomSketch({
         ))}
       </g>
 
-      {/* Refresh feedback (center click): light runs from the nucleus out along every bond and
-          each electron flashes as it arrives. Keyed by burstKey so every click replays it once;
-          coordinates follow the atoms while they keep turning. */}
+      {/* Refresh feedback (center click): a soft light slides out from the nucleus along every
+          bond and settles into its electron as a faint glow. Nothing bursts — travel time grows
+          with distance so the wave reads as flowing outward. Keyed by burstKey so every click
+          replays it once; coordinates follow the atoms while they keep turning. */}
       {burstKey ? (
         <g className="refresh-burst" key={`burst-${burstKey}`} aria-hidden="true">
-          <circle className="refresh-burst__core" cx="0" cy="0" r="16" />
+          <circle className="refresh-burst__core" cx="0" cy="0" r="22" />
           {atoms.map((atom) => {
             const distance = Math.hypot(atom.x, atom.y);
-            // Farther electrons light up a little later, so the wave visibly travels outward.
-            const delay = `${Math.round(Math.min(distance, 320) * 1.1)}ms`;
+            const travel = Math.round(900 + Math.min(distance, 320) * 3.2);
+            const start = Math.round(Math.min(distance, 320) * 0.5);
             return (
-              <g key={`burst-${atom.id}`} style={{ '--burst-delay': delay }}>
+              <g
+                key={`burst-${atom.id}`}
+                style={{ '--burst-delay': `${start}ms`, '--burst-travel': `${travel}ms` }}
+              >
                 <line
                   className="refresh-burst__ray-soft"
                   x1="0"
@@ -752,7 +756,7 @@ export function AtomSketch({
                   className="refresh-burst__flash"
                   cx={format(atom.x)}
                   cy={format(atom.y)}
-                  r={format(atom.node * 1.7)}
+                  r={format(atom.node * 1.5)}
                 />
               </g>
             );

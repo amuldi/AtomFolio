@@ -1,7 +1,8 @@
-// The comparison read-out under the 유명인 tab once 비교하기 has run: what differs, sector and
-// region mix, the holdings both share, and concentration. All numbers come from
+// The comparison read-out under the 유명인 tab once 비교하기 has run: a plain-words summary,
+// sector and region mix, the holdings both share, and concentration. All numbers come from
 // src/lib/guruCompare.js; the atoms themselves are on the main stage (GuruStage).
 import { REGION_LABELS, REGION_ORDER, SECTOR_LABELS } from '../../lib/guruCompare.js';
+import { ResizeBox } from './GuruShared.jsx';
 
 const REGION_SWATCH = {
   us: 'rgba(var(--frame-ink-a), 0.9)',
@@ -14,7 +15,7 @@ const REGION_SWATCH = {
 
 const formatPercent = (value, digits = 1) => `${(value * 100).toFixed(digits)}%`;
 
-export function GuruResultCards({ guru, result, insights, language }) {
+export function GuruResultCards({ guru, result, summary, language }) {
   const en = language === 'en';
   const lang = en ? 'en' : 'ko';
   const person = guru.person[lang];
@@ -45,10 +46,23 @@ export function GuruResultCards({ guru, result, insights, language }) {
 
   return (
     <div className="guru-compare__result">
-      <div className="guru-compare__card guru-compare__insights" style={{ '--i': 0 }}>
-        <ul>
-          {insights.map((line) => (
-            <li key={line}>{line}</li>
+      <div className={`guru-compare__card guru-summary is-${summary.level}`} style={{ '--i': 0 }}>
+        <div className="guru-summary__hero">
+          <b className="guru-summary__number">{formatPercent(result.commonShare)}</b>
+          <span>
+            <strong>{summary.headline}</strong>
+            <em>{en ? 'How much the two portfolios overlap' : '두 포트폴리오가 겹치는 비중'}</em>
+          </span>
+        </div>
+        <div className="guru-summary__meter" aria-hidden="true">
+          <i style={{ '--w': `${Math.min(100, result.commonShare * 100)}%` }} />
+        </div>
+        <ul className="guru-summary__list">
+          {summary.items.map((item) => (
+            <li key={item.key}>
+              <span className="guru-summary__tag">{item.label}</span>
+              <p>{item.text}</p>
+            </li>
           ))}
         </ul>
       </div>
@@ -59,7 +73,11 @@ export function GuruResultCards({ guru, result, insights, language }) {
           <em>{`${result.shared.length}${en ? '' : '종목'} · ${formatPercent(result.commonShare)}`}</em>
         </div>
         {result.shared.length ? (
-          <div className="guru-compare__table-scroll">
+          <ResizeBox
+            storageKey="atomfolio-guru-shared-height"
+            initial={260}
+            label={en ? 'Drag to resize' : '끌어서 크기 조절'}
+          >
             <table>
               <thead>
                 <tr>
@@ -78,7 +96,15 @@ export function GuruResultCards({ guru, result, insights, language }) {
                     </td>
                     <td>{formatPercent(holding.userWeight)}</td>
                     <td className="is-guru">{formatPercent(holding.guruWeight)}</td>
-                    <td className={holding.returnRate == null ? '' : holding.returnRate >= 0 ? 'positive' : 'negative'}>
+                    <td
+                      className={
+                        holding.returnRate == null
+                          ? ''
+                          : holding.returnRate >= 0
+                            ? 'positive'
+                            : 'negative'
+                      }
+                    >
                       {holding.returnRate == null
                         ? '-'
                         : `${holding.returnRate >= 0 ? '▲' : '▼'}${Math.abs(holding.returnRate).toFixed(1)}%`}
@@ -87,9 +113,11 @@ export function GuruResultCards({ guru, result, insights, language }) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ResizeBox>
         ) : (
-          <p className="guru-compare__empty">{en ? 'No holdings in common.' : '공통 종목이 없습니다.'}</p>
+          <p className="guru-compare__empty">
+            {en ? 'No holdings in common.' : '공통 종목이 없습니다.'}
+          </p>
         )}
       </div>
 
@@ -115,7 +143,10 @@ export function GuruResultCards({ guru, result, insights, language }) {
                 {row.key === 'rest' ? null : (
                   <div className="guru-compare__bar">
                     <b>
-                      <i className="is-mine" style={{ '--w': `${(row.user / sectorMax) * 100}%` }} />
+                      <i
+                        className="is-mine"
+                        style={{ '--w': `${(row.user / sectorMax) * 100}%` }}
+                      />
                     </b>
                     <em>{formatPercent(row.user)}</em>
                   </div>

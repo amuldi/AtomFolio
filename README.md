@@ -301,6 +301,7 @@ AtomFolio는 웹 하나가 아닙니다 — `desktop/` 아래에 별도의 Elect
 - 13F 투자자·기관: 지난 분기 대비 매매(신규·추가·축소·전량 매도). 기업인: 최근 Form 4 매매(거래 후 2영업일 안 공시).
 - 사진은 Wikimedia Commons의 자유 라이선스 사진, 없으면 기관 공식 사이트 로고를 씁니다 (`npm run data:guru-photos`).
 - 섹터·지역은 직접 정한 표가 없으면 발행사의 SEC 업종코드(SIC)와 본사 주소로 자동 분류합니다.
+- **한국 상장사**(삼성전자·SK하이닉스·현대차 등 12곳 + 전체 3,944개 검색): 금감원 OpenDART로 최대주주·특수관계인 지분, 5% 이상 대량보유, 임원·주요주주 매매를 보여줍니다. 최대주주가 원자로 그려지고 `이재용`·`정의선`처럼 사람 이름으로도 검색됩니다 (`server/dartFilings.mjs`, 서버에 `DART_API_KEY` 필요, 상장사 목록 갱신은 `npm run data:dart-corps`).
 - 서버에 `SEC_CONTACT_EMAIL`이 필요합니다(sec.gov 요구). 데이터 갱신: `npm run data:gurus`.
 
 ### 11. 이번 달 변화

@@ -1,7 +1,7 @@
 // The one detail card for a clicked electron. App.jsx resolves the holding's real numbers
 // (resolveHoldingPosition: market value, P/L, return, shares, prices in the security's own
 // currency, weight in the portfolio) and passes them as `metrics`; the raw CSV fields stay
-// available underneath, folded away. Draggable; remembers where it was dropped.
+// listed in full underneath (no folding). Draggable; remembers where it was dropped.
 import { useCallback, useRef, useState } from 'react';
 
 // Where the user last dragged the card, kept across selections so picking another holding
@@ -224,17 +224,21 @@ export function AtomDetailPanel({
       ) : null}
 
       {fields.length ? (
-        <details className="atom-detail-panel__raw" open={!metrics}>
-          <summary>{en ? 'All fields' : '전체 항목'}</summary>
-          <div className="atom-detail-panel__list">
+        // Always open: every field is readable at a glance, nothing to unfold.
+        <section className="atom-detail-panel__raw" aria-label={en ? 'All fields' : '전체 항목'}>
+          <h4 className="atom-detail-panel__raw-title">
+            {en ? 'All fields' : '전체 항목'}
+            <em>{fields.length}</em>
+          </h4>
+          <dl className="atom-detail-panel__list">
             {fields.map((field, index) => (
               <div className="atom-detail-panel__row" key={`${atom.id}-${field.label}-${index}`}>
-                <span className="atom-detail-panel__label">{field.label}</span>
-                <span className="atom-detail-panel__value">{field.value}</span>
+                <dt className="atom-detail-panel__label">{field.label}</dt>
+                <dd className="atom-detail-panel__value">{field.value}</dd>
               </div>
             ))}
-          </div>
-        </details>
+          </dl>
+        </section>
       ) : null}
     </aside>
   );

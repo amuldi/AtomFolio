@@ -288,6 +288,7 @@ The **Famous** tab on the left rail (`src/components/tool-drawer/GuruPanel.jsx`)
 - 13F filers: what they bought and sold since last quarter. Executives: latest Form 4 trades (filed within 2 business days).
 - Avatars are free-licensed Wikimedia Commons photos, otherwise the organisation's own logo (`npm run data:guru-photos`).
 - Sectors and regions not in the hand-made table come from the issuer's SEC industry code (SIC) and business address.
+- **Korean listed companies** (12 curated + search across all 3,944): largest shareholders and related parties, 5%+ blockholders and executive trades from the FSS's OpenDART. Owners are drawn as electrons, and a name like `이재용` finds the company (`server/dartFilings.mjs`; needs `DART_API_KEY`; refresh the company list with `npm run data:dart-corps`).
 - The server needs `SEC_CONTACT_EMAIL` (sec.gov requirement). Refresh with `npm run data:gurus`.
 
 ### 11. This month
