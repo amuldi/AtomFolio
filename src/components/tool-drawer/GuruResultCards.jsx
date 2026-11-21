@@ -2,7 +2,7 @@
 // sector and region mix, the holdings both share, and concentration. All numbers come from
 // src/lib/guruCompare.js; the atoms themselves are on the main stage (GuruStage).
 import { REGION_LABELS, REGION_ORDER, SECTOR_LABELS } from '../../lib/guruCompare.js';
-import { ResizeBox } from './GuruShared.jsx';
+import { ScrollBox } from './GuruShared.jsx';
 
 const REGION_SWATCH = {
   us: 'rgba(var(--frame-ink-a), 0.9)',
@@ -73,11 +73,7 @@ export function GuruResultCards({ guru, result, summary, language }) {
           <em>{`${result.shared.length}${en ? '' : '종목'} · ${formatPercent(result.commonShare)}`}</em>
         </div>
         {result.shared.length ? (
-          <ResizeBox
-            storageKey="atomfolio-guru-shared-height"
-            initial={260}
-            label={en ? 'Drag to resize' : '끌어서 크기 조절'}
-          >
+          <ScrollBox>
             <table>
               <thead>
                 <tr>
@@ -113,7 +109,7 @@ export function GuruResultCards({ guru, result, summary, language }) {
                 ))}
               </tbody>
             </table>
-          </ResizeBox>
+          </ScrollBox>
         ) : (
           <p className="guru-compare__empty">
             {en ? 'No holdings in common.' : '공통 종목이 없습니다.'}

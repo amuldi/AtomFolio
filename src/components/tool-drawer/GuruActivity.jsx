@@ -3,9 +3,8 @@
 //                     ranked by size, each with its own bar, share change and price move
 //   BuzzCard          a community's most-mentioned stocks (ApeWisdom)
 //   TradesCard        an executive's Form 4 trades, newest first
-// Each list sits in a ResizeBox: grab the strip under it and drag to show more or fewer rows.
 import { describeChange, summarizeTrades } from '../../lib/guruLive.js';
-import { KindBadge, Move, ResizeBox, TRADE_KIND, useFormatters } from './GuruShared.jsx';
+import { KindBadge, Move, ScrollBox, TRADE_KIND, useFormatters } from './GuruShared.jsx';
 
 function TradeRow({ change, maxValue, quote, language, fmt }) {
   const en = language === 'en';
@@ -105,15 +104,10 @@ export function TradeSummaryCard({ fund, quotes, language }) {
           </span>
         ))}
       </div>
-      <ResizeBox
-        storageKey="atomfolio-guru-trades-height"
-        initial={380}
-        max={900}
-        label={en ? 'Drag to resize' : '끌어서 크기 조절'}
-      >
+      <ScrollBox>
         {section(en ? 'Bought more' : '더 산 종목', buys, 'is-buy')}
         {section(en ? 'Sold' : '판 종목', sells, 'is-sell')}
-      </ResizeBox>
+      </ScrollBox>
     </div>
   );
 }
@@ -128,11 +122,7 @@ export function BuzzCard({ fund, language }) {
         <span>{en ? 'Most mentioned · 24h' : '언급 순위 · 24시간'}</span>
         <em>ApeWisdom</em>
       </div>
-      <ResizeBox
-        storageKey="atomfolio-guru-buzz-height"
-        initial={320}
-        label={en ? 'Drag to resize' : '끌어서 크기 조절'}
-      >
+      <ScrollBox>
         <ul className="guru-panel__rows">
           {fund.holdings.map((holding) => {
             const delta = holding.mentions - holding.mentions24hAgo;
@@ -154,7 +144,7 @@ export function BuzzCard({ fund, language }) {
             );
           })}
         </ul>
-      </ResizeBox>
+      </ScrollBox>
     </div>
   );
 }
@@ -171,11 +161,7 @@ export function TradesCard({ insider, quotes, language }) {
         <span>{en ? 'Latest trades' : '최근 매매'}</span>
         <em>{`Form 4 · ${insider.latestFiled} · ${insider.trades.length}${en ? '' : '건'}`}</em>
       </div>
-      <ResizeBox
-        storageKey="atomfolio-guru-form4-height"
-        initial={300}
-        label={en ? 'Drag to resize' : '끌어서 크기 조절'}
-      >
+      <ScrollBox>
         <ul className="guru-panel__rows">
           {insider.trades.map((trade) => {
             const quote = quotes?.[trade.ticker];
@@ -198,7 +184,6 @@ export function TradesCard({ insider, quotes, language }) {
                     {quote && trade.averagePrice > 0 ? (
                       <Move
                         value={(quote.price / trade.averagePrice - 1) * 100}
-                        label={en ? 'Now' : '지금'}
                       />
                     ) : null}
                   </em>
@@ -207,7 +192,7 @@ export function TradesCard({ insider, quotes, language }) {
             );
           })}
         </ul>
-      </ResizeBox>
+      </ScrollBox>
     </div>
   );
 }

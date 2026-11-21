@@ -34,7 +34,7 @@ import { AtomDetailPanel } from '../panels/AtomDetailPanel.jsx';
 import { textFor } from '../../utils/format.js';
 import { DartCards } from './GuruDart.jsx';
 import { GuruResultCards } from './GuruResultCards.jsx';
-import { Move, ResizeBox, TRADE_KIND, useFormatters } from './GuruShared.jsx';
+import { Move, ScrollBox, TRADE_KIND, useFormatters } from './GuruShared.jsx';
 import { GuruStage } from './GuruStage.jsx';
 
 const SELECTION_KEY = 'atomfolio-guru-selection';
@@ -649,13 +649,7 @@ export function GuruPanel({ analyticsSummary, activePortfolio, language, onInter
         </div>
       </div>
 
-      <ResizeBox
-        storageKey="atomfolio-guru-list-height"
-        initial={240}
-        min={96}
-        max={720}
-        label={en ? 'Drag to resize the list' : '끌어서 목록 크기 조절'}
-      >
+      <ScrollBox maxHeight="17rem">
         <div className="guru-panel__list" role="list">
           {matches.map(({ entry: candidate, holding }) => {
             const isActive = candidate.id === entry.id;
@@ -730,7 +724,7 @@ export function GuruPanel({ analyticsSummary, activePortfolio, language, onInter
             <span className="guru-panel__searching">{en ? 'Searching SEC…' : 'SEC 검색 중…'}</span>
           ) : null}
         </div>
-      </ResizeBox>
+      </ScrollBox>
 
       <div className="guru-panel__profile">
         <Avatar entry={entry} lang={lang} size="lg" />
