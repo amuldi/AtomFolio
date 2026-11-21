@@ -290,7 +290,34 @@ AtomFolio는 웹 하나가 아닙니다 — `desktop/` 아래에 별도의 Elect
 ### 10. 포트폴리오 비교
 
 - 비교 탭에서 모든 포트폴리오를 한 표에 놓고 수익률, 점수, 최대 비중 종목, 집중도(실질 종목 수)를 나란히 봅니다.
-- 행을 누르면 그 포트폴리오로 바로 전환됩니다.
+- 행을 누르면 그 포트폴리오로 바로 전환됩니다. (포트폴리오가 2개 이상일 때만 표시)
+
+### 10-1. 유명인 포트폴리오
+
+왼쪽 레일의 **유명인** 탭 (`src/components/tool-drawer/GuruPanel.jsx`). 공개 공시 98곳을 한곳에서 보고, 내 포트폴리오와 맞대 봅니다.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/updates/assets/atomfolio-famous-investor.jpg" alt="워런 버핏의 포트폴리오가 메인 무대에 원자로 그려진 화면"><br><sub>고른 투자자의 포트폴리오가 메인 무대에 앱의 원자와 같은 모습으로 그려집니다. 전자 색은 공시 이후 주가 변동입니다.</sub></td>
+    <td width="50%"><img src="docs/updates/assets/atomfolio-famous-compare.jpg" alt="내 포트폴리오와 버핏의 포트폴리오를 비교하는 화면, 공통 종목이 선으로 이어짐"><br><sub>비교하기: 내 원자가 들어오고 공통 종목끼리 선으로 이어집니다. 공통 41.3%.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/updates/assets/atomfolio-famous-korea-dart.jpg" alt="삼성전자의 최대주주와 특수관계인 지분이 원자로 그려진 화면"><br><sub>한국 상장사: DART로 최대주주·특수관계인 지분을 원자로 보여줍니다.</sub></td>
+    <td><img src="docs/updates/assets/atomfolio-famous-community.jpg" alt="레딧 월스트리트베츠의 24시간 언급 상위 종목 화면"><br><sub>커뮤니티·밈: 레딧 WSB의 24시간 언급 순위.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/updates/assets/atomfolio-famous-electron-card.jpg" alt="전자를 눌렀을 때 뜨는 종목 세부 카드"><br><sub>전자를 누르면 그 종목의 비중, 내 비중, 시세가 한 카드에 나옵니다.</sub></td>
+    <td><img src="docs/updates/assets/atomfolio-famous-holding-detail.jpg" alt="내 보유 종목의 상세창: 평가금액, 비중, 매수가에서 현재가까지"><br><sub>내 종목의 상세창도 하나로 합쳤습니다: 평가금액, 비중, 매수가→현재가.</sub></td>
+  </tr>
+</table>
+
+- **98곳**: 투자자 30(버핏·달리오·캐시 우드·소로스·그리핀…), 기관 22(국민연금·한국투자공사·한국은행, 블랙록, 뱅가드, 골드만삭스, 노르웨이·사우디 국부펀드…), 기업인 15(젠슨 황·머스크·저커버그…), 커뮤니티·밈 6(레딧 WSB, 의회 매매 추종 ETF, 밈 ETF…), 펀드·ETF 12(ARK, 피델리티 마젤란, 뱅가드 500…), 한국 13(삼성전자 등 12곳 + 국민연금 국내 주식). 목록에 없으면 SEC 전체와 상장사 3,944곳을 바로 검색합니다. `이재용`처럼 사람 이름도 찾습니다.
+- **데이터 출처**: SEC 13F(분기 보유), N-PORT(펀드 전체 보유), Form 4(기업인 매매, 2영업일 내 공시), 레딧 언급(ApeWisdom), 금감원 OpenDART(한국 최대주주·5% 대량보유·임원 매매).
+- 고른 포트폴리오는 `GuruStage.jsx`가 같은 `AtomSketch`로 그립니다. **비교하기**는 공통 비중·섹터·지역·집중도 카드를 열고, 13F는 지난 분기 대비 매매(신규·추가·축소·전량 매도)를 보여줍니다.
+- 국민연금 국내 주식은 DART 대량보유 보고서로 확인되는 5% 이상 보유 254종목만 포함합니다(`npm run data:nps-kr`). 대형주 일부는 이 보고서에 잡히지 않아 빠집니다.
+- 사진은 Wikimedia Commons의 자유 라이선스 사진, 없으면 기관 로고를 씁니다 (`npm run data:guru-photos`). 인물 초상권은 별개이므로 정식 출시 전 검토가 필요합니다.
+- 중심 원자를 누르면 시세(또는 공시)를 새로고침하며 중심에서 끝 전자까지 빛이 뻗어 나갑니다. 메인 화면에도 같은 효과가 적용됩니다.
+- 서버에 `SEC_CONTACT_EMAIL`(sec.gov 요구), `DART_API_KEY`가 필요합니다. 없으면 번들 스냅샷만 보입니다. 데이터 갱신: `npm run data:gurus`, `npm run data:dart-corps`.
 
 ### 11. 이번 달 변화
 

@@ -1,3 +1,5 @@
+import { classifyBucketFromText, matches, searchableText } from './assetKeywords.js';
+
 function normalizeText(value) {
   return String(value ?? '')
     .trim()
@@ -51,23 +53,6 @@ function findFieldValue(fields = [], candidates = []) {
   }
 
   return '';
-}
-
-function itemText(item) {
-  return [
-    item?.label,
-    item?.name,
-    item?.code,
-    item?.region,
-    item?.sector,
-    item?.assetClass,
-    item?.style,
-    item?.risk,
-    item?.riskLevel,
-    ...(item?.fields ?? []).flatMap((field) => [field.label, field.value]),
-  ]
-    .map((value) => String(value ?? '').trim().toLowerCase())
-    .join(' ');
 }
 
 function safeLabel(value, fallback = '미분류') {
@@ -210,54 +195,14 @@ function groupWeights(positions, key) {
     .sort((left, right) => right.weight - left.weight);
 }
 
-function isUsAsset(position) {
-  const text = itemText(position.item);
-  return /미국|us|usa|unitedstates|usd|nasdaq|nyse|qqq|spy|voo|vti|schd|soxx|aapl|msft/.test(text);
-}
-
-function isTechAsset(position) {
-  const text = itemText(position.item);
-  return /기술|테크|반도체|소프트웨어|ai|technology|tech|semiconductor|software|cloud|nasdaq|qqq|soxx|smh|aapl|msft|nvda/.test(text);
-}
-
-function isGoldCashAsset(position) {
-  const text = itemText(position.item);
-  return /금|현금|예수금|단기|원자재|gold|cash|money market|deposit|iau|gld|sgov|bil/.test(text);
-}
-
-function isReitAsset(position) {
-  return /리츠|부동산|reit|real estate|property/.test(itemText(position.item));
-}
-
-function isDividendAsset(position) {
-  return /배당|인컴|dividend|income|schd|dgro|vym/.test(itemText(position.item));
-}
-
-function isHighRiskAsset(position) {
-  const text = itemText(position.item);
-  return /고위험|공격|성장|기술|반도체|crypto|코인|leverage|2x|3x|growth|technology|semiconductor/.test(text);
-}
-
-function classifyRebalanceBucket(position) {
-  if (isReitAsset(position)) {
-    return 'reit';
-  }
-
-  if (isGoldCashAsset(position)) {
-    return 'goldCash';
-  }
-
-  if (isDividendAsset(position)) {
-    return 'dividend';
-  }
-
-  const text = itemText(position.item);
-  if (/주식|stock|equity|etf|fund|qqq|spy|voo|vti|nasdaq|s&p/.test(text)) {
-    return 'stock';
-  }
-
-  return 'other';
-}
+const textOf = (position) => searchableText(position.item);
+const isUsAsset = (position) => matches('us', textOf(position));
+const isTechAsset = (position) => matches('tech', textOf(position));
+const isGoldCashAsset = (position) => matches('goldCash', textOf(position));
+const isReitAsset = (position) => matches('reit', textOf(position));
+const isDividendAsset = (position) => matches('dividend', textOf(position));
+const isHighRiskAsset = (position) => matches('highRisk', textOf(position));
+const classifyRebalanceBucket = (position) => classifyBucketFromText(textOf(position));
 
 function calculateRiskScore(positions, totalValue) {
   if (!positions.length || totalValue <= 0) {

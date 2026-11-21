@@ -5,6 +5,7 @@
 // working) via onAddNew, pre-filling its ticker field rather than duplicating async market-data
 // fetching in a second place that could drift from the first.
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   buildGroupedHoldingItems,
   resolveHoldingName,
@@ -180,7 +181,9 @@ export function CommandPalette({
     return null;
   }
 
-  return (
+  // Through a portal: .app-shell is its own stacking context, so from inside it even z-index
+  // 10000 sits under anything portaled to <body> (the 유명인 stage, its name tag, detail cards).
+  return createPortal(
     <div className="command-palette-overlay" onClick={onClose}>
       <div
         className="command-palette"
@@ -356,6 +359,7 @@ export function CommandPalette({
           <span>Esc {language === 'en' ? 'close' : '닫기'}</span>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -12,6 +12,36 @@
 > sessions that actually did the work. Bugs found along the way are tracked separately in
 > [`AtomFolio_Bugs.en.md`](AtomFolio_Bugs.en.md).
 
+## 2026-11-22 — Famous portfolios tab (98 public filings from SEC and DART); one detail card for my holdings
+
+A **Famous** tab on the left rail: search public portfolios of investors, institutions, executives, communities, funds and Korean listed companies, draw them on the main stage as the app's own atom, and set them against yours with **Compare**. Every screenshot below was captured locally with real data (a 10-holding virtual portfolio).
+
+| | |
+| --- | --- |
+| ![Buffett's atom](assets/atomfolio-famous-investor.jpg) | ![Compare](assets/atomfolio-famous-compare.jpg) |
+| Warren Buffett (SEC 13F, as of 2026-09-30). Electron color is the price move since the filing | Compared with my portfolio: 41.3% in common, shared holdings joined by lines |
+| ![Samsung DART](assets/atomfolio-famous-korea-dart.jpg) | ![Reddit WSB](assets/atomfolio-famous-community.jpg) |
+| Samsung Electronics: largest shareholders and related parties (FSS DART) | Reddit WSB 24-hour mention ranking |
+| ![Electron card](assets/atomfolio-famous-electron-card.jpg) | ![My holding detail](assets/atomfolio-famous-holding-detail.jpg) |
+| The card shown when an electron is clicked | My holding's detail: market value, weight, buy price → now |
+
+**What went in**
+- Data: SEC 13F (52 investors and institutions), N-PORT (ETFs and funds), Form 4 (15 executives), Reddit mention ranking, OpenDART (search over 3,944 Korean companies, 254 NPS domestic stakes of 5%+). Server: `server/secFilings.mjs`, `server/dartFilings.mjs`.
+- Search: names, firms, holdings and aliases (`이재용` → Samsung Electronics); anyone else through an SEC-wide search.
+- Avatars: free-licensed Wikimedia Commons photos, otherwise the organisation's logo.
+- My portfolio: three detail windows that opened at once are now one card with real market value, weight and buy price → now. The hover card shrank to a one-line peek.
+- Clicking the center atom refreshes quotes with light running from the nucleus out to every electron.
+- A drag-to-resize area was added and then removed on request; lists scroll inside a fixed height.
+
+**Known limits**
+- NPS domestic holdings only include what DART blockholder reports show (some large caps are missing).
+- There is no real-time trade disclosure: 13F is due 45 days after quarter end, Form 4 within 2 business days.
+- Norway's sovereign fund has no official API for full holdings, so only its US stocks via SEC 13F show.
+- The photos' copyright licenses were checked, but portrait rights are separate and need review before a public launch.
+
+**Needed to deploy**: Vercel environment variables `SEC_CONTACT_EMAIL` and `DART_API_KEY`.
+**Verification**: `npm run lint` clean, `npm test` 195 of 196 passing (1 skip, 0 failures), `npm run build` clean; the screens above were checked on a local dev server.
+
 ## 2026-08-16 — Fixed a real case where the new asset-class auto-fill silently didn't fire (user-reported)
 
 Right after the entry below shipped asset-class inference, the user reported (with a screenshot)

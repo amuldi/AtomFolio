@@ -277,7 +277,34 @@ The six axis scores don't depend on investing style; a style only changes the we
 ### 10. Portfolio comparison
 
 - The Compare tab puts every portfolio in one table: return, score, largest holding, and concentration (effective number of holdings).
-- Clicking a row switches to that portfolio.
+- Clicking a row switches to that portfolio. (Shown once there are two or more portfolios.)
+
+### 10-1. Famous portfolios
+
+The **Famous** tab on the left rail (`src/components/tool-drawer/GuruPanel.jsx`): 98 public disclosures in one place, set against your own portfolio.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/updates/assets/atomfolio-famous-investor.jpg" alt="Warren Buffett's portfolio drawn as an atom on the main stage"><br><sub>The picked portfolio is drawn on the main stage as the app's own atom. Electron color is the price move since the filing.</sub></td>
+    <td width="50%"><img src="docs/updates/assets/atomfolio-famous-compare.jpg" alt="Comparing my portfolio with Buffett's; shared holdings joined by lines"><br><sub>Compare: my atom comes in and shared holdings are joined by lines. 41.3% in common.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/updates/assets/atomfolio-famous-korea-dart.jpg" alt="Samsung Electronics' largest shareholders drawn as an atom"><br><sub>Korean listed companies: owners from DART, drawn as an atom.</sub></td>
+    <td><img src="docs/updates/assets/atomfolio-famous-community.jpg" alt="Reddit wallstreetbets 24-hour most-mentioned stocks"><br><sub>Community: Reddit WSB's 24-hour mention ranking.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/updates/assets/atomfolio-famous-electron-card.jpg" alt="Detail card shown when an electron is clicked"><br><sub>Click an electron for its weight, your weight and the quote in one card.</sub></td>
+    <td><img src="docs/updates/assets/atomfolio-famous-holding-detail.jpg" alt="Detail card for one of my own holdings"><br><sub>My own holding's detail is now one card: market value, weight, buy price → now.</sub></td>
+  </tr>
+</table>
+
+- **98 entries**: 30 investors (Buffett, Dalio, Cathie Wood, Soros, Griffin…), 22 institutions (Korea's NPS, KIC and Bank of Korea, BlackRock, Vanguard, Goldman Sachs, Norway's and Saudi Arabia's sovereign funds…), 15 executives (Jensen Huang, Musk, Zuckerberg…), 6 community/meme (Reddit WSB, a Congress-trades ETF, a meme ETF…), 12 funds/ETFs (ARK, Fidelity Magellan, Vanguard 500…) and 13 Korean (12 companies + NPS domestic). Anyone else is one search away: all of SEC and 3,944 Korean listed companies. A name like `이재용` finds the company too.
+- **Sources**: SEC 13F (quarterly holdings), N-PORT (full fund holdings), Form 4 (executive trades, filed within 2 business days), Reddit mentions (ApeWisdom), FSS OpenDART (Korean largest shareholders, 5%+ blockholders, executive trades).
+- `GuruStage.jsx` draws the pick with the same `AtomSketch`. **Compare** opens common-share, sector, region and concentration cards; 13F filers also show last quarter's buys and sells.
+- NPS domestic includes only the 254 stakes of 5%+ visible in DART blockholder reports (`npm run data:nps-kr`); some large caps don't appear in those reports.
+- Photos are free-licensed Wikimedia Commons files, otherwise the organisation's logo (`npm run data:guru-photos`). Portrait rights are a separate matter and need review before a public launch.
+- Clicking the center atom refreshes quotes (or filings) with light running from the nucleus out to every electron; the main view got the same effect.
+- The server needs `SEC_CONTACT_EMAIL` (sec.gov requirement) and `DART_API_KEY`; without them only the bundled snapshot shows. Refresh data with `npm run data:gurus` and `npm run data:dart-corps`.
 
 ### 11. This month
 

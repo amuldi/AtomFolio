@@ -424,11 +424,20 @@ export function createPortfolioHeatmap(items, options = {}) {
   const today = startOfDay(options.today ?? new Date());
   const entries = extractTimelineEntries(items);
   const aggregate = new Map();
+  const counts = new Map();
 
   entries.forEach((entry) => {
     const key = dateKey(entry.date);
     aggregate.set(key, (aggregate.get(key) ?? 0) + entry.value);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
   });
+  // Amounts add up across holdings, percentages do not: ten holdings at +5% are a +5% day, not
+  // +50%. In percent mode each day shows the average of that day's holdings.
+  const percentEntries = entries.filter((entry) => entry.mode === 'percent').length;
+  const averagePercentages = percentEntries >= entries.length - percentEntries;
+  if (averagePercentages) {
+    aggregate.forEach((value, key) => aggregate.set(key, value / (counts.get(key) || 1)));
+  }
 
   const latestDate = entries.length
     ? entries.reduce(

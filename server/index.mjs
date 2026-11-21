@@ -3,6 +3,9 @@ import { createReadStream, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  handleGuruProfileRequest,
+  handleGuruQuotesRequest,
+  handleGuruSearchRequest,
   handleHealthRequest,
   handleMarketFinancialsRequest,
   handleMarketLiveRequest,
@@ -147,6 +150,27 @@ const server = http.createServer(async (request, response) => {
 
   if (requestUrl.pathname === '/api/market/search') {
     await handleMarketSearchRequest({
+      method: request.method,
+      query: requestUrl.searchParams,
+      clientKey,
+      sendJson: sendApiJson,
+    });
+    return;
+  }
+
+  if (requestUrl.pathname === '/api/gurus/search' || requestUrl.pathname === '/api/gurus/profile') {
+    const handler = requestUrl.pathname.endsWith('/search') ? handleGuruSearchRequest : handleGuruProfileRequest;
+    await handler({
+      method: request.method,
+      query: requestUrl.searchParams,
+      clientKey,
+      sendJson: sendApiJson,
+    });
+    return;
+  }
+
+  if (requestUrl.pathname === '/api/gurus/quotes') {
+    await handleGuruQuotesRequest({
       method: request.method,
       query: requestUrl.searchParams,
       clientKey,

@@ -1,0 +1,1 @@
+Put portraits you have the rights to here as <id>.jpg / .png / .webp (ids are in src/data/guruDirectory.json), then run `npm run data:guru-photos`. They take priority over Wikimedia Commons and logos.

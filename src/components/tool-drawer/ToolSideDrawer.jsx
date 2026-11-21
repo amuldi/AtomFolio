@@ -35,9 +35,11 @@ import {
   SketchAccountStackIcon,
   SketchManualAccountIcon,
   SketchNewsIcon,
+  SketchFamousIcon,
 } from './icons.jsx';
 import { MarketLivePreview, StockDetailCard } from './MarketPreview.jsx';
 import { MarketNewsPanel } from './MarketNewsPanel.jsx';
+import { GuruPanel } from './GuruPanel.jsx';
 import { HeatmapCard as HeatmapCardView } from '../cards/HeatmapCard.jsx';
 import { PortfolioScoreCard as PortfolioScoreCardView } from '../cards/PortfolioScoreCard.jsx';
 import { PortfolioAllocationCard as PortfolioAllocationCardView } from '../allocation/index.jsx';
@@ -200,9 +202,10 @@ function formatRebalanceGap(gap, language = 'ko') {
     return language === 'en' ? 'On target' : '목표와 일치';
   }
   if (language === 'en') {
-    return `${name} ${amount}pp ${gap.gapWeightPercent < 0 ? 'over' : 'under'}`;
+    return `${name} ${amount}pp ${gap.gapWeightPercent < 0 ? 'over' : 'under'} (default target ${gap.targetWeightPercent.toFixed(0)}%)`;
   }
-  return `${name} ${amount}%p ${gap.gapWeightPercent < 0 ? '초과' : '부족'}`;
+  // The target is a built-in default (DEFAULT_REBALANCE_TARGET_WEIGHTS), so say so.
+  return `${name} ${amount}%p ${gap.gapWeightPercent < 0 ? '초과' : '부족'} (기본 목표 ${gap.targetWeightPercent.toFixed(0)}%)`;
 }
 
 function formatAnalyticsPercentValue(value) {
@@ -300,6 +303,7 @@ export function ToolSideDrawer({
   heatmap,
   allocation,
   analyticsSummary,
+  stageSelectionKey = null,
   scorecard,
   overallScorecard,
   scoreAxes,
@@ -360,6 +364,13 @@ export function ToolSideDrawer({
   const [manualSuggestionLocked, setManualSuggestionLocked] = useState(false);
   const [editingHolding, setEditingHolding] = useState(null);
   const [selectedHolding, setSelectedHolding] = useState(null);
+  // Clicking an electron on the stage opens its own detail card; a different holding left open
+  // here would put two stocks' details side by side, so this one steps aside.
+  useEffect(() => {
+    if (stageSelectionKey) {
+      setSelectedHolding(null);
+    }
+  }, [stageSelectionKey]);
   // Whether the user has explicitly picked a 자산군 themselves for the *current* stock name/ticker
   // query — separate from what manualAssetClass currently equals, because equality alone can't
   // tell "the user chose 리츠 on purpose" apart from "리츠 is just left over from the previous
@@ -458,6 +469,15 @@ export function ToolSideDrawer({
       shortLabel: language === 'en' ? 'Compare' : '비교',
       icon: <SketchAccountStackIcon />,
       available: portfolioEntries.length >= 2,
+    },
+    {
+      // Famous investors (SEC 13F) and executives (Form 4): its own tab, available with any
+      // number of portfolios — comparing needs one, browsing and searching need none.
+      key: 'gurus',
+      label: language === 'en' ? 'Famous Portfolios' : '유명인 포트폴리오',
+      shortLabel: language === 'en' ? 'Famous' : '유명인',
+      icon: <SketchFamousIcon />,
+      available: true,
     },
     {
       key: 'twin',
@@ -1092,7 +1112,12 @@ export function ToolSideDrawer({
       }),
     [language, portfolioEntries, scoreWeightPreset],
   );
-  const monthlyDigest = useMemo(() => buildMonthlyDigest(analyticsSummary), [analyticsSummary]);
+  // Same array identity across renders, so the simulation panel's own memoization holds.
+  const twinPositionValues = useMemo(
+    () => items.map((item) => resolveHoldingPosition(item, { baseCurrency: 'KRW', fxRates }).marketValue),
+    [items, fxRates],
+  );
+  const monthlyDigest = useMemo(() => buildMonthlyDigest(analyticsSummary, { moversLimit: 3 }), [analyticsSummary]);
 
   useEffect(() => {
     if (!selectedHolding) {
@@ -1594,88 +1619,113 @@ export function ToolSideDrawer({
     </div>
   );
 
-  // "This month" card: what changed since last month. The summary above already shows where the
-  // portfolio stands; repeating its return/P&L/top holding here added nothing.
+  // "This month" card: what changed since last month, in plain words first, then the numbers.
+  // The summary above already shows where the portfolio stands; repeating its return/P&L/top
+  // holding here added nothing.
   const renderMonthlyReportPanel = () => {
     const digest = monthlyDigest;
     const en = language === 'en';
     const money = (value) => formatAnalyticsMoney(value, baseCurrency, { signed: true });
+    const plainMoney = (value) => formatAnalyticsMoney(Math.abs(value), baseCurrency);
     const historyMax = Math.max(
       1,
       ...(digest?.history ?? []).map((point) => Math.abs(point.returnRate ?? 0)),
     );
-    const renderMovers = (rows, tone) =>
+    const moverMax = Math.max(
+      1,
+      ...[...(digest?.gainers ?? []), ...(digest?.losers ?? [])].map((row) => Math.abs(row.change)),
+    );
+    const monthly = digest?.moversBasis === 'month';
+
+    // One sentence that says what happened, before any table.
+    let headline = '';
+    if (digest) {
+      if (!digest.previousPeriodKey) {
+        headline = en
+          ? `${digest.periodKey} is your first recorded month. From next month I can compare it with the one before.`
+          : `${digest.periodKey}이 첫 기록이에요. 다음 달부터 지난달과 비교해서 보여드릴게요.`;
+      } else if (Number.isFinite(digest.profitChange) && digest.profitChange !== 0) {
+        const up = digest.profitChange > 0;
+        headline = en
+          ? `Compared with ${digest.previousPeriodKey}, your profit ${up ? 'grew' : 'shrank'} by ${plainMoney(digest.profitChange)}.`
+          : `${digest.previousPeriodKey}보다 손익이 ${plainMoney(digest.profitChange)} ${up ? '늘었어요' : '줄었어요'}.`;
+      } else {
+        headline = en
+          ? `Profit is about the same as ${digest.previousPeriodKey}.`
+          : `${digest.previousPeriodKey}과 손익이 거의 같아요.`;
+      }
+    }
+
+    const metricTile = (label, value, text, caption) => (
+      <div className="tool-drawer__digest-tile">
+        <span>{label}</span>
+        <strong className={getSignedValueToneClass(value, 'positive', 'negative')}>{text}</strong>
+        <small>{caption}</small>
+      </div>
+    );
+
+    const renderMovers = (rows, tone, emptyText) =>
       rows.length ? (
-        <ul className="tool-drawer__digest-movers">
-          {rows.map((row) => (
+        <ol className="tool-drawer__digest-movers">
+          {rows.map((row, index) => (
             <li key={row.key}>
-              <span title={row.label}>{compactLabel(row.label, 14)}</span>
+              <b className="tool-drawer__digest-rank">{index + 1}</b>
+              <span className="tool-drawer__digest-name" title={row.label}>
+                {row.label}
+              </span>
               <strong className={tone}>{money(row.change)}</strong>
+              <i
+                className={`tool-drawer__digest-meter is-${tone}`}
+                style={{ '--w': `${Math.max(4, (Math.abs(row.change) / moverMax) * 100)}%` }}
+                aria-hidden="true"
+              />
             </li>
           ))}
-        </ul>
+        </ol>
       ) : (
-        <p className="tool-drawer__digest-none">{en ? 'None' : '없음'}</p>
+        <p className="tool-drawer__digest-none">{emptyText}</p>
       );
 
     return (
       <div className="tool-drawer__report-panel">
-        <section className="tool-drawer__overview-card tool-drawer__overview-card--wide">
-          <p>
-            {en ? 'This month' : '이번 달 변화'}
+        <section className="tool-drawer__overview-card tool-drawer__overview-card--wide tool-drawer__digest">
+          <header className="tool-drawer__digest-head">
+            <h4>{en ? 'This month' : '이번 달 변화'}</h4>
             {digest ? (
               <span className="tool-drawer__digest-period">
-                {' · '}
                 {digest.periodKey}
-                {digest.previousPeriodKey
-                  ? en
-                    ? ` vs ${digest.previousPeriodKey}`
-                    : ` (${digest.previousPeriodKey} 대비)`
-                  : ''}
+                {digest.previousPeriodKey ? <em>{en ? `vs ${digest.previousPeriodKey}` : `${digest.previousPeriodKey} 대비`}</em> : null}
               </span>
             ) : null}
-          </p>
+          </header>
           {digest ? (
             <div className="tool-drawer__report-summary">
+              <p className="tool-drawer__digest-headline">{headline}</p>
+
               {digest.previousPeriodKey ? (
-                <div className="tool-drawer__analytics-grid tool-drawer__digest-grid">
-                  <div className="tool-drawer__analytics-metric">
-                    <span>{en ? 'Value' : '평가금액'}</span>
-                    <strong className={getSignedValueToneClass(digest.marketValueChange, 'positive', 'negative')}>
-                      {money(digest.marketValueChange)}
-                    </strong>
-                  </div>
-                  <div className="tool-drawer__analytics-metric">
-                    <span>{en ? 'P/L' : '손익'}</span>
-                    <strong className={getSignedValueToneClass(digest.profitChange, 'positive', 'negative')}>
-                      {money(digest.profitChange)}
-                    </strong>
-                  </div>
-                  <div className="tool-drawer__analytics-metric">
-                    <span>{en ? 'Return' : '수익률'}</span>
-                    <strong className={getSignedValueToneClass(digest.returnRateChange, 'positive', 'negative')}>
-                      {Number.isFinite(digest.returnRateChange)
-                        ? `${digest.returnRateChange > 0 ? '+' : ''}${digest.returnRateChange.toFixed(1)}%p`
-                        : '-'}
-                    </strong>
-                  </div>
+                <div className="tool-drawer__digest-tiles">
+                  {metricTile(en ? 'Value' : '평가금액', digest.marketValueChange, money(digest.marketValueChange), en ? 'vs last month' : '지난달보다')}
+                  {metricTile(en ? 'Profit' : '손익', digest.profitChange, money(digest.profitChange), en ? 'vs last month' : '지난달보다')}
+                  {metricTile(
+                    en ? 'Return' : '수익률',
+                    digest.returnRateChange,
+                    Number.isFinite(digest.returnRateChange)
+                      ? `${digest.returnRateChange > 0 ? '+' : ''}${digest.returnRateChange.toFixed(1)}%p`
+                      : '-',
+                    en ? 'points vs last month' : '지난달 대비 %p',
+                  )}
                 </div>
-              ) : (
-                <p className="tool-drawer__digest-note">
-                  {en
-                    ? 'Only one month is recorded, so there is nothing to compare yet. Movers below are cumulative.'
-                    : '기록된 달이 하나뿐이라 아직 비교할 수 없어요. 아래 종목은 누적 손익 기준이에요.'}
-                </p>
-              )}
+              ) : null}
 
               {digest.history.length > 1 ? (
                 <div className="tool-drawer__digest-history">
-                  <span>{en ? 'Month-end return' : '월말 수익률 추이'}</span>
+                  <span>{en ? 'Return at each month-end' : '월말 수익률 흐름'}</span>
                   <div className="tool-drawer__digest-bars" role="img" aria-label={en ? 'Month-end return by month' : '월별 월말 수익률'}>
-                    {digest.history.map((point) => {
+                    {digest.history.map((point, index) => {
                       const value = point.returnRate ?? 0;
+                      const isLatest = index === digest.history.length - 1;
                       return (
-                        <div key={point.periodKey} className="tool-drawer__digest-bar">
+                        <div key={point.periodKey} className={`tool-drawer__digest-bar${isLatest ? ' is-latest' : ''}`}>
                           <em>{Number.isFinite(point.returnRate) ? `${value > 0 ? '+' : ''}${value.toFixed(1)}%` : '-'}</em>
                           <i
                             className={value >= 0 ? 'is-up' : 'is-down'}
@@ -1689,14 +1739,23 @@ export function ToolSideDrawer({
                 </div>
               ) : null}
 
+              <p className="tool-drawer__digest-basis">
+                {monthly
+                  ? en
+                    ? 'Holdings ranked by how much their profit changed since last month'
+                    : '지난달보다 손익이 얼마나 달라졌는지로 순위를 매겼어요'
+                  : en
+                    ? 'Only one month is recorded, so these are ranked by total profit so far'
+                    : '기록이 한 달뿐이라, 지금까지 쌓인 손익으로 순위를 매겼어요'}
+              </p>
               <div className="tool-drawer__digest-columns">
-                <div>
-                  <span>{en ? 'Gained most' : '많이 번 종목'}</span>
-                  {renderMovers(digest.gainers, 'positive')}
+                <div className="is-gain">
+                  <span>{monthly ? (en ? 'Helped most' : '가장 도움 된 종목') : en ? 'Biggest gains' : '가장 많이 번 종목'}</span>
+                  {renderMovers(digest.gainers, 'positive', en ? 'None yet' : '아직 없어요')}
                 </div>
-                <div>
-                  <span>{en ? 'Lost most' : '많이 잃은 종목'}</span>
-                  {renderMovers(digest.losers, 'negative')}
+                <div className="is-loss">
+                  <span>{monthly ? (en ? 'Held back most' : '가장 발목 잡은 종목') : en ? 'Biggest losses' : '가장 많이 잃은 종목'}</span>
+                  {renderMovers(digest.losers, 'negative', en ? 'No losing holdings' : '손해 본 종목이 없어요')}
                 </div>
               </div>
             </div>
@@ -2073,7 +2132,7 @@ export function ToolSideDrawer({
 
           {analyticsSummary ? (
             <section className="tool-drawer__overview-card tool-drawer__overview-card--wide tool-drawer__analytics-card">
-              <p>{language === 'en' ? 'Service Analytics' : '서비스 분석'}</p>
+              <p>{language === 'en' ? 'Portfolio Analysis' : '포트폴리오 분석'}</p>
               <div className="tool-drawer__analytics-grid">
                 {analyticsKpis.map((metric) => (
                   <div
@@ -2122,7 +2181,8 @@ export function ToolSideDrawer({
             </section>
           ) : null}
 
-          {heatmap ? (
+          {/* One dated day says nothing about "by date": the grid would be a single lit cell. */}
+          {heatmap && heatmap.cells.filter((cell) => cell.hasData).length >= 2 ? (
             <section className="tool-drawer__overview-card tool-drawer__overview-card--wide">
               <p>{language === 'en' ? 'Daily P/L' : '날짜별 손익률'}</p>
               <HeatmapCardView
@@ -2133,83 +2193,92 @@ export function ToolSideDrawer({
             </section>
           ) : null}
 
-          <div className="tool-drawer__overview-grid">
-            {scorecard || overallScorecard ? (
-              <section className="tool-drawer__overview-card tool-drawer__overview-card--score">
-                <div className="tool-drawer__overview-card-head">
-                  <p>{language === 'en' ? 'Portfolio Score' : '포트폴리오 점수'}</p>
-                </div>
+          {scorecard || overallScorecard || allocation ? (
+            // Score and mix share one card: how the portfolio rates on top, what it is made of
+            // right below, so the two read as one picture instead of two competing boxes.
+            <section className="tool-drawer__overview-card tool-drawer__overview-card--merged">
+              {scorecard || overallScorecard ? (
+                <div className="tool-drawer__merged-section tool-drawer__overview-card--score">
+                  <div className="tool-drawer__overview-card-head">
+                    <p>{language === 'en' ? 'Portfolio Score' : '포트폴리오 점수'}</p>
+                  </div>
 
-                {/* The six axis scores don't depend on the style — only how they're added up does.
-                    Show every style's total at once; clicking one just picks the number in the
-                    middle of the radar. Previously four buttons redrew an identical shape. */}
-                <div
-                  className="tool-drawer__score-mode-grid"
-                  aria-label={language === 'en' ? 'Score by investing style' : '투자 성향별 점수'}
-                >
-                  {SCORE_STYLE_OPTIONS.map((option) => {
-                    const value = overallScoreFor((scorecard ?? overallScorecard).metrics, option.key);
-                    return (
-                      <button
-                        key={option.key}
-                        type="button"
-                        className={`tool-drawer__score-mode${scoreWeightPreset === option.key ? ' is-active' : ''}`}
-                        title={language === 'en' ? option.hintEn : option.hintKo}
-                        onClick={() => {
-                          onInteract?.();
-                          onScoreWeightPresetChange?.(option.key);
-                        }}
-                      >
-                        <span>{language === 'en' ? option.labelEn : option.labelKo}</span>
-                        <strong>{value}</strong>
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="tool-drawer__score-mode-hint">
-                  {(() => {
-                    const option =
-                      SCORE_STYLE_OPTIONS.find((candidate) => candidate.key === scoreWeightPreset) ??
-                      SCORE_STYLE_OPTIONS[0];
-                    return language === 'en' ? option.hintEn : option.hintKo;
-                  })()}
-                </p>
-
-                <PortfolioScoreCardView
-                  scorecard={scorecard ?? overallScorecard}
-                  compareScorecard={scorecard && overallScorecard && portfolioEntries.length > 1 ? overallScorecard : null}
-                  axes={scoreAxes}
-                  language={language}
-                  className="score-panel score-panel--drawer"
-                />
-                {scorecard && overallScorecard && portfolioEntries.length > 1 ? (
-                  <p className="tool-drawer__score-legend">
-                    <span className="is-current">
-                      {language === 'en' ? 'This portfolio' : '이 포트폴리오'} {scorecard.overall}
-                    </span>
-                    <span className="is-compare">
-                      {language === 'en'
-                        ? `All ${portfolioEntries.length} combined`
-                        : `전체 ${portfolioEntries.length}개 합산`}{' '}
-                      {overallScorecard.overall}
-                    </span>
+                  {/* The six axis scores don't depend on the style — only how they're added up does.
+                      Show every style's total at once; clicking one just picks the number in the
+                      middle of the radar. Previously four buttons redrew an identical shape. */}
+                  <div
+                    className="tool-drawer__score-mode-grid"
+                    aria-label={language === 'en' ? 'Score by investing style' : '투자 성향별 점수'}
+                  >
+                    {SCORE_STYLE_OPTIONS.map((option) => {
+                      const value = overallScoreFor((scorecard ?? overallScorecard).metrics, option.key);
+                      return (
+                        <button
+                          key={option.key}
+                          type="button"
+                          className={`tool-drawer__score-mode${scoreWeightPreset === option.key ? ' is-active' : ''}`}
+                          title={language === 'en' ? option.hintEn : option.hintKo}
+                          onClick={() => {
+                            onInteract?.();
+                            onScoreWeightPresetChange?.(option.key);
+                          }}
+                        >
+                          <span>{language === 'en' ? option.labelEn : option.labelKo}</span>
+                          <strong>{value}</strong>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="tool-drawer__score-mode-hint">
+                    {(() => {
+                      const option =
+                        SCORE_STYLE_OPTIONS.find((candidate) => candidate.key === scoreWeightPreset) ??
+                        SCORE_STYLE_OPTIONS[0];
+                      return language === 'en' ? option.hintEn : option.hintKo;
+                    })()}
                   </p>
-                ) : null}
-              </section>
-            ) : null}
 
-            {allocation ? (
-              <section className="tool-drawer__overview-card">
-                <p>{language === 'en' ? 'Portfolio Mix' : '포트폴리오 비중'}</p>
-                <PortfolioAllocationCardView
-                  allocation={allocation}
-                  language={language}
-                  className="allocation-panel allocation-panel--drawer"
-                  onInteract={onInteract}
-                />
-              </section>
-            ) : null}
-          </div>
+                  <PortfolioScoreCardView
+                    scorecard={scorecard ?? overallScorecard}
+                    compareScorecard={scorecard && overallScorecard && portfolioEntries.length > 1 ? overallScorecard : null}
+                    axes={scoreAxes}
+                    language={language}
+                    className="score-panel score-panel--drawer"
+                  />
+                  {scorecard && overallScorecard && portfolioEntries.length > 1 ? (
+                    <p className="tool-drawer__score-legend">
+                      <span className="is-current">
+                        {language === 'en' ? 'This portfolio' : '이 포트폴리오'} {scorecard.overall}
+                      </span>
+                      <span className="is-compare">
+                        {language === 'en'
+                          ? `All ${portfolioEntries.length} combined`
+                          : `전체 ${portfolioEntries.length}개 합산`}{' '}
+                        {overallScorecard.overall}
+                      </span>
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {allocation ? (
+                <div className="tool-drawer__merged-section tool-drawer__merged-section--mix">
+                  <div className="tool-drawer__overview-card-head">
+                    <p>{language === 'en' ? 'Portfolio Mix' : '포트폴리오 비중'}</p>
+                  </div>
+                  <PortfolioAllocationCardView
+                    allocation={allocation}
+                    language={language}
+                    className="allocation-panel allocation-panel--drawer"
+                    onInteract={onInteract}
+                    formatValue={(value) =>
+                      formatAnalyticsMoney(convertCurrencyAmount(value, 'KRW', baseCurrency, fxRates), baseCurrency)
+                    }
+                  />
+                </div>
+              ) : null}
+            </section>
+          ) : null}
 
           {analyticsSummary?.profitFlow?.length ? renderMonthlyReportPanel() : null}
         </div>
@@ -2220,14 +2289,23 @@ export function ToolSideDrawer({
       return renderComparePanel();
     }
 
+    if (resolvedTool.key === 'gurus') {
+      return (
+        <GuruPanel
+          analyticsSummary={analyticsSummary}
+          activePortfolio={activePortfolio}
+          language={language}
+          onInteract={onInteract}
+        />
+      );
+    }
+
     if (resolvedTool.key === 'twin') {
       return (
         <DigitalTwinPanel
           items={items}
           timelineItems={timelineItems}
-          positionValues={items.map(
-            (item) => resolveHoldingPosition(item, { baseCurrency: 'KRW', fxRates }).marketValue,
-          )}
+          positionValues={twinPositionValues}
           className="twin-panel--drawer"
         />
       );

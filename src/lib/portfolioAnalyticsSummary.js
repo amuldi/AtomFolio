@@ -1,3 +1,4 @@
+import { classifyBucketFromText, searchableText } from './assetKeywords.js';
 import {
   buildFxRates,
   convertCurrencyAmount,
@@ -292,36 +293,7 @@ function readGroupLabel(item, key, candidates, fallback = '미분류') {
 }
 
 function classifyRebalanceBucket(item) {
-  const text = [
-    item?.label,
-    item?.name,
-    item?.code,
-    item?.region,
-    item?.sector,
-    item?.assetClass,
-    item?.style,
-    ...(item?.fields ?? []).flatMap((field) => [field.label, field.value]),
-  ]
-    .map((value) => String(value ?? '').trim().toLowerCase())
-    .join(' ');
-
-  if (/리츠|부동산|reit|real estate|property/.test(text)) {
-    return 'reit';
-  }
-
-  if (/금(?!액|융)|현금|예수금|단기|원자재|gold|cash|money market|deposit|iau|gld|sgov|bil/.test(text)) {
-    return 'goldCash';
-  }
-
-  if (/배당|인컴|dividend|income|schd|dgro|vym/.test(text)) {
-    return 'dividend';
-  }
-
-  if (/주식|stock|equity|etf|fund|qqq|spy|voo|vti|nasdaq|s&p/.test(text)) {
-    return 'stock';
-  }
-
-  return 'other';
+  return classifyBucketFromText(searchableText(item));
 }
 
 // Exported (not just used internally for the aggregate summary) so a single-holding UI — the

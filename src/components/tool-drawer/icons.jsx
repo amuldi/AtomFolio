@@ -131,6 +131,31 @@ export function SketchManualAccountIcon() {
   );
 }
 
+// 유명인 tab: a sketched bust with a small star. Reuses the news icon's stroke classes so it sits
+// on the rail with the same weight and active-state styling.
+export function SketchFamousIcon() {
+  return (
+    <svg className="news-dock__icon" viewBox="0 0 48 48" aria-hidden="true">
+      <path
+        className="news-dock__soft"
+        d="M23.6 10.6C28.3 10.4 31 13.6 30.9 17.6C30.8 21.8 27.9 24.6 23.9 24.5C19.8 24.4 17 21.4 17.1 17.4C17.2 13.5 19.6 10.8 23.6 10.6Z"
+      />
+      <path
+        className="news-dock__main"
+        d="M24 11.6C27.6 11.5 29.9 14.2 29.8 17.6C29.7 21.1 27.3 23.5 23.9 23.4C20.6 23.3 18.2 20.8 18.3 17.4C18.4 14.1 20.6 11.7 24 11.6Z"
+      />
+      <path
+        className="news-dock__main"
+        d="M12.8 37.6C13.6 31.4 18 27.6 24.1 27.6C30.3 27.7 34.6 31.6 35.3 37.8"
+      />
+      <path
+        className="news-dock__accent"
+        d="M37.2 8.6L38.3 11.4L41.2 11.6L38.9 13.4L39.7 16.2L37.3 14.6L34.8 16.1L35.6 13.3L33.4 11.5L36.3 11.4Z"
+      />
+    </svg>
+  );
+}
+
 export function SketchNewsIcon() {
   return (
     <svg className="news-dock__icon" viewBox="0 0 48 48" aria-hidden="true">

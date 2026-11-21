@@ -1,0 +1,660 @@
+{
+  "berkshire": {
+    "kind": "photo",
+    "src": "/gurus/berkshire.jpg",
+    "author": "USA International Trade Administration",
+    "license": "Public domain",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Warren_Buffett_at_the_2015_SelectUSA_Investment_Summit_(cropped).jpg"
+  },
+  "bridgewater": {
+    "kind": "photo",
+    "src": "/gurus/bridgewater.jpg",
+    "author": "Web Summit",
+    "license": "CC BY 2.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Web_Summit_2018_-_Forum_-_Day_2,_November_7_HM1_7481_(44858045925).jpg"
+  },
+  "ark": {
+    "kind": "photo",
+    "src": "/gurus/ark.jpg",
+    "author": "Caroline Wood",
+    "license": "CC BY-SA 4.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Cathie_Wood_ARK_Invest_Photo.jpg"
+  },
+  "soros": {
+    "kind": "photo",
+    "src": "/gurus/soros.jpg",
+    "author": "Aris Oikonomou / European Commission",
+    "license": "CC BY 4.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:George_Soros,_Founder_and_Chairman_of_the_Open_Society_Foundations,_visits_the_EC_(3x4_cropped).jpg"
+  },
+  "appaloosa": {
+    "kind": "photo",
+    "src": "/gurus/appaloosa.jpg",
+    "author": "Appaloosa Management",
+    "license": "CC BY-SA 3.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:David_Tepper_01.jpg"
+  },
+  "gates": {
+    "kind": "photo",
+    "src": "/gurus/gates.jpg",
+    "author": "Bogdan Hoyaux / European Union",
+    "license": "CC BY 4.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Bill_Gates_at_the_European_Commission_-_P067383-987995_(cropped)_5.jpg"
+  },
+  "icahn": {
+    "kind": "photo",
+    "src": "/gurus/icahn.jpg",
+    "author": "AviateHistory",
+    "license": "CC0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Carl_Icahn,_1980s.jpg"
+  },
+  "citadel": {
+    "kind": "photo",
+    "src": "/gurus/citadel.jpg",
+    "author": "Paul Elledge",
+    "license": "CC BY-SA 4.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Kenneth_C._Griffin.jpg"
+  },
+  "point72": {
+    "kind": "photo",
+    "src": "/gurus/point72.jpg",
+    "author": "Michael Seib",
+    "license": "CC BY-SA 4.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Steve_baseball_4_(1)_(cropped).jpg"
+  },
+  "elliott": {
+    "kind": "photo",
+    "src": "/gurus/elliott.jpg",
+    "author": "World Economic Forum",
+    "license": "CC BY-SA 2.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:The_Global_Financial_Context_Paul_Singer_(cropped).jpg"
+  },
+  "lonepine": {
+    "kind": "photo",
+    "src": "/gurus/lonepine.jpg",
+    "author": "Dave Cournoyer",
+    "license": "CC BY-SA 2.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:2013-05-21_Stephen_Mandel_(cropped).jpg"
+  },
+  "millennium": {
+    "kind": "photo",
+    "src": "/gurus/millennium.jpg",
+    "author": "Christian Kozowyk",
+    "license": "CC BY-SA 4.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Ienglander_0637_v3_12x8-2-1152x1440_720.jpg"
+  },
+  "tci": {
+    "kind": "photo",
+    "src": "/gurus/tci.jpg",
+    "author": "Foreign, Commonwealth &amp; Development Office",
+    "license": "CC BY 2.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Chris_Hohn_GFSS_2023.jpg"
+  },
+  "baupost": {
+    "kind": "photo",
+    "src": "/gurus/baupost.jpg",
+    "author": "Maryland GovPics",
+    "license": "CC BY 2.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Seth_Klarman_at_147th_Preakness_Stakes.jpg"
+  },
+  "fairfax": {
+    "kind": "photo",
+    "src": "/gurus/fairfax.jpg",
+    "author": "செல்வா at Tamil Wikipedia",
+    "license": "CC BY 3.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Prem_Watsa.jpg"
+  },
+  "pabrai": {
+    "kind": "photo",
+    "src": "/gurus/pabrai.jpg",
+    "author": "Fabarsi",
+    "license": "CC BY-SA 3.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Mohnish_Pabrai.jpg"
+  },
+  "nps": {
+    "kind": "logo",
+    "src": "/gurus/nps.png",
+    "author": "National Pension Service · 미국 주식",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://nps.or.kr"
+  },
+  "kic": {
+    "kind": "logo",
+    "src": "/gurus/kic.jpg",
+    "author": "KIC · 국부펀드",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://kic.kr"
+  },
+  "bok": {
+    "kind": "logo",
+    "src": "/gurus/bok.jpg",
+    "author": "Bank of Korea · 외환보유액",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://bok.or.kr"
+  },
+  "blackrock": {
+    "kind": "logo",
+    "src": "/gurus/blackrock.ico",
+    "author": "BlackRock, Inc.",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://blackrock.com"
+  },
+  "vanguard": {
+    "kind": "logo",
+    "src": "/gurus/vanguard.ico",
+    "author": "Vanguard Portfolio Management",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://vanguard.com"
+  },
+  "fidelity": {
+    "kind": "logo",
+    "src": "/gurus/fidelity.png",
+    "author": "FMR LLC",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://fidelity.com"
+  },
+  "trowe": {
+    "kind": "logo",
+    "src": "/gurus/trowe.png",
+    "author": "T. Rowe Price Associates",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://troweprice.com"
+  },
+  "capitalgroup": {
+    "kind": "logo",
+    "src": "/gurus/capitalgroup.png",
+    "author": "Capital Research Global Investors",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://capitalgroup.com"
+  },
+  "goldman": {
+    "kind": "logo",
+    "src": "/gurus/goldman.png",
+    "author": "Goldman Sachs Group",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://goldmansachs.com"
+  },
+  "jpmorgan": {
+    "kind": "logo",
+    "src": "/gurus/jpmorgan.png",
+    "author": "JPMorgan Chase & Co.",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://jpmorganchase.com"
+  },
+  "bofa": {
+    "kind": "logo",
+    "src": "/gurus/bofa.png",
+    "author": "Bank of America Corp",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://bankofamerica.com"
+  },
+  "ubs": {
+    "kind": "logo",
+    "src": "/gurus/ubs.png",
+    "author": "UBS Group AG",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://ubs.com"
+  },
+  "renaissance": {
+    "kind": "logo",
+    "src": "/gurus/renaissance.png",
+    "author": "Renaissance Technologies LLC",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://rentec.com"
+  },
+  "twosigma": {
+    "kind": "logo",
+    "src": "/gurus/twosigma.png",
+    "author": "Two Sigma Investments",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://twosigma.com"
+  },
+  "valueact": {
+    "kind": "logo",
+    "src": "/gurus/valueact.png",
+    "author": "ValueAct Holdings",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://valueact.com"
+  },
+  "norges": {
+    "kind": "logo",
+    "src": "/gurus/norges.png",
+    "author": "Norges Bank",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://nbim.no"
+  },
+  "temasek": {
+    "kind": "logo",
+    "src": "/gurus/temasek.png",
+    "author": "Temasek Holdings",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://temasek.com.sg"
+  },
+  "saudipif": {
+    "kind": "logo",
+    "src": "/gurus/saudipif.png",
+    "author": "Public Investment Fund",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://pif.gov.sa"
+  },
+  "cppib": {
+    "kind": "logo",
+    "src": "/gurus/cppib.png",
+    "author": "Canada Pension Plan Investment Board",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://cppinvestments.com"
+  },
+  "calpers": {
+    "kind": "logo",
+    "src": "/gurus/calpers.ico",
+    "author": "California Public Employees' Retirement System",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://calpers.ca.gov"
+  },
+  "huang": {
+    "kind": "photo",
+    "src": "/gurus/huang.jpg",
+    "author": "Anderseidesvik",
+    "license": "CC BY-SA 4.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Jensen_Huang_Stanford_2026-04-30_010_(cropped).jpg"
+  },
+  "musk": {
+    "kind": "photo",
+    "src": "/gurus/musk.jpg",
+    "author": "Gage Skidmore",
+    "license": "CC BY-SA 4.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Elon_Musk_-_54820081119_(3x4_cropped,_Rule_of_thirds).jpg"
+  },
+  "zuckerberg": {
+    "kind": "photo",
+    "src": "/gurus/zuckerberg.jpg",
+    "author": "The White House",
+    "license": "Public domain",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:P20260929DT-1655_(55561811540)_(cropped_2).jpg"
+  },
+  "bezos": {
+    "kind": "photo",
+    "src": "/gurus/bezos.jpg",
+    "author": "SECWAR",
+    "license": "Public domain",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:260202-D-PM193-2205_SECWAR_Arsenal_of_Freedom_Tour_-_Florida_(3x4_cropped_on_Bezos_and_rotated).jpg"
+  },
+  "cook": {
+    "kind": "photo",
+    "src": "/gurus/cook.jpg",
+    "author": "Dati Bendo / European Union",
+    "license": "CC BY 4.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Tim_Cook_in_New_York_City_-_2026_(cropped).jpg"
+  },
+  "nadella": {
+    "kind": "photo",
+    "src": "/gurus/nadella.jpg",
+    "author": "Brian Smale and Microsoft",
+    "license": "CC BY-SA 4.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:MS-Exec-Nadella-Satya-2017-08-31-22_(cropped).jpg"
+  },
+  "ellison": {
+    "kind": "photo",
+    "src": "/gurus/ellison.png",
+    "author": "Oracle PR Hartmann Studios",
+    "license": "CC BY 2.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Larry_Ellison_2016.png"
+  },
+  "pichai": {
+    "kind": "photo",
+    "src": "/gurus/pichai.jpg",
+    "author": "Photographer: Lukasz Kobus (European Commission)",
+    "license": "CC BY 4.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Sundar_Pichai_-_2023_(cropped).jpg"
+  },
+  "jassy": {
+    "kind": "photo",
+    "src": "/gurus/jassy.jpg",
+    "author": "Lisi Mezistrano Wolf",
+    "license": "CC BY-SA 4.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Andy_Jassy.jpg"
+  },
+  "su": {
+    "kind": "photo",
+    "src": "/gurus/su.jpg",
+    "author": "Fuzheado",
+    "license": "CC BY 4.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:SXSW-2024-alih-OB7A0861-Lisa_Su_(cropped_2).jpg"
+  },
+  "karp": {
+    "kind": "photo",
+    "src": "/gurus/karp.jpg",
+    "author": "UK Government",
+    "license": "CC BY 2.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Alex_Karp_attends_AI_Summit_(53302457013)_4-5_ratio.jpg"
+  },
+  "dell": {
+    "kind": "photo",
+    "src": "/gurus/dell.jpg",
+    "author": "Village Global",
+    "license": "CC BY 2.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Michael_Dell_(52548152888)_(cropped).jpg"
+  },
+  "brin": {
+    "kind": "photo",
+    "src": "/gurus/brin.jpg",
+    "author": "The White House",
+    "license": "Public domain",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Sergey_Brin_DC_Summit_2026_(cropped).jpg"
+  },
+  "dimon": {
+    "kind": "photo",
+    "src": "/gurus/dimon.jpg",
+    "author": "Lauren Hurley / No 10 Downing Street",
+    "license": "OGL 3",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Chancellor_Rachel_Reeves_meets_Jamie_Dimon_(54838700663)_(cropped)_(cropped).jpg"
+  },
+  "ackman": {
+    "kind": "photo",
+    "src": "/gurus/ackman.jpg",
+    "author": "Senate Democrats",
+    "license": "CC BY 2.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Valeant_Pharmaceuticals%27_Business_Model_(headshot).jpg"
+  },
+  "statestreet": {
+    "kind": "logo",
+    "src": "/gurus/statestreet.png",
+    "author": "State Street Corp",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://www.statestreet.com"
+  },
+  "harvard": {
+    "kind": "logo",
+    "src": "/gurus/harvard.png",
+    "author": "Harvard Management Co.",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://harvard.edu"
+  },
+  "coatue": {
+    "kind": "logo",
+    "src": "/gurus/coatue.jpg",
+    "author": "Coatue Management",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://coatue.com"
+  },
+  "viking": {
+    "kind": "logo",
+    "src": "/gurus/viking.png",
+    "author": "Viking Global Investors",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://vikingglobal.com"
+  },
+  "deshaw": {
+    "kind": "logo",
+    "src": "/gurus/deshaw.ico",
+    "author": "D. E. Shaw & Co.",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://deshaw.com"
+  },
+  "trian": {
+    "kind": "logo",
+    "src": "/gurus/trian.png",
+    "author": "Trian Fund Management",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://trianpartners.com"
+  },
+  "markel": {
+    "kind": "logo",
+    "src": "/gurus/markel.png",
+    "author": "Markel Group",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://markel.com"
+  },
+  "southeastern": {
+    "kind": "logo",
+    "src": "/gurus/southeastern.jpg",
+    "author": "Southeastern Asset Management",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://southeasternasset.com"
+  },
+  "akre": {
+    "kind": "logo",
+    "src": "/gurus/akre.png",
+    "author": "Akre Capital Management",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://akre.com"
+  },
+  "tiger": {
+    "kind": "logo",
+    "src": "/gurus/tiger.ico",
+    "author": "Tiger Global Management",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://tigerglobal.com"
+  },
+  "thirdpoint": {
+    "kind": "photo",
+    "src": "/gurus/thirdpoint.jpg",
+    "author": "Hedge Funds",
+    "license": "CC BY 3.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Daniel_Loeb,_Third_Point.jpg"
+  },
+  "fairholme": {
+    "kind": "photo",
+    "src": "/gurus/fairholme.jpg",
+    "author": "Hedge Funds",
+    "license": "CC BY 3.0",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Bruce_Berkowitz,_Fairholme_Capital_Management.jpg"
+  },
+  "wsb": {
+    "kind": "logo",
+    "src": "/gurus/wsb.png",
+    "author": "레딧 WSB · 24시간 언급 상위",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://reddit.com"
+  },
+  "reddit": {
+    "kind": "logo",
+    "src": "/gurus/reddit.png",
+    "author": "레딧 전체 · 24시간 언급 상위",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://reddit.com"
+  },
+  "nanc": {
+    "kind": "logo",
+    "src": "/gurus/nanc.png",
+    "author": "NANC · 펠로시 등 의원 매매 추종 ETF",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://unusualwhales.com"
+  },
+  "buzz": {
+    "kind": "logo",
+    "src": "/gurus/buzz.png",
+    "author": "VanEck BUZZ · SNS 화제 종목 ETF",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://vaneck.com"
+  },
+  "meme": {
+    "kind": "logo",
+    "src": "/gurus/meme.png",
+    "author": "Roundhill MEME · 밈 주식 ETF",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://roundhillinvestments.com"
+  },
+  "fundsmith": {
+    "kind": "logo",
+    "src": "/gurus/fundsmith.png",
+    "author": "Fundsmith",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://fundsmith.co.uk"
+  },
+  "samsung": {
+    "kind": "logo",
+    "src": "/gurus/samsung.ico",
+    "author": "KRX 005930 · 최대주주·임원 매매",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://samsung.com"
+  },
+  "skhynix": {
+    "kind": "logo",
+    "src": "/gurus/skhynix.ico",
+    "author": "KRX 000660 · 최대주주·임원 매매",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://skhynix.com"
+  },
+  "hyundai": {
+    "kind": "logo",
+    "src": "/gurus/hyundai.png",
+    "author": "KRX 005380 · 최대주주·임원 매매",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://hyundai.com"
+  },
+  "kia": {
+    "kind": "logo",
+    "src": "/gurus/kia.ico",
+    "author": "KRX 000270 · 최대주주·임원 매매",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://kia.com"
+  },
+  "naver": {
+    "kind": "logo",
+    "src": "/gurus/naver.ico",
+    "author": "KRX 035420 · 최대주주·임원 매매",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://navercorp.com"
+  },
+  "kakao": {
+    "kind": "logo",
+    "src": "/gurus/kakao.ico",
+    "author": "KRX 035720 · 최대주주·임원 매매",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://kakaocorp.com"
+  },
+  "lges": {
+    "kind": "logo",
+    "src": "/gurus/lges.png",
+    "author": "KRX 373220 · 최대주주·임원 매매",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://lgensol.com"
+  },
+  "celltrion": {
+    "kind": "logo",
+    "src": "/gurus/celltrion.ico",
+    "author": "KRX 068270 · 최대주주·임원 매매",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://celltrion.com"
+  },
+  "sbio": {
+    "kind": "logo",
+    "src": "/gurus/sbio.ico",
+    "author": "KRX 207940 · 최대주주·임원 매매",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://samsungbiologics.com"
+  },
+  "posco": {
+    "kind": "logo",
+    "src": "/gurus/posco.png",
+    "author": "KRX 005490 · 최대주주·임원 매매",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://posco-inc.com"
+  },
+  "hanwha": {
+    "kind": "logo",
+    "src": "/gurus/hanwha.ico",
+    "author": "KRX 012450 · 최대주주·임원 매매",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://hanwha.com"
+  },
+  "krafton": {
+    "kind": "logo",
+    "src": "/gurus/krafton.png",
+    "author": "KRX 259960 · 최대주주·임원 매매",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://krafton.com"
+  },
+  "nps_kr": {
+    "kind": "logo",
+    "src": "/gurus/nps_kr.png",
+    "author": "National Pension Service · 미국 주식",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://nps.or.kr"
+  },
+  "arkk": {
+    "kind": "logo",
+    "src": "/gurus/arkk.png",
+    "author": "ARK · 캐시 우드 대표 ETF",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://ark-invest.com"
+  },
+  "arkw": {
+    "kind": "logo",
+    "src": "/gurus/arkw.png",
+    "author": "ARK · 인터넷·AI",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://ark-invest.com"
+  },
+  "arkg": {
+    "kind": "logo",
+    "src": "/gurus/arkg.png",
+    "author": "ARK · 바이오",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://ark-invest.com"
+  },
+  "arkq": {
+    "kind": "logo",
+    "src": "/gurus/arkq.png",
+    "author": "ARK · 로봇",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://ark-invest.com"
+  },
+  "fmagx": {
+    "kind": "logo",
+    "src": "/gurus/fmagx.png",
+    "author": "Fidelity · 피터 린치의 그 펀드",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://fidelity.com"
+  },
+  "fcntx": {
+    "kind": "logo",
+    "src": "/gurus/fcntx.png",
+    "author": "Fidelity · 대형 성장 펀드",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://fidelity.com"
+  },
+  "vfiax": {
+    "kind": "logo",
+    "src": "/gurus/vfiax.ico",
+    "author": "Vanguard · S&P500 대표 펀드",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://vanguard.com"
+  },
+  "vtsax": {
+    "kind": "logo",
+    "src": "/gurus/vtsax.ico",
+    "author": "Vanguard · 미국 전체",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://vanguard.com"
+  },
+  "agthx": {
+    "kind": "logo",
+    "src": "/gurus/agthx.png",
+    "author": "Capital Group · 대형 성장",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://capitalgroup.com"
+  },
+  "prgfx": {
+    "kind": "logo",
+    "src": "/gurus/prgfx.png",
+    "author": "T. Rowe Price · 성장주",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://troweprice.com"
+  },
+  "swppx": {
+    "kind": "logo",
+    "src": "/gurus/swppx.png",
+    "author": "Schwab · S&P500",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://schwab.com"
+  },
+  "fbgrx": {
+    "kind": "logo",
+    "src": "/gurus/fbgrx.png",
+    "author": "Fidelity · 블루칩",
+    "license": "Trademark of its owner — shown for identification",
+    "sourceUrl": "https://fidelity.com"
+  }
+}

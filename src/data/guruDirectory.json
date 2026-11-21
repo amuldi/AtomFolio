@@ -1,0 +1,1428 @@
+{
+  "note": "Curated list for the 유명인 tab. kind=fund → SEC 13F (cik); kind=insider → SEC Form 4 (cik); kind=etf → SEC N-PORT holdings of a fund (symbol); kind=buzz → most-mentioned stocks on a community (ApeWisdom filter, not holdings). category drives the filter chips; aliases widen search. domain gives the logo when there is no free-licensed portrait; wiki is the English Wikipedia article for the portrait. kind=dart → Korean listed company from OpenDART (corpCode): largest shareholders, 5% blockholders, executive trades. kind=snapshot → bundled data only, no live lookup.",
+  "people": [
+    {
+      "id": "berkshire",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1067983",
+      "person": {
+        "ko": "워런 버핏",
+        "en": "Warren Buffett"
+      },
+      "entity": "Berkshire Hathaway",
+      "wiki": "Warren_Buffett",
+      "domain": "berkshirehathaway.com"
+    },
+    {
+      "id": "bridgewater",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1350694",
+      "person": {
+        "ko": "레이 달리오",
+        "en": "Ray Dalio"
+      },
+      "entity": "Bridgewater Associates",
+      "wiki": "Ray_Dalio",
+      "domain": "bridgewater.com"
+    },
+    {
+      "id": "ark",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1697748",
+      "person": {
+        "ko": "캐시 우드",
+        "en": "Cathie Wood"
+      },
+      "entity": "ARK Investment Management",
+      "wiki": "Cathie_Wood",
+      "domain": "ark-invest.com"
+    },
+    {
+      "id": "soros",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1029160",
+      "person": {
+        "ko": "조지 소로스",
+        "en": "George Soros"
+      },
+      "entity": "Soros Fund Management",
+      "wiki": "George_Soros",
+      "domain": "soros.com"
+    },
+    {
+      "id": "duquesne",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1536411",
+      "person": {
+        "ko": "스탠리 드러켄밀러",
+        "en": "Stanley Druckenmiller"
+      },
+      "entity": "Duquesne Family Office",
+      "wiki": "Stanley_Druckenmiller",
+      "domain": null
+    },
+    {
+      "id": "appaloosa",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1656456",
+      "person": {
+        "ko": "데이비드 테퍼",
+        "en": "David Tepper"
+      },
+      "entity": "Appaloosa LP",
+      "wiki": "David_Tepper",
+      "domain": null
+    },
+    {
+      "id": "himalaya",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1709323",
+      "person": {
+        "ko": "리 루",
+        "en": "Li Lu"
+      },
+      "entity": "Himalaya Capital",
+      "wiki": "Li_Lu",
+      "domain": "himcap.com",
+      "logo": false
+    },
+    {
+      "id": "gates",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1166559",
+      "person": {
+        "ko": "빌 게이츠",
+        "en": "Bill Gates"
+      },
+      "entity": "Gates Foundation Trust",
+      "wiki": "Bill_Gates",
+      "domain": "gatesfoundation.org"
+    },
+    {
+      "id": "icahn",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "921669",
+      "person": {
+        "ko": "칼 아이칸",
+        "en": "Carl Icahn"
+      },
+      "entity": "Icahn Enterprises",
+      "wiki": "Carl_Icahn",
+      "domain": "ielp.com"
+    },
+    {
+      "id": "citadel",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1423053",
+      "person": {
+        "ko": "켄 그리핀",
+        "en": "Ken Griffin"
+      },
+      "entity": "Citadel Advisors",
+      "wiki": "Kenneth_C._Griffin",
+      "domain": "citadel.com"
+    },
+    {
+      "id": "point72",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1603466",
+      "person": {
+        "ko": "스티브 코언",
+        "en": "Steve Cohen"
+      },
+      "entity": "Point72 Asset Management",
+      "wiki": "Steven_A._Cohen",
+      "domain": "point72.com"
+    },
+    {
+      "id": "elliott",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1791786",
+      "person": {
+        "ko": "폴 싱어",
+        "en": "Paul Singer"
+      },
+      "entity": "Elliott Investment Management",
+      "wiki": "Paul_Singer_(businessman)",
+      "domain": "elliottmgmt.com"
+    },
+    {
+      "id": "tiger",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1167483",
+      "person": {
+        "ko": "체이스 콜먼",
+        "en": "Chase Coleman"
+      },
+      "entity": "Tiger Global Management",
+      "wiki": "Chase_Coleman_III",
+      "domain": "tigerglobal.com"
+    },
+    {
+      "id": "coatue",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1135730",
+      "person": {
+        "ko": "필리프 라퐁",
+        "en": "Philippe Laffont"
+      },
+      "entity": "Coatue Management",
+      "wiki": "Philippe_Laffont",
+      "domain": "coatue.com"
+    },
+    {
+      "id": "lonepine",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1061165",
+      "person": {
+        "ko": "스티븐 맨덜",
+        "en": "Stephen Mandel"
+      },
+      "entity": "Lone Pine Capital",
+      "wiki": "Stephen_Mandel",
+      "domain": "lonepinecapital.com"
+    },
+    {
+      "id": "viking",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1103804",
+      "person": {
+        "ko": "안드레아스 할보르센",
+        "en": "Andreas Halvorsen"
+      },
+      "entity": "Viking Global Investors",
+      "wiki": "Andreas_Halvorsen",
+      "domain": "vikingglobal.com"
+    },
+    {
+      "id": "deshaw",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1009207",
+      "person": {
+        "ko": "데이비드 쇼",
+        "en": "David E. Shaw"
+      },
+      "entity": "D. E. Shaw & Co.",
+      "wiki": "David_E._Shaw",
+      "domain": "deshaw.com"
+    },
+    {
+      "id": "millennium",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1273087",
+      "person": {
+        "ko": "이스라엘 잉글랜더",
+        "en": "Israel Englander"
+      },
+      "entity": "Millennium Management",
+      "wiki": "Israel_Englander",
+      "domain": "mlp.com"
+    },
+    {
+      "id": "trian",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1345471",
+      "person": {
+        "ko": "넬슨 펠츠",
+        "en": "Nelson Peltz"
+      },
+      "entity": "Trian Fund Management",
+      "wiki": "Nelson_Peltz",
+      "domain": "trianpartners.com"
+    },
+    {
+      "id": "tci",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1647251",
+      "person": {
+        "ko": "크리스 혼",
+        "en": "Chris Hohn"
+      },
+      "entity": "TCI Fund Management",
+      "wiki": "Christopher_Hohn",
+      "domain": "tcifund.com"
+    },
+    {
+      "id": "baupost",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1061768",
+      "person": {
+        "ko": "세스 클라만",
+        "en": "Seth Klarman"
+      },
+      "entity": "Baupost Group",
+      "wiki": "Seth_Klarman",
+      "domain": "baupost.com"
+    },
+    {
+      "id": "thirdpoint",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1040273",
+      "person": {
+        "ko": "대니얼 로브",
+        "en": "Daniel Loeb"
+      },
+      "entity": "Third Point",
+      "wiki": "Daniel_S._Loeb",
+      "domain": "thirdpoint.com"
+    },
+    {
+      "id": "fairfax",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "915191",
+      "person": {
+        "ko": "프렘 왓사",
+        "en": "Prem Watsa"
+      },
+      "entity": "Fairfax Financial",
+      "wiki": "Prem_Watsa",
+      "domain": "fairfax.ca"
+    },
+    {
+      "id": "markel",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1096343",
+      "person": {
+        "ko": "톰 게이너",
+        "en": "Tom Gayner"
+      },
+      "entity": "Markel Group",
+      "wiki": "Thomas_Gayner",
+      "domain": "markel.com"
+    },
+    {
+      "id": "southeastern",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "807985",
+      "person": {
+        "ko": "메이슨 호킨스",
+        "en": "Mason Hawkins"
+      },
+      "entity": "Southeastern Asset Management",
+      "wiki": "O._Mason_Hawkins",
+      "domain": "southeasternasset.com"
+    },
+    {
+      "id": "fairholme",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1056831",
+      "person": {
+        "ko": "브루스 버코위츠",
+        "en": "Bruce Berkowitz"
+      },
+      "entity": "Fairholme Capital",
+      "wiki": "Bruce_Berkowitz",
+      "domain": "fairholmefunds.com"
+    },
+    {
+      "id": "pabrai",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1549575",
+      "person": {
+        "ko": "모니시 파브라이",
+        "en": "Mohnish Pabrai"
+      },
+      "entity": "Dalal Street",
+      "wiki": "Mohnish_Pabrai",
+      "domain": "pabraifunds.com"
+    },
+    {
+      "id": "fundsmith",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1569205",
+      "person": {
+        "ko": "테리 스미스",
+        "en": "Terry Smith"
+      },
+      "entity": "Fundsmith",
+      "wiki": "Terry_Smith_(businessman)",
+      "domain": "fundsmith.co.uk",
+      "portrait": false
+    },
+    {
+      "id": "akre",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "1112520",
+      "person": {
+        "ko": "척 애크리",
+        "en": "Chuck Akre"
+      },
+      "entity": "Akre Capital Management",
+      "wiki": "Chuck_Akre",
+      "domain": "akre.com"
+    },
+    {
+      "id": "russo",
+      "kind": "fund",
+      "category": "investor",
+      "cik": "860643",
+      "person": {
+        "ko": "톰 루소",
+        "en": "Tom Russo"
+      },
+      "entity": "Gardner Russo & Quinn",
+      "wiki": null,
+      "domain": "gardnerrusso.com"
+    },
+    {
+      "id": "wsb",
+      "kind": "buzz",
+      "category": "community",
+      "filter": "wallstreetbets",
+      "person": {
+        "ko": "월스트리트베츠",
+        "en": "r/wallstreetbets"
+      },
+      "entity": "레딧 WSB · 24시간 언급 상위",
+      "aliases": [
+        "레딧",
+        "reddit",
+        "wsb",
+        "월베",
+        "개미",
+        "밈"
+      ],
+      "wiki": null,
+      "domain": "reddit.com"
+    },
+    {
+      "id": "reddit",
+      "kind": "buzz",
+      "category": "community",
+      "filter": "all-stocks",
+      "person": {
+        "ko": "레딧 주식 커뮤니티",
+        "en": "Reddit stocks"
+      },
+      "entity": "레딧 전체 · 24시간 언급 상위",
+      "aliases": [
+        "레딧",
+        "reddit",
+        "개미",
+        "커뮤니티"
+      ],
+      "wiki": null,
+      "domain": "reddit.com"
+    },
+    {
+      "id": "nanc",
+      "kind": "etf",
+      "category": "community",
+      "symbol": "NANC",
+      "person": {
+        "ko": "미 의회 민주당 매매",
+        "en": "Congress Democrats"
+      },
+      "entity": "NANC · 펠로시 등 의원 매매 추종 ETF",
+      "aliases": [
+        "펠로시",
+        "pelosi",
+        "의회",
+        "congress",
+        "국회의원",
+        "nanc"
+      ],
+      "wiki": null,
+      "domain": "unusualwhales.com"
+    },
+    {
+      "id": "buzz",
+      "kind": "etf",
+      "category": "community",
+      "symbol": "BUZZ",
+      "person": {
+        "ko": "소셜 인기 종목",
+        "en": "Social Sentiment"
+      },
+      "entity": "VanEck BUZZ · SNS 화제 종목 ETF",
+      "aliases": [
+        "밈",
+        "meme",
+        "소셜",
+        "sns",
+        "buzz"
+      ],
+      "wiki": null,
+      "domain": "vaneck.com"
+    },
+    {
+      "id": "meme",
+      "kind": "etf",
+      "category": "community",
+      "symbol": "MEME",
+      "person": {
+        "ko": "밈 주식",
+        "en": "Meme Stocks"
+      },
+      "entity": "Roundhill MEME · 밈 주식 ETF",
+      "aliases": [
+        "밈",
+        "meme",
+        "밈주식"
+      ],
+      "wiki": null,
+      "domain": "roundhillinvestments.com"
+    },
+    {
+      "id": "burry",
+      "kind": "fund",
+      "category": "community",
+      "cik": "1649339",
+      "person": {
+        "ko": "마이클 버리",
+        "en": "Michael Burry"
+      },
+      "entity": "Scion · 빅쇼트 (2025년 마지막 공시)",
+      "aliases": [
+        "빅쇼트",
+        "big short",
+        "버리"
+      ],
+      "wiki": "Michael_Burry",
+      "domain": null
+    },
+    {
+      "id": "samsung",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "00126380",
+      "person": {
+        "ko": "삼성전자",
+        "en": "Samsung Electronics"
+      },
+      "entity": "KRX 005930 · 최대주주·임원 매매",
+      "aliases": [
+        "이재용",
+        "삼성",
+        "홍라희",
+        "삼성생명"
+      ],
+      "wiki": null,
+      "domain": "samsung.com"
+    },
+    {
+      "id": "skhynix",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "00164779",
+      "person": {
+        "ko": "SK하이닉스",
+        "en": "SK hynix"
+      },
+      "entity": "KRX 000660 · 최대주주·임원 매매",
+      "aliases": [
+        "sk",
+        "최태원",
+        "하이닉스"
+      ],
+      "wiki": null,
+      "domain": "skhynix.com"
+    },
+    {
+      "id": "hyundai",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "00164742",
+      "person": {
+        "ko": "현대자동차",
+        "en": "Hyundai Motor"
+      },
+      "entity": "KRX 005380 · 최대주주·임원 매매",
+      "aliases": [
+        "정의선",
+        "현대차",
+        "현대"
+      ],
+      "wiki": null,
+      "domain": "hyundai.com"
+    },
+    {
+      "id": "kia",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "00106641",
+      "person": {
+        "ko": "기아",
+        "en": "Kia"
+      },
+      "entity": "KRX 000270 · 최대주주·임원 매매",
+      "aliases": [
+        "기아차",
+        "정의선"
+      ],
+      "wiki": null,
+      "domain": "kia.com"
+    },
+    {
+      "id": "naver",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "00266961",
+      "person": {
+        "ko": "NAVER",
+        "en": "NAVER"
+      },
+      "entity": "KRX 035420 · 최대주주·임원 매매",
+      "aliases": [
+        "이해진",
+        "네이버"
+      ],
+      "wiki": null,
+      "domain": "navercorp.com"
+    },
+    {
+      "id": "kakao",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "00258801",
+      "person": {
+        "ko": "카카오",
+        "en": "Kakao"
+      },
+      "entity": "KRX 035720 · 최대주주·임원 매매",
+      "aliases": [
+        "김범수",
+        "카톡"
+      ],
+      "wiki": null,
+      "domain": "kakaocorp.com"
+    },
+    {
+      "id": "lges",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "01515323",
+      "person": {
+        "ko": "LG에너지솔루션",
+        "en": "LG Energy Solution"
+      },
+      "entity": "KRX 373220 · 최대주주·임원 매매",
+      "aliases": [
+        "lg",
+        "구광모",
+        "엘지"
+      ],
+      "wiki": null,
+      "domain": "lgensol.com"
+    },
+    {
+      "id": "celltrion",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "00413046",
+      "person": {
+        "ko": "셀트리온",
+        "en": "Celltrion"
+      },
+      "entity": "KRX 068270 · 최대주주·임원 매매",
+      "aliases": [
+        "서정진"
+      ],
+      "wiki": null,
+      "domain": "celltrion.com"
+    },
+    {
+      "id": "sbio",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "00877059",
+      "person": {
+        "ko": "삼성바이오로직스",
+        "en": "Samsung Biologics"
+      },
+      "entity": "KRX 207940 · 최대주주·임원 매매",
+      "aliases": [
+        "삼성",
+        "이재용"
+      ],
+      "wiki": null,
+      "domain": "samsungbiologics.com"
+    },
+    {
+      "id": "posco",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "00155319",
+      "person": {
+        "ko": "POSCO홀딩스",
+        "en": "POSCO Holdings"
+      },
+      "entity": "KRX 005490 · 최대주주·임원 매매",
+      "aliases": [
+        "포스코"
+      ],
+      "wiki": null,
+      "domain": "posco-inc.com"
+    },
+    {
+      "id": "hanwha",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "00126566",
+      "person": {
+        "ko": "한화에어로스페이스",
+        "en": "Hanwha Aerospace"
+      },
+      "entity": "KRX 012450 · 최대주주·임원 매매",
+      "aliases": [
+        "한화",
+        "김승연",
+        "김동관"
+      ],
+      "wiki": null,
+      "domain": "hanwha.com"
+    },
+    {
+      "id": "krafton",
+      "kind": "dart",
+      "category": "korea",
+      "corpCode": "00760971",
+      "person": {
+        "ko": "크래프톤",
+        "en": "Krafton"
+      },
+      "entity": "KRX 259960 · 최대주주·임원 매매",
+      "aliases": [
+        "배틀그라운드",
+        "장병규"
+      ],
+      "wiki": null,
+      "domain": "krafton.com"
+    },
+    {
+      "id": "arkk",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "ARKK",
+      "person": {
+        "ko": "ARK 이노베이션",
+        "en": "ARK Innovation ETF"
+      },
+      "entity": "ARK · 캐시 우드 대표 ETF",
+      "aliases": [
+        "캐시우드",
+        "cathie",
+        "ark"
+      ],
+      "wiki": null,
+      "domain": "ark-invest.com"
+    },
+    {
+      "id": "arkw",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "ARKW",
+      "person": {
+        "ko": "ARK 넥스트 인터넷",
+        "en": "ARK Next Gen Internet ETF"
+      },
+      "entity": "ARK · 인터넷·AI",
+      "aliases": [
+        "캐시우드",
+        "ark"
+      ],
+      "wiki": null,
+      "domain": "ark-invest.com"
+    },
+    {
+      "id": "arkg",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "ARKG",
+      "person": {
+        "ko": "ARK 게노믹스",
+        "en": "ARK Genomic Revolution ETF"
+      },
+      "entity": "ARK · 바이오",
+      "aliases": [
+        "캐시우드",
+        "ark"
+      ],
+      "wiki": null,
+      "domain": "ark-invest.com"
+    },
+    {
+      "id": "arkq",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "ARKQ",
+      "person": {
+        "ko": "ARK 자율주행·로보틱스",
+        "en": "ARK Autonomous Tech & Robotics ETF"
+      },
+      "entity": "ARK · 로봇",
+      "aliases": [
+        "캐시우드",
+        "ark"
+      ],
+      "wiki": null,
+      "domain": "ark-invest.com"
+    },
+    {
+      "id": "fmagx",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "FMAGX",
+      "person": {
+        "ko": "피델리티 마젤란",
+        "en": "Fidelity Magellan Fund"
+      },
+      "entity": "Fidelity · 피터 린치의 그 펀드",
+      "aliases": [
+        "피터린치",
+        "린치",
+        "magellan",
+        "마젤란"
+      ],
+      "wiki": null,
+      "domain": "fidelity.com"
+    },
+    {
+      "id": "fcntx",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "FCNTX",
+      "person": {
+        "ko": "피델리티 콘트라펀드",
+        "en": "Fidelity Contrafund"
+      },
+      "entity": "Fidelity · 대형 성장 펀드",
+      "aliases": [
+        "콘트라",
+        "contrafund"
+      ],
+      "wiki": null,
+      "domain": "fidelity.com"
+    },
+    {
+      "id": "vfiax",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "VFIAX",
+      "person": {
+        "ko": "뱅가드 S&P500 인덱스",
+        "en": "Vanguard 500 Index Fund"
+      },
+      "entity": "Vanguard · S&P500 대표 펀드",
+      "aliases": [
+        "s&p",
+        "sp500",
+        "인덱스",
+        "보글"
+      ],
+      "wiki": null,
+      "domain": "vanguard.com"
+    },
+    {
+      "id": "vtsax",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "VTSAX",
+      "person": {
+        "ko": "뱅가드 미국 전체 시장",
+        "en": "Vanguard Total Stock Market"
+      },
+      "entity": "Vanguard · 미국 전체",
+      "aliases": [
+        "토탈",
+        "total market"
+      ],
+      "wiki": null,
+      "domain": "vanguard.com"
+    },
+    {
+      "id": "agthx",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "AGTHX",
+      "person": {
+        "ko": "아메리칸 펀드 그로스",
+        "en": "Growth Fund of America"
+      },
+      "entity": "Capital Group · 대형 성장",
+      "aliases": [
+        "캐피털",
+        "growth fund"
+      ],
+      "wiki": null,
+      "domain": "capitalgroup.com"
+    },
+    {
+      "id": "prgfx",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "PRGFX",
+      "person": {
+        "ko": "T. 로우 프라이스 성장주",
+        "en": "T. Rowe Price Growth Stock"
+      },
+      "entity": "T. Rowe Price · 성장주",
+      "aliases": [
+        "로우프라이스"
+      ],
+      "wiki": null,
+      "domain": "troweprice.com"
+    },
+    {
+      "id": "swppx",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "SWPPX",
+      "person": {
+        "ko": "슈왑 S&P500 인덱스",
+        "en": "Schwab S&P 500 Index"
+      },
+      "entity": "Schwab · S&P500",
+      "aliases": [
+        "슈왑",
+        "s&p"
+      ],
+      "wiki": null,
+      "domain": "schwab.com"
+    },
+    {
+      "id": "fbgrx",
+      "kind": "etf",
+      "category": "fund",
+      "symbol": "FBGRX",
+      "person": {
+        "ko": "피델리티 블루칩 그로스",
+        "en": "Fidelity Blue Chip Growth"
+      },
+      "entity": "Fidelity · 블루칩",
+      "aliases": [
+        "블루칩"
+      ],
+      "wiki": null,
+      "domain": "fidelity.com"
+    },
+    {
+      "id": "nps",
+      "kind": "fund",
+      "category": "institution",
+      "cik": "1608046",
+      "person": {
+        "ko": "국민연금",
+        "en": "Korea NPS"
+      },
+      "entity": "National Pension Service · 미국 주식",
+      "wiki": null,
+      "domain": "nps.or.kr"
+    },
+    {
+      "id": "nps_kr",
+      "kind": "snapshot",
+      "category": "korea",
+      "person": {
+        "ko": "국민연금 · 국내 주식",
+        "en": "Korea NPS · Domestic"
+      },
+      "entity": "국민연금공단 · 5% 이상 보유 종목",
+      "aliases": [
+        "국민연금",
+        "nps",
+        "연금",
+        "국내"
+      ],
+      "wiki": null,
+      "domain": "nps.or.kr"
+    },
+    {
+      "id": "kic",
+      "kind": "fund",
+      "category": "institution",
+      "cik": "1441689",
+      "person": {
+        "ko": "한국투자공사",
+        "en": "Korea Investment Corp"
+      },
+      "entity": "KIC · 국부펀드",
+      "wiki": null,
+      "domain": "kic.kr"
+    },
+    {
+      "id": "bok",
+      "kind": "fund",
+      "category": "institution",
+      "cik": "1965704",
+      "person": {
+        "ko": "한국은행",
+        "en": "Bank of Korea"
+      },
+      "entity": "Bank of Korea · 외환보유액",
+      "wiki": null,
+      "domain": "bok.or.kr"
+    },
+    {
+      "id": "blackrock",
+      "kind": "fund",
+      "category": "institution",
+      "cik": "2012383",
+      "person": {
+        "ko": "블랙록",
+        "en": "BlackRock"
+      },
+      "entity": "BlackRock, Inc.",
+      "wiki": null,
+      "domain": "blackrock.com"
+    },
+    {
+      "id": "vanguard",
+      "kind": "fund",
+      "category": "institution",
+      "cik": "2100121",
+      "person": {
+        "ko": "뱅가드",
+        "en": "Vanguard"
+      },
+      "entity": "Vanguard Portfolio Management",
+      "wiki": null,
+      "domain": "vanguard.com"
+    },
+    {
+      "id": "statestreet",
+      "kind": "fund",
+      "category": "institution",
+      "cik": "93751",
+      "person": {
+        "ko": "스테이트 스트리트",
+        "en": "State Street"
+      },
+      "entity": "State Street Corp",
+      "wiki": null,
+      "domain": "www.statestreet.com"
+    },
+    {
+      "id": "fidelity",
+      "kind": "fund",
+      "category": "institution",
+      "cik": "315066",
+      "person": {
+        "ko": "피델리티",
+        "en": "Fidelity"
+      },
+      "entity": "FMR LLC",
+      "wiki": null,
+      "domain": "fidelity.com"
+    },
+    {
+      "id": "trowe",
+      "kind": "fund",
+      "category": "institution",
+      "cik": "80255",
+      "person": {
+        "ko": "T. 로우 프라이스",
+        "en": "T. Rowe Price"
+      },
+      "entity": "T. Rowe Price Associates",
+      "wiki": null,
+      "domain": "troweprice.com"
+    },
+    {
+      "id": "capitalgroup",
+      "kind": "fund",
+      "category": "institution",
+      "cik": "1422848",
+      "person": {
+        "ko": "캐피털 그룹",
+        "en": "Capital Group"
+      },
+      "entity": "Capital Research Global Investors",
+      "wiki": null,
+      "domain": "capitalgroup.com"
+    },
+    {
+      "id": "goldman",
+      "kind": "fund",
+      "category": "institution",
+      "cik": "886982",
+      "person": {
+        "ko": "골드만삭스",
+        "en": "Goldman Sachs"
+      },
+      "entity": "Goldman Sachs Group",
+      "wiki": null,
+      "domain": "goldmansachs.com"
+    },
+    {
+      "id": "jpmorgan",
+      "kind": "fund",
+      "category": "institution",
+      "cik": "19617",
+      "person": {
+        "ko": "JP모건",
+        "en": "JPMorgan"
+      },
+      "entity": "JPMorgan Chase & Co.",
+      "wiki": null,
+      "domain": "jpmorganchase.com"
+    },
+    {
+      "id": "bofa",
+      "kind": "fund",
+      "category": "institution",
+      "cik": "70858",
+      "person": {
+        "ko": "뱅크오브아메리카",
+        "en": "Bank of America"
+      },
+      "entity": "Bank of America Corp",
+      "wiki": null,
+      "domain": "bankofamerica.com"
+    },
+    {
+      "id": "ubs",
+      "kind": "fund",
+      "category": "institution",
+      "cik": "1610520",
+      "person": {
+        "ko": "UBS",
+        "en": "UBS"
+      },
+      "entity": "UBS Group AG",
+      "wiki": null,
+      "domain": "ubs.com"
+    },
+    {
+      "id": "renaissance",
+      "kind": "fund",
+      "category": "institution",
+      "cik": "1037389",
+      "person": {
+        "ko": "르네상스 테크놀로지",
+        "en": "Renaissance Technologies"
+      },
+      "entity": "Renaissance Technologies LLC",
+      "wiki": null,
+      "domain": "rentec.com"
+    },
+    {
+      "id": "twosigma",
+      "kind": "fund",
+      "category": "institution",
+      "cik": "1179392",
+      "person": {
+        "ko": "투 시그마",
+        "en": "Two Sigma"
+      },
+      "entity": "Two Sigma Investments",
+      "wiki": null,
+      "domain": "twosigma.com"
+    },
+    {
+      "id": "valueact",
+      "kind": "fund",
+      "category": "institution",
+      "cik": "1418814",
+      "person": {
+        "ko": "밸류액트",
+        "en": "ValueAct"
+      },
+      "entity": "ValueAct Holdings",
+      "wiki": null,
+      "domain": "valueact.com"
+    },
+    {
+      "id": "norges",
+      "kind": "fund",
+      "category": "institution",
+      "cik": "1374170",
+      "person": {
+        "ko": "노르웨이 국부펀드",
+        "en": "Norway NBIM"
+      },
+      "entity": "Norges Bank",
+      "wiki": null,
+      "domain": "nbim.no"
+    },
+    {
+      "id": "temasek",
+      "kind": "fund",
+      "category": "institution",
+      "cik": "1021944",
+      "person": {
+        "ko": "테마섹",
+        "en": "Temasek"
+      },
+      "entity": "Temasek Holdings",
+      "wiki": null,
+      "domain": "temasek.com.sg"
+    },
+    {
+      "id": "saudipif",
+      "kind": "fund",
+      "category": "institution",
+      "cik": "1767640",
+      "person": {
+        "ko": "사우디 국부펀드",
+        "en": "Saudi PIF"
+      },
+      "entity": "Public Investment Fund",
+      "wiki": null,
+      "domain": "pif.gov.sa"
+    },
+    {
+      "id": "cppib",
+      "kind": "fund",
+      "category": "institution",
+      "cik": "1283718",
+      "person": {
+        "ko": "캐나다 연금(CPP)",
+        "en": "CPP Investments"
+      },
+      "entity": "Canada Pension Plan Investment Board",
+      "wiki": null,
+      "domain": "cppinvestments.com"
+    },
+    {
+      "id": "calpers",
+      "kind": "fund",
+      "category": "institution",
+      "cik": "919079",
+      "person": {
+        "ko": "캘퍼스",
+        "en": "CalPERS"
+      },
+      "entity": "California Public Employees' Retirement System",
+      "wiki": null,
+      "domain": "calpers.ca.gov"
+    },
+    {
+      "id": "harvard",
+      "kind": "fund",
+      "category": "institution",
+      "cik": "1082621",
+      "person": {
+        "ko": "하버드 대학 기금",
+        "en": "Harvard Endowment"
+      },
+      "entity": "Harvard Management Co.",
+      "wiki": null,
+      "domain": "harvard.edu"
+    },
+    {
+      "id": "huang",
+      "kind": "insider",
+      "category": "executive",
+      "cik": "1197649",
+      "person": {
+        "ko": "젠슨 황",
+        "en": "Jensen Huang"
+      },
+      "entity": "NVIDIA CEO",
+      "wiki": "Jensen_Huang",
+      "domain": "nvidia.com"
+    },
+    {
+      "id": "musk",
+      "kind": "insider",
+      "category": "executive",
+      "cik": "1494730",
+      "person": {
+        "ko": "일론 머스크",
+        "en": "Elon Musk"
+      },
+      "entity": "Tesla CEO",
+      "wiki": "Elon_Musk",
+      "domain": "tesla.com"
+    },
+    {
+      "id": "zuckerberg",
+      "kind": "insider",
+      "category": "executive",
+      "cik": "1548760",
+      "person": {
+        "ko": "마크 저커버그",
+        "en": "Mark Zuckerberg"
+      },
+      "entity": "Meta CEO",
+      "wiki": "Mark_Zuckerberg",
+      "domain": "meta.com"
+    },
+    {
+      "id": "bezos",
+      "kind": "insider",
+      "category": "executive",
+      "cik": "1043298",
+      "person": {
+        "ko": "제프 베이조스",
+        "en": "Jeff Bezos"
+      },
+      "entity": "Amazon 창업자",
+      "wiki": "Jeff_Bezos",
+      "domain": "amazon.com"
+    },
+    {
+      "id": "cook",
+      "kind": "insider",
+      "category": "executive",
+      "cik": "1214156",
+      "person": {
+        "ko": "팀 쿡",
+        "en": "Tim Cook"
+      },
+      "entity": "Apple CEO",
+      "wiki": "Tim_Cook",
+      "domain": "apple.com"
+    },
+    {
+      "id": "nadella",
+      "kind": "insider",
+      "category": "executive",
+      "cik": "1513142",
+      "person": {
+        "ko": "사티아 나델라",
+        "en": "Satya Nadella"
+      },
+      "entity": "Microsoft CEO",
+      "wiki": "Satya_Nadella",
+      "domain": "microsoft.com"
+    },
+    {
+      "id": "ellison",
+      "kind": "insider",
+      "category": "executive",
+      "cik": "901999",
+      "person": {
+        "ko": "래리 엘리슨",
+        "en": "Larry Ellison"
+      },
+      "entity": "Oracle 창업자",
+      "wiki": "Larry_Ellison",
+      "domain": "oracle.com"
+    },
+    {
+      "id": "pichai",
+      "kind": "insider",
+      "category": "executive",
+      "cik": "1534753",
+      "person": {
+        "ko": "순다르 피차이",
+        "en": "Sundar Pichai"
+      },
+      "entity": "Alphabet CEO",
+      "wiki": "Sundar_Pichai",
+      "domain": "abc.xyz"
+    },
+    {
+      "id": "jassy",
+      "kind": "insider",
+      "category": "executive",
+      "cik": "1374545",
+      "person": {
+        "ko": "앤디 재시",
+        "en": "Andy Jassy"
+      },
+      "entity": "Amazon CEO",
+      "wiki": "Andy_Jassy",
+      "domain": "amazon.com"
+    },
+    {
+      "id": "su",
+      "kind": "insider",
+      "category": "executive",
+      "cik": "1405109",
+      "person": {
+        "ko": "리사 수",
+        "en": "Lisa Su"
+      },
+      "entity": "AMD CEO",
+      "wiki": "Lisa_Su",
+      "domain": "amd.com"
+    },
+    {
+      "id": "karp",
+      "kind": "insider",
+      "category": "executive",
+      "cik": "1823951",
+      "person": {
+        "ko": "알렉스 카프",
+        "en": "Alex Karp"
+      },
+      "entity": "Palantir CEO",
+      "wiki": "Alex_Karp",
+      "domain": "palantir.com"
+    },
+    {
+      "id": "dell",
+      "kind": "insider",
+      "category": "executive",
+      "cik": "908724",
+      "person": {
+        "ko": "마이클 델",
+        "en": "Michael Dell"
+      },
+      "entity": "Dell 창업자",
+      "wiki": "Michael_Dell",
+      "domain": "dell.com"
+    },
+    {
+      "id": "brin",
+      "kind": "insider",
+      "category": "executive",
+      "cik": "1295032",
+      "person": {
+        "ko": "세르게이 브린",
+        "en": "Sergey Brin"
+      },
+      "entity": "Alphabet 공동창업자",
+      "wiki": "Sergey_Brin",
+      "domain": "abc.xyz"
+    },
+    {
+      "id": "dimon",
+      "kind": "insider",
+      "category": "executive",
+      "cik": "1195345",
+      "person": {
+        "ko": "제이미 다이먼",
+        "en": "Jamie Dimon"
+      },
+      "entity": "JPMorgan CEO",
+      "wiki": "Jamie_Dimon",
+      "domain": "jpmorganchase.com"
+    },
+    {
+      "id": "ackman",
+      "kind": "insider",
+      "category": "executive",
+      "cik": "1056513",
+      "person": {
+        "ko": "빌 애크먼",
+        "en": "Bill Ackman"
+      },
+      "entity": "Pershing Square",
+      "wiki": "Bill_Ackman",
+      "domain": "pershingsquareholdings.com"
+    }
+  ]
+}
