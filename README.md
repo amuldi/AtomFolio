@@ -17,7 +17,7 @@
 
 **[배포 사이트](https://atomfolio.vercel.app)** · [예시 데이터](samples/demo/) · [업데이트 로그](docs/updates/AtomFolio_Updates.md) · [기획서](docs/proposal/AtomFolio_Proposal.md)
 
-<img src="docs/updates/assets/atomfolio-current-atomview.jpg" alt="AtomFolio 메인 화면: 가운데 포트폴리오에서 종목 전자들이 뻗어 나가고, 손익이 큰 종목이 빨강·파랑으로 빛나는 모습. 왼쪽 레일에 유명인 탭이 있음" width="100%">
+<img width="1509" height="823" alt="스크린샷 2026-11-22 23 56 15" src="https://github.com/user-attachments/assets/260c6f62-79ae-4d92-894a-b0b10aee4d7f" />
 
 </div>
 
@@ -863,7 +863,7 @@ sequenceDiagram
 
 </details>
 
-## 구현하면서 애먹었던 부분
+## 구현하면서 어려웠던 부분
 
 ### CSV가 일정하지 않았다
 
