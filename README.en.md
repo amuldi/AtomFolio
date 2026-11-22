@@ -17,7 +17,7 @@ and investment simulation into a single picture: holdings radiating out from the
 
 **[Live site](https://atomfolio.vercel.app)** · [Demo data](samples/demo/) · [Update log](docs/updates/AtomFolio_Updates.en.md) · [Proposal](docs/proposal/AtomFolio_Proposal.md)
 
-<img src="docs/updates/assets/atomfolio-current-atomview.jpg" alt="AtomFolio main screen: holdings radiate from the portfolio at the center, with big movers glowing red or blue" width="100%">
+<img src="docs/updates/assets/atomfolio-current-atomview.jpg" alt="AtomFolio main screen: holdings radiate from the portfolio at the center, with big movers glowing red or blue. The Famous tab sits in the left rail" width="100%">
 
 </div>
 

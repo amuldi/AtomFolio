@@ -17,7 +17,7 @@
 
 **[배포 사이트](https://atomfolio.vercel.app)** · [예시 데이터](samples/demo/) · [업데이트 로그](docs/updates/AtomFolio_Updates.md) · [기획서](docs/proposal/AtomFolio_Proposal.md)
 
-<img src="docs/updates/assets/atomfolio-current-atomview.jpg" alt="AtomFolio 메인 화면: 가운데 포트폴리오에서 종목 전자들이 뻗어 나가고, 손익이 큰 종목이 빨강·파랑으로 빛나는 모습" width="100%">
+<img src="docs/updates/assets/atomfolio-current-atomview.jpg" alt="AtomFolio 메인 화면: 가운데 포트폴리오에서 종목 전자들이 뻗어 나가고, 손익이 큰 종목이 빨강·파랑으로 빛나는 모습. 왼쪽 레일에 유명인 탭이 있음" width="100%">
 
 </div>
 
@@ -98,7 +98,7 @@ AtomFolio의 목표는 세 가지입니다.
 ## 실행 화면
 
 > [!NOTE]
-> 아래 스크린샷은 2026-11-15(유명인 포트폴리오는 2026-11-22)에 [`samples/demo/`](samples/demo/)의 예시 포트폴리오 8개를 올려 다시 찍은 화면입니다. 실제 계좌 데이터가 아닙니다. 예전 화면은 [업데이트 로그](#업데이트-로그)에 남아 있습니다.
+> 아래 스크린샷은 2026-11-15(메인 화면과 유명인 포트폴리오는 2026-11-22)에 [`samples/demo/`](samples/demo/)의 예시 포트폴리오 8개를 올려 다시 찍은 화면입니다. 실제 계좌 데이터가 아닙니다. 예전 화면은 [업데이트 로그](#업데이트-로그)에 남아 있습니다.
 
 ### 메인 포트폴리오
 
