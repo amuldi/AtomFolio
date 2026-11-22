@@ -944,6 +944,22 @@ VITE_CLERK_PUBLISHABLE_KEY="pk_test_..."
 ATOMFOLIO_TRUSTED_AUTH_HEADERS="true"
 ```
 
+유명인 탭(SEC·DART 공시)의 실시간 조회에는 서버 환경 변수가 둘 필요합니다. 없으면 번들 스냅샷만
+보이고 화면에 안내가 나옵니다. 로컬에서는 git에 올라가지 않는 `.env.local`에 넣습니다
+(`server/dev.mjs`가 백엔드로 읽어 줍니다).
+
+```bash
+SEC_CONTACT_EMAIL="연락받을@이메일"   # sec.gov가 연락처 없는 자동 요청을 막습니다. "AtomFolio <이메일>"로 전송
+DART_API_KEY="..."                   # https://opendart.fss.or.kr 에서 무료 발급
+```
+
+**Vercel 무료(Hobby) 플랜은 서버 함수를 배포당 12개까지만 허용합니다.** `api/` 아래 파일이
+함수 하나씩이라 새 엔드포인트를 파일로 추가하면 13개가 되어 **빌드가 거부되고, 프로덕션은 조용히 옛
+버전에 머뭅니다.** 그래서 유명인 탭의 `/api/gurus/{search,profile,quotes}`는 별도 파일이 아니라
+`api/market/search.js` 한 함수가 `route` 쿼리로 나눠 처리하고, [vercel.json](vercel.json)의 rewrite가
+기존 주소를 그대로 유지합니다. 새 API를 추가할 때도 기존 함수에 얹거나 플랜을 올려야 합니다
+(`find api -name '*.js' -not -path 'api/_utils/*' | wc -l`로 개수 확인).
+
 배포 전 체크리스트(필수 환경 변수, Clerk/Neon 설정, 게스트 워크스페이스 정책, 레이트 리밋
 권장값, 개인정보/삭제 정책 등)는 [`docs/production-readiness.md`](docs/production-readiness.md)에
 정리되어 있습니다.
@@ -954,7 +970,11 @@ Vercel 설정은 [vercel.json](vercel.json)에 있습니다.
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "functions": { "api/market/search.js": { "maxDuration": 60 } },
   "rewrites": [
+    { "source": "/api/gurus/search", "destination": "/api/market/search?route=gurus-search" },
+    { "source": "/api/gurus/profile", "destination": "/api/market/search?route=gurus-profile" },
+    { "source": "/api/gurus/quotes", "destination": "/api/market/search?route=gurus-quotes" },
     {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
@@ -971,6 +991,9 @@ Vercel 설정은 [vercel.json](vercel.json)에 있습니다.
 | `GET /api/market/live` | 현재가, 변동률, 차트 데이터 조회 |
 | `GET /api/market/search` | 종목 후보 검색 |
 | `GET /api/market/news` | 시장 뉴스 조회 |
+| `GET /api/gurus/search?q=` | 유명인 검색: 한국 상장사(DART 목록)와 SEC 전체 이름 검색 |
+| `GET /api/gurus/profile?cik=\|etf=\|buzz=\|dart=` | 포트폴리오 조회: SEC 13F·Form 4, 펀드 N-PORT, 레딧 언급 순위, 한국 DART 지분 |
+| `GET /api/gurus/quotes?symbols=` | 유명인 화면의 보유 종목 현재가·변동률 |
 | `GET /api/workspace/session` | 현재 요청의 로그인 감지 상태와 workspace 확인 |
 | `POST /api/workspace/claim-guest` | 로그인 사용자 workspace로 게스트 데이터 병합 |
 | `POST /api/portfolio/ingest` | CSV 텍스트를 포트폴리오로 변환 |

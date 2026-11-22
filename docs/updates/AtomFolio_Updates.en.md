@@ -12,6 +12,23 @@
 > sessions that actually did the work. Bugs found along the way are tracked separately in
 > [`AtomFolio_Bugs.en.md`](AtomFolio_Bugs.en.md).
 
+## 2026-11-22 (follow-up) — Why the Famous tab didn't show on the live site: Vercel's 12-function limit
+
+PR #1 was merged into `main` but the live site never showed the Famous tab. The three new endpoints
+(`/api/gurus/{search,profile,quotes}`) were each an `api/gurus/*.js` file, which took the app to 15
+serverless functions; the Hobby plan allows 12 per deployment, so Vercel refused the build and
+production stayed on the old version.
+
+The three endpoints now share `api/market/search.js` (dispatching on a `route` query), and rewrites in
+`vercel.json` keep the public URLs, bringing the count back to 12 (PR #2). All four routes (guru
+search, profile, quotes and the existing symbol search) were called locally, and after the redeploy the
+live site's `/api/gurus/profile?dart=00126380` (Samsung's largest shareholders) and `?cik=1067983`
+(Berkshire 13F) return real data.
+
+Lesson: a new API file means a new function, so under a 12-function cap new endpoints have to ride on
+an existing one. The README's "Environment variables & deployment" section now records this constraint
+and the `SEC_CONTACT_EMAIL` / `DART_API_KEY` settings.
+
 ## 2026-11-22 — Famous portfolios tab (98 public filings from SEC and DART); one detail card for my holdings
 
 A **Famous** tab on the left rail: search public portfolios of investors, institutions, executives, communities, funds and Korean listed companies, draw them on the main stage as the app's own atom, and set them against yours with **Compare**. Every screenshot below was captured locally with real data (a 10-holding virtual portfolio).

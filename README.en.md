@@ -914,13 +914,34 @@ Under production's `VERCEL=1`, this value is always disabled no matter what it's
 ATOMFOLIO_TRUSTED_AUTH_HEADERS="true"
 ```
 
+The Famous tab's live lookups (SEC and DART filings) need two server environment variables. Without them
+only the bundled snapshot shows, with a notice. Locally, put them in the git-ignored `.env.local`
+(`server/dev.mjs` loads it for the backend).
+
+```bash
+SEC_CONTACT_EMAIL="you@example.com"   # sec.gov blocks automated requests without a contact; sent as "AtomFolio <email>"
+DART_API_KEY="..."                    # free key from https://opendart.fss.or.kr
+```
+
+**Vercel's free (Hobby) plan allows at most 12 serverless functions per deployment.** Every file under
+`api/` is one function, so adding an endpoint as a new file makes 13, **the build is refused and
+production silently stays on the old version.** That is why the Famous tab's
+`/api/gurus/{search,profile,quotes}` are not separate files: `api/market/search.js` serves them by a
+`route` query, and rewrites in [vercel.json](vercel.json) keep the public URLs. A new API has to ride
+on an existing function or the plan has to be upgraded (count with
+`find api -name '*.js' -not -path 'api/_utils/*' | wc -l`).
+
 Vercel configuration lives in [vercel.json](vercel.json).
 
 ```json
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "functions": { "api/market/search.js": { "maxDuration": 60 } },
   "rewrites": [
+    { "source": "/api/gurus/search", "destination": "/api/market/search?route=gurus-search" },
+    { "source": "/api/gurus/profile", "destination": "/api/market/search?route=gurus-profile" },
+    { "source": "/api/gurus/quotes", "destination": "/api/market/search?route=gurus-quotes" },
     {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
@@ -937,6 +958,9 @@ Vercel configuration lives in [vercel.json](vercel.json).
 | `GET /api/market/live` | Current price, change, and chart data |
 | `GET /api/market/search` | Search for candidate securities |
 | `GET /api/market/news` | Market news |
+| `GET /api/gurus/search?q=` | Famous tab search: Korean listed companies (DART list) and SEC-wide name search |
+| `GET /api/gurus/profile?cik=\|etf=\|buzz=\|dart=` | Portfolio lookup: SEC 13F and Form 4, fund N-PORT, Reddit mention ranking, Korean DART ownership |
+| `GET /api/gurus/quotes?symbols=` | Current price and change for the holdings shown in the Famous tab |
 | `GET /api/workspace/session` | Login-detection status and workspace for the current request |
 | `POST /api/workspace/claim-guest` | Merge guest data into the logged-in user's workspace |
 | `POST /api/portfolio/ingest` | Convert CSV text into a portfolio |
