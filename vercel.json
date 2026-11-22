@@ -3,13 +3,16 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
-    "api/gurus/profile.js": { "maxDuration": 60 }
+    "api/market/search.js": { "maxDuration": 60 }
   },
   "crons": [
     { "path": "/api/market/news?language=ko&mode=today&_ts=cron", "schedule": "0 22 * * *" },
     { "path": "/api/market/news?language=en&mode=today&_ts=cron", "schedule": "30 22 * * *" }
   ],
   "rewrites": [
+    { "source": "/api/gurus/search", "destination": "/api/market/search?route=gurus-search" },
+    { "source": "/api/gurus/profile", "destination": "/api/market/search?route=gurus-profile" },
+    { "source": "/api/gurus/quotes", "destination": "/api/market/search?route=gurus-quotes" },
     {
       "source": "/api/workspace/device-token",
       "destination": "/api/workspace/session"
