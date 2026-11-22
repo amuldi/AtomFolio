@@ -10,7 +10,7 @@ and investment simulation into a single picture: holdings radiating out from the
 [한국어](README.md) · [English](README.en.md)
 
 [![Live](https://img.shields.io/badge/Live-atomfolio.vercel.app-111111?logo=vercel&logoColor=fff)](https://atomfolio.vercel.app)
-![Tests](https://img.shields.io/badge/tests-162%20passing-2F7A55)
+![Tests](https://img.shields.io/badge/tests-196%20passing-2F7A55)
 ![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=111)
 ![Three.js](https://img.shields.io/badge/Three.js-0.168-000000?logo=three.js&logoColor=fff)
 ![Postgres](https://img.shields.io/badge/Postgres-Neon-4169E1?logo=postgresql&logoColor=fff)
@@ -28,6 +28,7 @@ and investment simulation into a single picture: holdings radiating out from the
 | **One atom = one portfolio** | The center is your whole portfolio, each electron is a holding, electron size is the quantity held |
 | **Gain and loss as color and glow** | Red for gains, blue for losses; the bigger the move, the brighter the glow |
 | **Any CSV as-is** | The app interprets each broker's own CSV layout |
+| **Famous portfolios** | See 98 public filings (Buffett, Korea's NPS, ARK, Samsung's largest shareholders…) as the same atom and set them against yours |
 | **Summary · Compare · Simulation · News** | Scores, this month's changes, portfolio comparison, market-shock math, and market news in one flow |
 
 ## Table of contents
@@ -137,6 +138,21 @@ How one atom encodes a portfolio:
       <img src="docs/updates/assets/atomfolio-current-news.jpg" alt="AtomFolio market news"><br>
       <b>Market news</b> · Falls back to the latest stock news if there's nothing dated today. News cards are kept to title, source, and time so they can be scanned quickly.
     </td>
+  </tr>
+</table>
+
+### Famous portfolios
+
+The **Famous** tab on the left rail searches public portfolios of investors, institutions, executives, communities, funds and Korean listed companies and draws the pick on the main stage as the same atom as yours. **Compare** brings your atom in and joins shared holdings with lines. Details in [10-1](#10-1-famous-portfolios).
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/updates/assets/atomfolio-famous-investor.jpg" alt="Warren Buffett's portfolio"><br><sub>Warren Buffett (SEC 13F). Electron color is the price move since the filing</sub></td>
+    <td width="50%"><img src="docs/updates/assets/atomfolio-famous-compare.jpg" alt="Compared with my portfolio"><br><sub>Compared with my portfolio: 41.3% in common</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/updates/assets/atomfolio-famous-korea-dart.jpg" alt="Samsung's largest shareholders"><br><sub>Samsung Electronics' largest shareholders (FSS DART)</sub></td>
+    <td><img src="docs/updates/assets/atomfolio-famous-community.jpg" alt="Reddit WSB mention ranking"><br><sub>Reddit WSB 24-hour mention ranking</sub></td>
   </tr>
 </table>
 
@@ -360,7 +376,7 @@ When none of these can determine the value, the card says to fix it in the Manag
 | [Electron](https://www.electronjs.org) 32 + electron-builder | MIT | The macOS menu bar app, the atom widget, and packaging (`desktop/`) |
 | [Gaegu](https://fonts.google.com/specimen/Gaegu) | OFL | Handwritten Hangul font for atom labels |
 | [ESLint](https://eslint.org) · [Prettier](https://prettier.io) · [knip](https://knip.dev) | MIT | Linting, formatting, and finding unused files/exports |
-| Node.js `node:test` | MIT | 162 tests (no external test framework) |
+| Node.js `node:test` | MIT | 196 tests (no external test framework) |
 
 Sign-in (Clerk), the database (Neon), and hosting/functions (Vercel) are cloud services, not open source. [Plausible](https://plausible.io) visit analytics turns on only when `VITE_PLAUSIBLE_DOMAIN` is set.
 
@@ -376,6 +392,7 @@ Market data (quotes, news, search) is never fetched by the browser directly. Eve
 | **Security metadata** (asset class, region, sector) | Built-in dictionary, Wikidata (API and SPARQL), Yahoo Finance search | `/api/securities/enrich`, `server/securityEnrichment.mjs` |
 | **Financials** | US SEC EDGAR (`company_tickers.json`, XBRL companyfacts), Yahoo Finance quoteSummary | `/api/market/financials`, `src/lib/companyFinancials.js` |
 | **Market news** | Naver Finance news, Naver news search, Bing News RSS, Finnhub (when `FINNHUB_API_KEY` is set); if all fail, previously collected articles | `/api/market/news`, `src/lib/marketNews.js`, `server/newsArchive.mjs` |
+| **Famous portfolios** | ① US SEC EDGAR: 13F (investors' and institutions' quarterly holdings), N-PORT (full fund holdings), Form 4 (executive trades), CUSIPs mapped to tickers via OpenFIGI ② FSS OpenDART: Korean largest shareholders, 5%+ blockholders, executive trades, NPS domestic 5%+ stakes ③ ApeWisdom: Reddit 24-hour mention ranking ④ Wikimedia Commons: free-licensed portraits (else the organisation's logo) | `server/secFilings.mjs`, `server/dartFilings.mjs`, `/api/gurus/*`, `scripts/fetch-guru-*.mjs` |
 | **Your portfolio** | CSVs you upload or holdings you type in. Saved to browser `localStorage` first, then synced to the server (Neon Postgres, or a JSON file locally) | `server/portfolioStore.mjs` |
 
 - Quote responses are cached on the server for 10 seconds; if every source fails, the last good answer is returned with `stale: true`.
@@ -975,7 +992,7 @@ Vercel configuration lives in [vercel.json](vercel.json).
 
 Recently confirmed:
 
-- `npm test` (`node --test`, 162 tests — parser, scoring, "This month", input checks, quote merging, auth isolation, and more)
+- `npm test` (`node --test`, 196 tests — parser, scoring, "This month", input checks, quote merging, auth isolation, and more)
 - `npm run lint`, `npm run build`
 - On `https://atomfolio.vercel.app`: score styles, "This month", and electron glow checked live
 - All eight `samples/demo/` CSVs load with no warnings
@@ -1013,7 +1030,7 @@ in [docs/updates/AtomFolio_Bugs.en.md](docs/updates/AtomFolio_Bugs.en.md) (Korea
 | Quote reliability | Yahoo → Stooq, two-step fallback | KIS (official) → Naver/Mirae raced concurrently → Yahoo → Stooq, with a circuit breaker, failure tracking, and outage alerting |
 | Navigation | Fixed sidebar icons | Command palette (⌘K) searching across every portfolio, a separate management table view |
 | Platforms | Web only | Web + a macOS menu bar companion app (Electron) |
-| Tests | Almost none | 162 (`node --test`) — auth isolation, rate limiting, KIS routing, scoring, "This month", and more |
+| Tests | Almost none | 196 (`node --test`) — auth isolation, rate limiting, KIS routing, scoring, "This month", and more |
 | Atom scene | Nodes only | Electron size = quantity held, color and glow by gain/loss, input-check rings, handwritten name tag |
 
 See the [menu bar companion app](#menu-bar-companion-app-macos) section above for screenshots and

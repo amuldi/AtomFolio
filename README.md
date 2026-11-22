@@ -10,7 +10,7 @@
 [한국어](README.md) · [English](README.en.md)
 
 [![Live](https://img.shields.io/badge/Live-atomfolio.vercel.app-111111?logo=vercel&logoColor=fff)](https://atomfolio.vercel.app)
-![Tests](https://img.shields.io/badge/tests-162%20passing-2F7A55)
+![Tests](https://img.shields.io/badge/tests-196%20passing-2F7A55)
 ![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=111)
 ![Three.js](https://img.shields.io/badge/Three.js-0.168-000000?logo=three.js&logoColor=fff)
 ![Postgres](https://img.shields.io/badge/Postgres-Neon-4169E1?logo=postgresql&logoColor=fff)
@@ -28,6 +28,7 @@
 | **원자 하나 = 포트폴리오 하나** | 가운데가 내 돈 전체, 전자 하나가 종목 하나, 전자 크기가 보유 수량 |
 | **색과 빛으로 손익** | 수익은 빨강, 손실은 파랑. 많이 벌거나 잃을수록 더 밝게 빛남 |
 | **CSV 그대로** | 증권사마다 다른 CSV 양식을 앱이 알아서 해석 |
+| **유명인 포트폴리오** | 버핏·국민연금·ARK·삼성전자 최대주주 등 공개 공시 98곳을 같은 원자로 보고, 내 포트폴리오와 맞대 봄 |
 | **요약·비교·모의 투자·뉴스** | 점수, 이번 달 변화, 포트폴리오 비교, 시장 충격 계산, 시장 뉴스를 한 화면 흐름에서 |
 
 ## 목차
@@ -97,7 +98,7 @@ AtomFolio의 목표는 세 가지입니다.
 ## 실행 화면
 
 > [!NOTE]
-> 아래 스크린샷은 2026-11-15에 [`samples/demo/`](samples/demo/)의 예시 포트폴리오 8개를 올려 다시 찍은 화면입니다. 실제 계좌 데이터가 아닙니다. 예전 화면은 [업데이트 로그](#업데이트-로그)에 남아 있습니다.
+> 아래 스크린샷은 2026-11-15(유명인 포트폴리오는 2026-11-22)에 [`samples/demo/`](samples/demo/)의 예시 포트폴리오 8개를 올려 다시 찍은 화면입니다. 실제 계좌 데이터가 아닙니다. 예전 화면은 [업데이트 로그](#업데이트-로그)에 남아 있습니다.
 
 ### 메인 포트폴리오
 
@@ -137,6 +138,21 @@ AtomFolio의 목표는 세 가지입니다.
       <img src="docs/updates/assets/atomfolio-current-news.jpg" alt="AtomFolio 시장 뉴스"><br>
       <b>시장 뉴스</b> · 오늘 뉴스가 없으면 최신 주식 뉴스로 fallback합니다. 뉴스 카드는 제목, 출처, 시간 중심으로 빠르게 스캔할 수 있게 구성했습니다.
     </td>
+  </tr>
+</table>
+
+### 유명인 포트폴리오
+
+왼쪽 레일의 **유명인** 탭에서 투자자·기관·기업인·커뮤니티·펀드·한국 상장사의 공개 포트폴리오를 검색하면, 내 원자와 같은 모습으로 메인 무대에 그려집니다. **비교하기**를 누르면 내 원자가 들어와 공통 종목끼리 선으로 이어집니다. 자세한 내용은 [10-1](#10-1-유명인-포트폴리오)을 참고하세요.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/updates/assets/atomfolio-famous-investor.jpg" alt="워런 버핏의 포트폴리오"><br><sub>워런 버핏 (SEC 13F). 전자 색은 공시 이후 주가 변동</sub></td>
+    <td width="50%"><img src="docs/updates/assets/atomfolio-famous-compare.jpg" alt="내 포트폴리오와 비교"><br><sub>내 포트폴리오와 비교: 공통 41.3%</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/updates/assets/atomfolio-famous-korea-dart.jpg" alt="삼성전자 최대주주 지분"><br><sub>삼성전자 최대주주·특수관계인 (금감원 DART)</sub></td>
+    <td><img src="docs/updates/assets/atomfolio-famous-community.jpg" alt="레딧 WSB 언급 순위"><br><sub>레딧 WSB 24시간 언급 순위</sub></td>
   </tr>
 </table>
 
@@ -373,7 +389,7 @@ AtomFolio는 웹 하나가 아닙니다 — `desktop/` 아래에 별도의 Elect
 | [Electron](https://www.electronjs.org) 32 + electron-builder | MIT | macOS 메뉴바 앱과 원자 위젯, 앱 패키징 (`desktop/`) |
 | [Gaegu](https://fonts.google.com/specimen/Gaegu) | OFL | 원자 라벨의 한글 손글씨 글꼴 |
 | [ESLint](https://eslint.org) · [Prettier](https://prettier.io) · [knip](https://knip.dev) | MIT | 코드 검사, 자동 정리, 쓰지 않는 파일·export 찾기 |
-| Node.js `node:test` | MIT | 테스트 162개 (외부 테스트 프레임워크 없음) |
+| Node.js `node:test` | MIT | 테스트 196개 (외부 테스트 프레임워크 없음) |
 
 로그인(Clerk), 데이터베이스(Neon), 배포·서버 함수(Vercel)는 오픈소스가 아니라 클라우드 서비스입니다. [Plausible](https://plausible.io) 방문 통계는 `VITE_PLAUSIBLE_DOMAIN`을 설정했을 때만 켜집니다.
 
@@ -389,6 +405,7 @@ AtomFolio는 웹 하나가 아닙니다 — `desktop/` 아래에 별도의 Elect
 | **종목 정보 보강** (자산군·지역·분야) | 앱에 내장한 종목 사전, Wikidata(API·SPARQL), Yahoo Finance 검색 | `/api/securities/enrich`, `server/securityEnrichment.mjs` |
 | **재무 정보** | 미국 SEC EDGAR(`company_tickers.json`, XBRL companyfacts), Yahoo Finance quoteSummary | `/api/market/financials`, `src/lib/companyFinancials.js` |
 | **시장 뉴스** | 네이버 금융 뉴스, 네이버 뉴스 검색, Bing News RSS, Finnhub(`FINNHUB_API_KEY`를 설정했을 때). 모두 실패하면 서버에 모아 둔 지난 기사 | `/api/market/news`, `src/lib/marketNews.js`, `server/newsArchive.mjs` |
+| **유명인 포트폴리오** | ① 미국 SEC EDGAR: 13F(투자자·기관 분기 보유), N-PORT(펀드 전체 보유), Form 4(기업인 매매), 종목 코드는 OpenFIGI로 변환 ② 금감원 OpenDART: 한국 상장사 최대주주·5% 대량보유·임원 매매, 국민연금 국내 5% 이상 보유 ③ ApeWisdom: 레딧 24시간 언급 순위 ④ Wikimedia Commons: 자유 라이선스 인물 사진(없으면 기관 로고) | `server/secFilings.mjs`, `server/dartFilings.mjs`, `/api/gurus/*`, `scripts/fetch-guru-*.mjs` |
 | **내 포트폴리오** | 사용자가 올린 CSV·직접 입력. 브라우저 `localStorage`에 먼저 저장하고 서버(Neon Postgres, 로컬은 JSON 파일)에 동기화 | `server/portfolioStore.mjs` |
 
 - 시세 응답은 서버에서 10초 동안 캐시하고, 모든 출처가 실패하면 마지막으로 성공한 값을 `stale: true` 표시와 함께 돌려줍니다.
@@ -1008,7 +1025,7 @@ Vercel 설정은 [vercel.json](vercel.json)에 있습니다.
 
 최근 확인한 항목입니다.
 
-- `npm test` (`node --test`, 162개 — 파서, 점수, 이번 달 변화, 입력 오류 감지, 시세 병합, 인증 격리 등)
+- `npm test` (`node --test`, 196개 — 파서, 점수, 이번 달 변화, 입력 오류 감지, 시세 병합, 인증 격리 등)
 - `npm run lint`, `npm run build`
 - 배포 주소 `https://atomfolio.vercel.app`에서 점수 성향·이번 달 변화·전자 빛 표시 실제 동작 확인
 - `samples/demo/` 예시 CSV 8개 업로드 시 경고 없이 표시 확인
@@ -1046,7 +1063,7 @@ localStorage만 쓰는 웹 하나였습니다. 지금은 여기서 훨씬 더 �
 | 시세 안정성 | Yahoo → Stooq 2단 fallback | KIS(공식) → Naver/Mirae 동시 경쟁 → Yahoo → Stooq, 서킷 브레이커 + 실패 추적 + 장애 알림 |
 | 탐색 | 사이드 아이콘 고정 노출 | 명령 팔레트(⌘K)로 모든 포트폴리오 통합 검색, 관리 테이블 뷰 |
 | 플랫폼 | 웹 하나 | 웹 + macOS 메뉴바 동반 앱(Electron) |
-| 테스트 | 거의 없음 | `node --test` 162개 (인증 격리·레이트리밋·KIS 라우팅·점수·이번 달 변화 등) |
+| 테스트 | 거의 없음 | `node --test` 196개 (인증 격리·레이트리밋·KIS 라우팅·점수·이번 달 변화 등) |
 | 원자 화면 | 노드만 배치 | 전자 크기 = 보유 수량, 손익에 따라 색과 빛의 세기, 입력 오류 표시, 손글씨 이름표 |
 
 macOS 메뉴바 앱에 대한 스크린샷과 소개는 위 [메뉴바 동반 앱](#메뉴바-동반-앱-macos) 절을
